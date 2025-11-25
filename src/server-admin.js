@@ -7,6 +7,7 @@ const db = require("./config/db");
 
 const app = express();
 const PORT = 4002;
+const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
 
 // Hàm sinh mã
 const generateCode = (len = 8) => {
@@ -16,6 +17,21 @@ const generateCode = (len = 8) => {
   for (let i = 0; i < len; i++)
     res += chars.charAt(Math.floor(Math.random() * chars.length));
   return res;
+};
+
+const parseMonthRange = (monthStr) => {
+  const now = new Date();
+  const normalized =
+    typeof monthStr === "string" && /^\d{4}-\d{2}$/.test(monthStr)
+      ? monthStr
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+          2,
+          "0"
+        )}`;
+  const start = new Date(`${normalized}-01T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  return { normalized, start, end };
 };
 
 app.set("view engine", "ejs");
@@ -79,7 +95,15 @@ app.get("/logout", (req, res) => {
 
 // --- DASHBOARD ---
 app.get("/", checkAuth, async (req, res) => {
-  const rDom = await db.query(`SELECT * FROM domains ORDER BY id DESC`);
+  const rDom = await db.query(
+    `
+      SELECT d.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      FROM domains d
+      LEFT JOIN users cu ON d.user_id = cu.id
+      LEFT JOIN users uu ON d.updated_by = uu.id
+      ORDER BY d.id DESC
+    `
+  );
   const stats = await db.query(`
         SELECT (SELECT COUNT(*) FROM domains) as total_domains,
                (SELECT COUNT(*) FROM campaigns) as total_links,
@@ -96,8 +120,13 @@ app.get("/", checkAuth, async (req, res) => {
 app.post("/domains/create", checkAuth, async (req, res) => {
   try {
     await db.query(
-      `INSERT INTO domains (domain_url, safe_template, user_id) VALUES ($1, $2, $3)`,
-      [req.body.domain_url, req.body.safe_template, req.session.user.id]
+      `INSERT INTO domains (domain_url, safe_template, user_id, updated_by) VALUES ($1, $2, $3, $4)`,
+      [
+        req.body.domain_url,
+        req.body.safe_template,
+        req.session.user.id,
+        req.session.user.id,
+      ]
     );
     res.redirect("/");
   } catch (e) {
@@ -107,8 +136,8 @@ app.post("/domains/create", checkAuth, async (req, res) => {
 
 app.get("/domains/toggle/:id", checkAuth, async (req, res) => {
   await db.query(
-    `UPDATE domains SET status = CASE WHEN status='active' THEN 'inactive' ELSE 'active' END WHERE id=$1`,
-    [req.params.id]
+    `UPDATE domains SET status = CASE WHEN status='active' THEN 'inactive' ELSE 'active' END, updated_by=$2 WHERE id=$1`,
+    [req.params.id, req.session.user.id]
   );
   res.redirect("/");
 });
@@ -136,7 +165,10 @@ app.get("/domains/:id/verify", checkAuth, async (req, res) => {
   if (!r.rowCount) return res.json({ status: "error" });
   dns.resolve4(r.rows[0].domain_url, (err, addrs) => {
     if (err) return res.json({ status: "error", msg: "Chưa trỏ DNS" });
-    db.query(`UPDATE domains SET status='active' WHERE id=$1`, [req.params.id]);
+    db.query(`UPDATE domains SET status='active', updated_by=$2 WHERE id=$1`, [
+      req.params.id,
+      req.session.user.id,
+    ]);
     res.json({ status: "success", msg: "OK: " + addrs[0] });
   });
 });
@@ -144,11 +176,27 @@ app.get("/domains/:id/verify", checkAuth, async (req, res) => {
 // --- LINK CAMPAIGNS ---
 app.get("/domains/:id", checkAuth, async (req, res) => {
   const domainId = req.params.id;
-  const rDom = await db.query(`SELECT * FROM domains WHERE id=$1`, [domainId]);
+  const rDom = await db.query(
+    `
+      SELECT d.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      FROM domains d
+      LEFT JOIN users cu ON d.user_id = cu.id
+      LEFT JOIN users uu ON d.updated_by = uu.id
+      WHERE d.id=$1
+    `,
+    [domainId]
+  );
   if (!rDom.rowCount) return res.redirect("/");
 
   const rLinks = await db.query(
-    `SELECT * FROM campaigns WHERE domain_id=$1 ORDER BY id DESC`,
+    `
+      SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      FROM campaigns c
+      LEFT JOIN users cu ON c.user_id = cu.id
+      LEFT JOIN users uu ON c.updated_by = uu.id
+      WHERE c.domain_id=$1
+      ORDER BY c.id DESC
+    `,
     [domainId]
   );
 
@@ -161,13 +209,26 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
   });
 
   // Smart Alert Logic (Đếm truy cập sạch từ quốc gia allow)
-  for (let l of links) {
-    if (!l.is_active && l.filters?.countries?.length > 0) {
-      const c = await db.query(
-        `SELECT COUNT(*) FROM traffic_logs WHERE campaign_id=$1 AND action='safe_page' AND country = ANY($2)`,
-        [l.id, l.filters.countries]
-      );
-      l.potential_traffic = c.rows[0].count;
+  const linkIds = links.map((l) => l.id);
+  if (linkIds.length) {
+    const safeMap = new Map();
+    const safeRows = await db.query(
+      `
+        SELECT campaign_id,
+               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') AS safe_total,
+               COUNT(*) FILTER (WHERE action LIKE 'safe_page%' AND created_at >= now() - interval '24 hours') AS safe_24h
+        FROM traffic_logs
+        WHERE campaign_id = ANY($1)
+        GROUP BY campaign_id
+      `,
+      [linkIds]
+    );
+    safeRows.rows.forEach((row) => safeMap.set(row.campaign_id, row));
+    for (let l of links) {
+      const safe = safeMap.get(l.id) || {};
+      l.safe_total = Number(safe.safe_total || 0);
+      l.safe_24h = Number(safe.safe_24h || 0);
+      l.suggestion = !l.is_active && l.safe_24h >= 20;
     }
   }
 
@@ -193,8 +254,8 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
 
     await db.query(
       `
-            INSERT INTO campaigns (domain_id, user_id, name, param_key, param_value, target_url, rules, filters)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO campaigns (domain_id, user_id, name, param_key, param_value, target_url, rules, filters, updated_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `,
       [
         domain_id,
@@ -205,6 +266,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
         target_url,
         rules_json || "[]",
         filters,
+        req.session.user.id,
       ]
     );
 
@@ -215,9 +277,10 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
 });
 
 app.get("/campaigns/toggle/:id", checkAuth, async (req, res) => {
-  await db.query(`UPDATE campaigns SET is_active = NOT is_active WHERE id=$1`, [
-    req.params.id,
-  ]);
+  await db.query(
+    `UPDATE campaigns SET is_active = NOT is_active, updated_by=$2 WHERE id=$1`,
+    [req.params.id, req.session.user.id]
+  );
   const r = await db.query(`SELECT domain_id FROM campaigns WHERE id=$1`, [
     req.params.id,
   ]);
@@ -267,32 +330,162 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
       ? allowed_countries
       : allowed_countries.split(",");
   await db.query(
-    `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4 WHERE id=$5`,
-    [name, target_url, rules_json || "[]", filters, req.params.id]
+    `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, updated_by=$5 WHERE id=$6`,
+    [
+      name,
+      target_url,
+      rules_json || "[]",
+      filters,
+      req.session.user.id,
+      req.params.id,
+    ]
   );
   res.redirect("/domains/" + domain_id);
+});
+
+app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
+  const campId = req.params.id;
+  const r = await db.query(
+    `SELECT id, name, rules, filters, param_key, param_value FROM campaigns WHERE id=$1`,
+    [campId]
+  );
+  if (!r.rowCount) return res.status(404).json({ error: "not_found" });
+  const row = r.rows[0];
+  res.json({
+    id: row.id,
+    name: row.name,
+    rules: row.rules || [],
+    filters: row.filters || {},
+    param_key: row.param_key,
+    param_value: row.param_value,
+  });
 });
 
 // ...
 app.get('/campaigns/:id/report', checkAuth, async (req, res) => {
     const campId = req.params.id;
     const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [campId]);
+    if (!rCamp.rowCount) return res.redirect("/");
     
-    // --- SỬA CÂU QUERY NÀY ---
-    // Đếm FAIL bằng cách tìm action bắt đầu bằng 'safe_page%' (để bắt hết các lỗi sai params, sai country...)
-    const stats = await db.query(`
+    const stats = await db.query(
+      `
         SELECT date(created_at) as day, 
                COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
                COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
         FROM traffic_logs 
         WHERE campaign_id = $1 
+          AND created_at >= date_trunc('day', now() - interval '30 days')
         GROUP BY day 
-        ORDER BY day DESC 
-        LIMIT 7`, 
-    [campId]);
+        ORDER BY day ASC
+      `,
+      [campId]
+    );
 
-    const logs = await db.query(`SELECT * FROM traffic_logs WHERE campaign_id=$1 ORDER BY id DESC LIMIT 100`, [campId]);
-    res.render('admin/report', { camp: rCamp.rows[0], stats: stats.rows, logs: logs.rows });
+    const totals = await db.query(
+      `
+        SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
+               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
+               COUNT(*) as total
+        FROM traffic_logs 
+        WHERE campaign_id = $1 
+          AND created_at >= date_trunc('day', now() - interval '30 days')
+      `,
+      [campId]
+    );
+
+    const prevTotals = await db.query(
+      `
+        SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
+               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
+               COUNT(*) as total
+        FROM traffic_logs 
+        WHERE campaign_id = $1 
+          AND created_at >= date_trunc('day', now() - interval '60 days')
+          AND created_at < date_trunc('day', now() - interval '30 days')
+      `,
+      [campId]
+    );
+
+    const countryStats = await db.query(
+      `
+        SELECT country, 
+               COUNT(*) as hits,
+               COUNT(*) FILTER (WHERE action='redirect') as redirects
+        FROM traffic_logs
+        WHERE campaign_id=$1 
+          AND created_at >= date_trunc('day', now() - interval '30 days')
+        GROUP BY country
+        ORDER BY hits DESC
+        LIMIT 6
+      `,
+      [campId]
+    );
+
+    const logs = await db.query(
+      `SELECT * FROM traffic_logs WHERE campaign_id=$1 ORDER BY id DESC LIMIT 150`,
+      [campId]
+    );
+
+    const summary = totals.rows[0] || { redirects: 0, safe: 0, total: 0 };
+    const previous = prevTotals.rows[0] || { redirects: 0, safe: 0, total: 0 };
+    summary.pass_rate = summary.total
+      ? Math.round((summary.redirects / summary.total) * 1000) / 10
+      : 0;
+    summary.delta_redirects = summary.redirects - (previous.redirects || 0);
+    summary.redirect_growth =
+      previous.redirects > 0
+        ? Math.round((summary.delta_redirects / previous.redirects) * 1000) / 10
+        : null;
+
+    res.render("admin/report", {
+      camp: rCamp.rows[0],
+      stats: stats.rows,
+      logs: logs.rows,
+      summary,
+      countryStats: countryStats.rows,
+    previous,
+  });
+});
+
+app.get("/campaigns/:id/report/export", checkAuth, async (req, res) => {
+  const campId = req.params.id;
+  const { normalized, start, end } = parseMonthRange(req.query.month);
+  const rCamp = await db.query(`SELECT name FROM campaigns WHERE id=$1`, [
+    campId,
+  ]);
+  if (!rCamp.rowCount) return res.redirect("/");
+
+  const data = await db.query(
+    `
+      SELECT date(created_at) as day,
+             COUNT(*) FILTER (WHERE action='redirect') as redirects,
+             COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
+      FROM traffic_logs
+      WHERE campaign_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+      GROUP BY day
+      ORDER BY day ASC
+    `,
+    [campId, start, end]
+  );
+
+  const rows = ["day,redirects,safe,total,pass_rate_percent"];
+  data.rows.forEach((row) => {
+    const day = new Date(row.day).toISOString().slice(0, 10);
+    const redirects = Number(row.redirects || 0);
+    const safe = Number(row.safe || 0);
+    const total = redirects + safe;
+    const rate = total ? Math.round((redirects / total) * 1000) / 10 : 0;
+    rows.push(`${day},${redirects},${safe},${total},${rate}`);
+  });
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=\"campaign-${campId}-${normalized}.csv\"`
+  );
+  res.send(rows.join("\n"));
 });
 // ...
 

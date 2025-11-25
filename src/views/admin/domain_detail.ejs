@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Quản lý - <%= domain.domain_url %>
+    </title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: sans-serif;
+        }
+
+        .select2-container {
+            width: 100% !important;
+            z-index: 9999;
+        }
+
+        .suggestion-box {
+            background: #fff3cd;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark px-4 mb-4">
+        <a href="/" class="navbar-brand btn btn-outline-light border-0 text-start">⬅ Quay lại Dashboard</a>
+    </nav>
+
+    <div class="container pb-5">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h3 class="mb-1 text-primary">
+                        <%= domain.domain_url %>
+                    </h3>
+                    <span class="badge bg-secondary">Giao diện sạch: <%= domain.safe_template %></span>
+                    <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>">
+                        <%= domain.status.toUpperCase() %>
+                    </span>
+                </div>
+                <div>
+                    <button class="btn btn-outline-primary me-2" onclick="checkDNS('<%= domain.id %>')">Check
+                        DNS</button>
+                    <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#addLinkModal">+ Tạo
+                        Link Mới</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Tên Camp</th>
+                        <th>Link Chạy Ads</th>
+                        <th>Quy tắc (Rules)</th>
+                        <th>Trạng thái</th>
+                        <th>Thống kê</th>
+                        <th class="text-end">Hành động</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (links.length===0) { %>
+                        <tr>
+                            <td colspan="6" class="text-center py-4">Chưa có link nào.</td>
+                        </tr>
+                        <% } %>
+                            <% links.forEach(l=> { %>
+                                <tr>
+                                    <td>
+                                        <b>
+                                            <%= l.name %>
+                                        </b><br>
+                                        <small class="text-muted text-truncate" style="max-width: 150px; display:block">
+                                            <%= l.target_url %>
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control bg-white text-primary fw-bold"
+                                                value="<%= l.full_url %>" readonly id="link-<%= l.id %>">
+                                            <button class="btn btn-primary copy-btn"
+                                                onclick="copyLink('link-<%= l.id %>')" title="Sao chép Link">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </div>
+                                        <div class="mt-1">
+                                            <span class="badge bg-light text-secondary border">Auto ID: <%=
+                                                    l.param_value %></span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <small>
+                                            <% if(l.rules && l.rules.length) { %>
+                                                Check: <b>
+                                                    <%= l.rules.length %>
+                                                </b> tham số<br>
+                                                Quốc gia: <%= (l.filters && l.filters.countries &&
+                                                    l.filters.countries.length) ? l.filters.countries.join(',') : 'All'
+                                                    %>
+                                                    <% } else { %> Mặc định <% } %>
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <a href="/campaigns/toggle/<%= l.id %>"
+                                            class="btn btn-sm <%= l.is_active ? 'btn-success' : 'btn-danger' %>">
+                                            <%= l.is_active ? 'ON' : 'OFF' %>
+                                        </a>
+                                        <% if(!l.is_active && l.potential_traffic> 10) { %>
+                                            <div class="suggestion-box text-warning">⚠️ <%= l.potential_traffic %> click
+                                                    tiềm năng</div>
+                                            <% } %>
+                                    </td>
+                                    <td><b>
+                                            <%= l.stats_redirects %>
+                                        </b> pass</td>
+                                    <td class="text-end">
+                                        <a href="/campaigns/<%= l.id %>/report"
+                                            class="btn btn-sm btn-info text-white"><i class="fas fa-chart-bar"></i></a>
+                                        <a href="/campaigns/edit/<%= l.id %>" class="btn btn-sm btn-primary"><i
+                                                class="fas fa-edit"></i></a>
+                                        <% if (user.role_name==='super_admin' ) { %>
+                                            <a href="/campaigns/delete/<%= l.id %>" class="btn btn-sm btn-danger"
+                                                onclick="return confirm('Xóa?')"><i class="fas fa-trash"></i></a>
+                                            <% } %>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal fade" id="addLinkModal" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <form class="modal-content" action="/campaigns/create" method="POST" id="createForm">
+                <div class="modal-header">
+                    <h5 class="modal-title">Tạo Link Ads Mới</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="domain_id" value="<%= domain.id %>">
+
+                    <div class="alert alert-info py-2 small">
+                        <i class="fas fa-bolt"></i> Link sẽ được sinh tự động (VD: <b>?q=AbC123</b>) sau khi lưu.
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="fw-bold">Tên Chiến Dịch</label>
+                            <input type="text" name="name" class="form-control" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="fw-bold">Link Đích (Target)</label>
+                            <input type="url" name="target_url" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <div class="mb-3">
+                        <label class="fw-bold">Quốc gia cho phép</label>
+                        <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple"
+                            id="countrySelect"></select>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="fw-bold">Luật kiểm tra</label>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button"
+                                data-bs-toggle="dropdown">Mẫu Nhanh</button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="addTemplate('fb')">Facebook Ads</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="addTemplate('gg')">Google Ads</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div id="rules-wrapper" class="border rounded p-2 mb-2 bg-light"></div>
+                    <button type="button" class="btn btn-sm btn-secondary w-100" onclick="addNewRule()">+ Thêm điều
+                        kiện</button>
+                    <input type="hidden" name="rules_json" id="rules_json">
+                </div>
+                <div class="modal-footer"><button class="btn btn-primary w-100">Tạo Link Ngay</button></div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+       const ALL_COUNTRIES = {
+        "VN": "Vietnam", "US": "United States", "GB": "United Kingdom", "JP": "Japan", "KR": "South Korea",
+        "CN": "China", "TW": "Taiwan", "TH": "Thailand", "ID": "Indonesia", "PH": "Philippines",
+        "SG": "Singapore", "MY": "Malaysia", "IN": "India", "AU": "Australia", "CA": "Canada",
+        "DE": "Germany", "FR": "France", "RU": "Russia", "BR": "Brazil", "UA": "Ukraine",
+        "AF": "Afghanistan", "AX": "Åland Islands", "AL": "Albania", "DZ": "Algeria", "AS": "American Samoa",
+        "AD": "Andorra", "AO": "Angola", "AI": "Anguilla", "AQ": "Antarctica", "AG": "Antigua and Barbuda",
+        "AR": "Argentina", "AM": "Armenia", "AW": "Aruba", "AT": "Austria", "AZ": "Azerbaijan",
+        "BS": "Bahamas", "BH": "Bahrain", "BD": "Bangladesh", "BB": "Barbados", "BY": "Belarus",
+        "BE": "Belgium", "BZ": "Belize", "BJ": "Benin", "BM": "Bermuda", "BT": "Bhutan",
+        "BO": "Bolivia", "BQ": "Bonaire, Sint Eustatius and Saba", "BA": "Bosnia and Herzegovina", "BW": "Botswana", "BV": "Bouvet Island",
+        "IO": "British Indian Ocean Territory", "BN": "Brunei Darussalam", "BG": "Bulgaria", "BF": "Burkina Faso", "BI": "Burundi",
+        "CV": "Cabo Verde", "KH": "Cambodia", "CM": "Cameroon", "KY": "Cayman Islands", "CF": "Central African Republic",
+        "TD": "Chad", "CL": "Chile", "CX": "Christmas Island", "CC": "Cocos (Keeling) Islands", "CO": "Colombia",
+        "KM": "Comoros", "CG": "Congo", "CD": "Congo (Democratic Republic)", "CK": "Cook Islands", "CR": "Costa Rica",
+        "CI": "Côte d'Ivoire", "HR": "Croatia", "CU": "Cuba", "CW": "Curaçao", "CY": "Cyprus",
+        "CZ": "Czechia", "DK": "Denmark", "DJ": "Djibouti", "DM": "Dominica", "DO": "Dominican Republic",
+        "EC": "Ecuador", "EG": "Egypt", "SV": "El Salvador", "GQ": "Equatorial Guinea", "ER": "Eritrea",
+        "EE": "Estonia", "SZ": "Eswatini", "ET": "Ethiopia", "FK": "Falkland Islands", "FO": "Faroe Islands",
+        "FJ": "Fiji", "FI": "Finland", "GF": "French Guiana", "PF": "French Polynesia", "TF": "French Southern Territories",
+        "GA": "Gabon", "GM": "Gambia", "GE": "Georgia", "GH": "Ghana", "GI": "Gibraltar",
+        "GR": "Greece", "GL": "Greenland", "GD": "Grenada", "GP": "Guadeloupe", "GU": "Guam",
+        "GT": "Guatemala", "GG": "Guernsey", "GN": "Guinea", "GW": "Guinea-Bissau", "GY": "Guyana",
+        "HT": "Haiti", "HM": "Heard Island and McDonald Islands", "VA": "Holy See", "HN": "Honduras", "HK": "Hong Kong",
+        "HU": "Hungary", "IS": "Iceland", "IR": "Iran", "IQ": "Iraq", "IE": "Ireland",
+        "IM": "Isle of Man", "IL": "Israel", "IT": "Italy", "JM": "Jamaica", "JE": "Jersey",
+        "JO": "Jordan", "KZ": "Kazakhstan", "KE": "Kenya", "KI": "Kiribati", "KP": "North Korea",
+        "KW": "Kuwait", "KG": "Kyrgyzstan", "LA": "Lao People's Democratic Republic", "LV": "Latvia", "LB": "Lebanon",
+        "LS": "Lesotho", "LR": "Liberia", "LY": "Libya", "LI": "Liechtenstein", "LT": "Lithuania",
+        "LU": "Luxembourg", "MO": "Macao", "MG": "Madagascar", "MW": "Malawi", "MV": "Maldives",
+        "ML": "Mali", "MT": "Malta", "MH": "Marshall Islands", "MQ": "Martinique", "MR": "Mauritania",
+        "MU": "Mauritius", "YT": "Mayotte", "MX": "Mexico", "FM": "Micronesia", "MD": "Moldova",
+        "MC": "Monaco", "MN": "Mongolia", "ME": "Montenegro", "MS": "Montserrat", "MA": "Morocco",
+        "MZ": "Mozambique", "MM": "Myanmar", "NA": "Namibia", "NR": "Nauru", "NP": "Nepal",
+        "NL": "Netherlands", "NC": "New Caledonia", "NZ": "New Zealand", "NI": "Nicaragua", "NE": "Niger",
+        "NG": "Nigeria", "NU": "Niue", "NF": "Norfolk Island", "MK": "North Macedonia", "MP": "Northern Mariana Islands",
+        "NO": "Norway", "OM": "Oman", "PK": "Pakistan", "PW": "Palau", "PS": "Palestine, State of",
+        "PA": "Panama", "PG": "Papua New Guinea", "PY": "Paraguay", "PE": "Peru", "PN": "Pitcairn",
+        "PL": "Poland", "PT": "Portugal", "PR": "Puerto Rico", "QA": "Qatar", "RE": "Réunion",
+        "RO": "Romania", "RW": "Rwanda", "BL": "Saint Barthélemy", "SH": "Saint Helena", "KN": "Saint Kitts and Nevis",
+        "LC": "Saint Lucia", "MF": "Saint Martin (French part)", "PM": "Saint Pierre and Miquelon", "VC": "Saint Vincent and the Grenadines", "WS": "Samoa",
+        "SM": "San Marino", "ST": "Sao Tome and Principe", "SA": "Saudi Arabia", "SN": "Senegal", "RS": "Serbia",
+        "SC": "Seychelles", "SL": "Sierra Leone", "SX": "Sint Maarten (Dutch part)", "SK": "Slovakia", "SI": "Slovenia",
+        "SB": "Solomon Islands", "SO": "Somalia", "ZA": "South Africa", "GS": "South Georgia and the South Sandwich Islands", "SS": "South Sudan",
+        "ES": "Spain", "LK": "Sri Lanka", "SD": "Sudan", "SR": "Suriname", "SJ": "Svalbard and Jan Mayen",
+        "SE": "Sweden", "CH": "Switzerland", "SY": "Syria", "TJ": "Tajikistan", "TZ": "Tanzania",
+        "TL": "Timor-Leste", "TG": "Togo", "TK": "Tokelau", "TO": "Tonga", "TT": "Trinidad and Tobago",
+        "TN": "Tunisia", "TR": "Turkey", "TM": "Turkmenistan", "TC": "Turks and Caicos Islands", "TV": "Tuvalu",
+        "UG": "Uganda", "AE": "United Arab Emirates", "UY": "Uruguay", "UZ": "Uzbekistan", "VU": "Vanuatu",
+        "VE": "Venezuela", "VG": "Virgin Islands (British)", "VI": "Virgin Islands (U.S.)", "WF": "Wallis and Futuna", "EH": "Western Sahara",
+        "YE": "Yemen", "ZM": "Zambia", "ZW": "Zimbabwe"
+    };
+
+        $(document).ready(function () {
+            const select = $('#countrySelect');
+            for (let [code, name] of Object.entries(ALL_COUNTRIES)) {
+                select.append(new Option(`${name} (${code})`, code));
+            }
+            select.select2({ placeholder: "Chọn quốc gia...", dropdownParent: $('#addLinkModal') });
+
+            // Mặc định thêm 1 dòng rule trống
+            addNewRule('utm_source', 'exists', '');
+        });
+
+        function addNewRule(key = '', op = 'exists', val = '') {
+            let html = `
+                <div class="row g-2 mb-2 rule-row align-items-center">
+                    <div class="col-4"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key (vd: fbclid)" value="${key}"></div>
+                    <div class="col-3">
+                        <select class="form-select form-select-sm rule-op" onchange="toggleVal(this)">
+                            <option value="exists" ${op === 'exists' ? 'selected' : ''}>Tồn tại</option>
+                            <option value="equals" ${op === 'equals' ? 'selected' : ''}>Bằng (=)</option>
+                        </select>
+                    </div>
+                    <div class="col-4"><input type="text" class="form-control form-control-sm rule-val" value="${val}" ${op === 'exists' ? 'disabled' : ''} placeholder="Giá trị"></div>
+                    <div class="col-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove()">×</button></div>
+                </div>`;
+            $('#rules-wrapper').append(html);
+        }
+
+        function toggleVal(sel) {
+            const inp = sel.closest('.rule-row').querySelector('.rule-val');
+            inp.disabled = (sel.value === 'exists');
+            if (inp.disabled) inp.value = '';
+        }
+
+        function addTemplate(t) {
+            $('#rules-wrapper').empty(); // Xóa trắng để nạp mẫu mới
+            if (t === 'fb') {
+                // List chuẩn Facebook
+                addNewRule('utm_source', 'equals', 'facebook');
+                addNewRule('fbclid', 'exists');
+                addNewRule('campaign_id', 'exists');
+                addNewRule('adset_id', 'exists');
+                addNewRule('ad_id', 'exists');
+                addNewRule('placement', 'exists');
+            }
+            else if (t === 'gg') {
+                // List chuẩn Google
+                addNewRule('utm_source', 'equals', 'google');
+                addNewRule('gclid', 'exists');
+                addNewRule('campaignid', 'exists');
+                addNewRule('adgroupid', 'exists');
+                addNewRule('keyword', 'exists');
+            }
+            else if (t === 'tiktok') {
+                addNewRule('utm_source', 'equals', 'tiktok');
+                addNewRule('ttclid', 'exists');
+            }
+        }
+
+        function checkDNS(id) {
+            fetch(`/domains/${id}/verify`).then(r => r.json()).then(d => { alert(d.msg); location.reload(); });
+        }
+
+        function copyLink(id) {
+            const el = document.getElementById(id);
+            el.select();
+            document.execCommand("copy");
+            alert("Đã copy");
+        }
+
+        $('#createForm').on('submit', function () {
+            let rules = [];
+            $('.rule-row').each(function () {
+                let k = $(this).find('.rule-key').val();
+                let o = $(this).find('.rule-op').val();
+                let v = $(this).find('.rule-val').val();
+                if (k) rules.push({ key: k, operator: o, value: v });
+            });
+            $('#rules_json').val(JSON.stringify(rules));
+        });
+    </script>
+</body>
+
+</html>

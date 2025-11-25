@@ -1,106 +1,196 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
-    <title>Báo cáo - <%= camp.name %></title>
+    <title>Bao cao - <%= camp.name %></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        .card-stat { border: none; }
+        .card-stat h2 { margin: 0; }
+        .badge-pill { border-radius: 50px; }
         .table-log td { font-size: 0.85rem; vertical-align: middle; }
-        .badge-status { min-width: 60px; }
     </style>
 </head>
 <body class="bg-light p-4">
     <div class="container bg-white p-4 rounded shadow-sm">
-        <div class="d-flex justify-content-between mb-4">
-            <h3>📊 Báo cáo: <span class="text-primary"><%= camp.name %></span></h3>
-            <a href="/domains/<%= camp.domain_id %>" class="btn btn-outline-secondary">Quay lại</a>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h3 class="mb-1">Bao cao: <span class="text-primary"><%= camp.name %></span></h3>
+                <small class="text-muted">Domain ID: <%= camp.domain_id %> | Campaign ID: <%= camp.id %></small>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <form class="d-flex align-items-center" action="/campaigns/<%= camp.id %>/report/export" method="GET">
+                    <input type="month" name="month" class="form-control form-control-sm me-2" value="<%= new Date().toISOString().slice(0,7) %>">
+                    <button class="btn btn-outline-primary btn-sm" type="submit"><i class="fas fa-file-export me-1"></i>Xuat CSV</button>
+                </form>
+                <a href="/domains/<%= camp.domain_id %>" class="btn btn-outline-secondary btn-sm">Quay lai</a>
+            </div>
         </div>
 
-        <div class="row mb-5">
-            <div class="col-md-12">
-                <h5 class="border-bottom pb-2">Traffic 7 ngày qua</h5>
-                <table class="table table-bordered text-center">
-                    <thead class="table-light">
-                        <th>Ngày</th>
-                        <th class="text-success">Redirect (Pass)</th>
-                        <th class="text-danger">Safe Page (Fail)</th>
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card card-stat shadow-sm">
+                    <div class="card-body">
+                        <div class="text-muted">Redirect (Pass)</div>
+                        <h2 class="text-success fw-bold"><%= summary.redirects || 0 %></h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-stat shadow-sm">
+                    <div class="card-body">
+                        <div class="text-muted">Safe (Fail)</div>
+                        <h2 class="text-danger fw-bold"><%= summary.safe || 0 %></h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-stat shadow-sm">
+                    <div class="card-body">
+                        <div class="text-muted">Pass rate</div>
+                        <h2 class="fw-bold"><%= summary.pass_rate || 0 %>%</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-stat shadow-sm">
+                    <div class="card-body">
+                        <div class="text-muted">Tang truong redirect</div>
+                        <% if(summary.redirect_growth === null) { %>
+                            <h2 class="fw-bold text-muted">N/A</h2>
+                        <% } else { %>
+                            <h2 class="fw-bold <%= summary.redirect_growth >=0 ? 'text-success' : 'text-danger' %>">
+                                <%= summary.redirect_growth %>%
+                            </h2>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-lg-8">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-white"><b>Traffic 30 ngay</b></div>
+                    <div class="card-body"><canvas id="trafficChart" height="120"></canvas></div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-white"><b>Top quoc gia</b></div>
+                    <div class="card-body p-0">
+                        <table class="table table-sm mb-0">
+                            <thead><tr><th>Quoc gia</th><th class="text-end">Hit</th><th class="text-end">Pass</th></tr></thead>
+                            <tbody>
+                                <% if(!countryStats || countryStats.length === 0) { %>
+                                    <tr><td colspan="3" class="text-center text-muted py-3">Chua co du lieu</td></tr>
+                                <% } %>
+                                <% countryStats && countryStats.forEach(c => { %>
+                                    <tr>
+                                        <td><%= c.country || 'N/A' %></td>
+                                        <td class="text-end"><%= c.hits %></td>
+                                        <td class="text-end"><%= c.redirects %></td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h5 class="border-bottom pb-2">Bang ngay (30 ngay)</h5>
+            <table class="table table-bordered text-center">
+                <thead class="table-light">
+                    <tr><th>Ngay</th><th class="text-success">Redirect</th><th class="text-danger">Safe</th><th>Pass %</th></tr>
+                </thead>
+                <tbody>
+                    <% if(stats.length === 0) { %>
+                        <tr><td colspan="4" class="text-center text-muted">Chua co du lieu</td></tr>
+                    <% } %>
+                    <% stats.forEach(s => { const total = (s.redirects||0) + (s.safe||0); const rate = total ? Math.round((s.redirects/total)*1000)/10 : 0; %>
+                        <tr>
+                            <td><%= new Date(s.day).toLocaleDateString('vi-VN') %></td>
+                            <td class="text-success fw-bold"><%= s.redirects || 0 %></td>
+                            <td class="text-danger fw-bold"><%= s.safe || 0 %></td>
+                            <td><%= rate %>%</td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+
+        <div>
+            <h5 class="border-bottom pb-2">Log moi (150)</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover table-log">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Thoi gian (VN)</th>
+                            <th>IP</th>
+                            <th>Quoc gia</th>
+                            <th>Thiet bi / OS</th>
+                            <th>Trang thai</th>
+                            <th>Ly do</th>
+                            <th>Referer</th>
+                        </tr>
                     </thead>
                     <tbody>
-                        <% if(stats.length === 0) { %>
-                            <tr><td colspan="3">Chưa có dữ liệu</td></tr>
-                        <% } %>
-                        <% stats.forEach(s => { %>
+                        <% logs.forEach(log => { %>
                             <tr>
-                                <td><%= new Date(s.day).toLocaleDateString('vi-VN') %></td>
-                                <td class="text-success fw-bold fs-5"><%= s.redirects || 0 %></td>
-                                <td class="text-danger fw-bold fs-5"><%= s.safe || 0 %></td>
+                                <td><%= new Date(log.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
+                                <td class="font-monospace"><%= log.ip %></td>
+                                <td><span class="badge bg-info text-dark"><%= log.country %></span></td>
+                                <td><%= log.device_type || 'PC' %> / <%= log.os_name || 'Unknown' %></td>
+                                <td><span class="badge <%= log.action === 'redirect' ? 'bg-success' : 'bg-danger' %> badge-pill"><%= log.action === 'redirect' ? 'PASS' : 'FAIL' %></span></td>
+                                <td>
+                                    <% if(log.action === 'redirect') { %>
+                                        <span class="text-success small">Chuyen huong OK</span>
+                                    <% } else if (log.action === 'safe_page_inactive') { %>
+                                        <span class="text-warning small">Link dang tat</span>
+                                    <% } else if (log.action === 'safe_page_wrong_country') { %>
+                                        <span class="text-danger small">Sai quoc gia</span>
+                                    <% } else if (log.action === 'safe_page_wrong_param_val' || log.action === 'safe_page_missing_param') { %>
+                                        <span class="text-danger small">Tham so sai/thieu</span>
+                                    <% } else { %>
+                                        <span class="text-muted small">Trang safe</span>
+                                    <% } %>
+                                </td>
+                                <td class="text-truncate" style="max-width: 150px;" title="<%= log.referer %>"><%= log.referer || '-' %></td>
                             </tr>
                         <% }) %>
                     </tbody>
                 </table>
             </div>
         </div>
-
-        <h5 class="border-bottom pb-2">📋 Nhật ký truy cập (100 lượt mới nhất)</h5>
-        <div class="table-responsive">
-            <table class="table table-sm table-striped table-hover table-log">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Thời gian (VN)</th>
-                        <th>IP</th>
-                        <th>Quốc gia</th>
-                        <th>Thiết bị / OS</th>
-                        <th>Trạng thái</th>
-                        <th>Chi tiết lỗi</th>
-                        <th>Referer</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% logs.forEach(log => { %>
-                        <tr>
-                            <td><%= new Date(log.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
-                            
-                            <td><span class="font-monospace"><%= log.ip %></span></td>
-                            
-                            <td><span class="badge bg-info text-dark"><%= log.country %></span></td>
-                            
-                            <td>
-                                <% if(log.device_type || log.os_name) { %>
-                                    <%= log.device_type || 'PC' %> / <%= log.os_name || 'Unknown' %>
-                                <% } else { %>
-                                    <span class="text-muted">-</span>
-                                <% } %>
-                            </td>
-                            
-                            <td>
-                                <% if(log.action === 'redirect') { %>
-                                    <span class="badge bg-success badge-status">PASS</span>
-                                <% } else { %>
-                                    <span class="badge bg-danger badge-status">FAIL</span>
-                                <% } %>
-                            </td>
-
-                            <td>
-                                <% if(log.action === 'redirect') { %>
-                                    <span class="text-success small">Chuyển hướng OK</span>
-                                <% } else if (log.action === 'safe_page_inactive') { %>
-                                    <span class="text-warning small">Link đang Tắt</span>
-                                <% } else if (log.action === 'safe_page_wrong_country') { %>
-                                    <span class="text-danger small">Sai Quốc gia</span>
-                                <% } else if (log.action === 'safe_page_wrong_params' || log.action === 'safe_page_missing_param') { %>
-                                    <span class="text-danger small">Thiếu/Sai Tham số</span>
-                                <% } else { %>
-                                    <span class="text-muted small">Vào trang sạch</span>
-                                <% } %>
-                            </td>
-
-                            <td class="text-truncate" style="max-width: 150px;" title="<%= log.referer %>">
-                                <%= log.referer || '-' %>
-                            </td>
-                        </tr>
-                    <% }) %>
-                </tbody>
-            </table>
-        </div>
     </div>
+
+    <script>
+        const statsData = <%- JSON.stringify(stats || []) %>;
+        const labels = statsData.map(s => new Date(s.day).toLocaleDateString('vi-VN'));
+        const redirectSeries = statsData.map(s => s.redirects || 0);
+        const safeSeries = statsData.map(s => s.safe || 0);
+
+        const ctx = document.getElementById('trafficChart');
+        if (ctx && statsData.length) {
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Redirect', data: redirectSeries, borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.1)', tension: 0.3 },
+                        { label: 'Safe', data: safeSeries, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.3 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: true } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+    </script>
 </body>
 </html>

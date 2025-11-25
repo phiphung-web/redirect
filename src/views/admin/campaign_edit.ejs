@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
     <title>Sửa Chiến Dịch - <%= camp.name %></title>
@@ -37,6 +37,11 @@
                 <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple" id="countrySelect">
                     </select>
                 <small class="text-muted">Để trống = Tất cả quốc gia.</small>
+            </div>
+            <div class="mb-3">
+                <label class="fw-bold">Dan cau hinh (JSON)</label>
+                <textarea class="form-control" rows="3" id="configPaste" placeholder='{"rules":[], "filters":{"countries":["VN","US"]}}'></textarea>
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="applyConfigFromTextarea()">Ap dung cau hinh</button>
             </div>
 
             <hr>
@@ -152,6 +157,24 @@
             const inp = sel.closest('.rule-row').querySelector('.rule-val');
             inp.disabled = (sel.value === 'exists');
             if(inp.disabled) inp.value = '';
+        }
+
+        function applyConfigFromTextarea() {
+            const txt = document.getElementById('configPaste').value.trim();
+            if (!txt) return;
+            try {
+                const cfg = JSON.parse(txt);
+                fillConfigForm(cfg);
+            } catch (e) {
+                alert("JSON khong hop le");
+            }
+        }
+
+        function fillConfigForm(cfg) {
+            $('#rules-wrapper').empty();
+            (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value));
+            const countries = (cfg.filters && cfg.filters.countries) || [];
+            $('#countrySelect').val(countries).trigger('change');
         }
 
         $('#editForm').on('submit', function() {

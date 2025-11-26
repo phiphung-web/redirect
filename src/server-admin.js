@@ -438,7 +438,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   const now = new Date();
   let start = new Date(now);
   let end = new Date(now);
-  const grouping = "day";
+  let grouping = "day";
 
   const parseDate = (s) => {
     const d = new Date(s);
@@ -493,17 +493,17 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
 
   const stats = await db.query(
     `
-        SELECT date_trunc('day', created_at) as day, 
+        SELECT date_trunc($4::text, created_at) as day, 
                COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
                COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
         FROM traffic_logs 
         WHERE campaign_id = $1 
           AND created_at >= $2
-          AND created_at < $4
+          AND created_at < $3
         GROUP BY day 
         ORDER BY day ASC
       `,
-    [campId, start, end]
+    [campId, start, end, grouping]
   );
 
   const totals = await db.query(
@@ -574,7 +574,9 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
       ? Math.round((summary.delta_redirects / previous.redirects) * 1000) / 10
       : null;
 
-  const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${end.toLocaleDateString("vi-VN")}`;
+  const labelEnd = new Date(end);
+  if (range !== "today") labelEnd.setDate(labelEnd.getDate() - 1);
+  const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${labelEnd.toLocaleDateString("vi-VN")}`;
 
   res.render("admin/report", {
     camp: rCamp.rows[0],

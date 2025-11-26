@@ -35,6 +35,52 @@ const parseMonthRange = (monthStr) => {
   return { normalized, start, end };
 };
 
+const buildSystemStatus = async () => {
+  let dbStatus = "ok";
+  let dbInfo = {
+    version: null,
+    connections: null,
+    active_connections: null,
+    db_size: null,
+  };
+  try {
+    const r = await db.query(
+      `SELECT version(),
+              (SELECT COUNT(*) FROM pg_stat_activity) AS connections,
+              (SELECT COUNT(*) FROM pg_stat_activity WHERE state='active') AS active_connections,
+              pg_database_size(current_database()) AS db_size`
+    );
+    dbInfo = {
+      version: r.rows[0].version,
+      connections: Number(r.rows[0].connections || 0),
+      active_connections: Number(r.rows[0].active_connections || 0),
+      db_size: Number(r.rows[0].db_size || 0),
+    };
+  } catch (e) {
+    dbStatus = "error";
+  }
+  const load = os.loadavg();
+  const memTotal = os.totalmem();
+  const memFree = os.freemem();
+  const memUsed = memTotal - memFree;
+  return {
+    uptime: os.uptime(),
+    load1: load[0],
+    load5: load[1],
+    load15: load[2],
+    memTotal,
+    memUsed,
+    memFree,
+    dbStatus,
+    dbInfo,
+    procMem: process.memoryUsage(),
+    procUptime: process.uptime(),
+    platform: os.platform(),
+    release: os.release(),
+    cpus: os.cpus().length,
+  };
+};
+
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.urlencoded({ extended: true }));
@@ -580,6 +626,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${labelEnd.toLocaleDateString("vi-VN")}`;
 
   res.render("admin/report", {
+    user: req.session.user,
     camp: rCamp.rows[0],
     stats: stats.rows,
     logs: logs.rows,
@@ -619,6 +666,7 @@ app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {
   sql += ` ORDER BY id DESC LIMIT ${limit}`;
   const logs = await db.query(sql, params);
   res.render("admin/logs", {
+    user: req.session.user,
     camp: rCamp.rows[0],
     logs: logs.rows,
     action,
@@ -792,32 +840,13 @@ app.get(
 );
 
 app.get("/admin/system", requireRole(["super_admin"]), async (req, res) => {
-  let dbStatus = "ok";
-  try {
-    await db.query("SELECT 1");
-  } catch (e) {
-    dbStatus = "error";
-  }
-  const load = os.loadavg();
-  const memTotal = os.totalmem();
-  const memFree = os.freemem();
-  const memUsed = memTotal - memFree;
-  res.render("admin/system", {
-    user: req.session.user,
-    uptime: os.uptime(),
-    load1: load[0],
-    load5: load[1],
-    load15: load[2],
-    memTotal,
-    memUsed,
-    memFree,
-    dbStatus,
-    procMem: process.memoryUsage(),
-    procUptime: process.uptime(),
-    platform: os.platform(),
-    release: os.release(),
-    cpus: os.cpus().length,
-  });
+  const stats = await buildSystemStatus();
+  res.render("admin/system", { user: req.session.user, ...stats });
+});
+
+app.get("/admin/system/data", requireRole(["super_admin"]), async (req, res) => {
+  const stats = await buildSystemStatus();
+  res.json(stats);
 });
 
 app.listen(PORT, () => console.log(`Admin V2 running on ${PORT}`));

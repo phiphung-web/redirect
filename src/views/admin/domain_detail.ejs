@@ -24,10 +24,14 @@
                     <h3 class="mb-1 text-primary"><%= domain.domain_url %></h3>
                     <span class="badge bg-secondary">Giao diện sách: <%= domain.safe_template %></span>
                     <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>"><%= domain.status.toUpperCase() %></span>
-                    <div class="text-muted small mt-1">
-                        Tạo: <%= domain.created_by_name || 'N/A' %> @ <%= new Date(domain.created_at).toLocaleString('vi-VN') %> |
-                        Cập nhật: <%= domain.updated_by_name || domain.created_by_name || '-' %> @ <%= domain.updated_at ? new Date(domain.updated_at).toLocaleString('vi-VN') : '-' %>
-                    </div>
+                    <div class="text-muted small mt-1">Tạo: <%= domain.created_by_name || 'N/A' %> @ <%= new Date(domain.created_at).toLocaleString('vi-VN') %> | Cập nhật: <%= domain.updated_by_name || domain.created_by_name || '-' %> @ <%= domain.updated_at ? new Date(domain.updated_at).toLocaleString('vi-VN') : '-' %></div>
+                    <% if (linkStats) { %>
+                        <div class="mt-2">
+                            <span class="badge bg-primary">Tổng link: <%= linkStats.total %></span>
+                            <span class="badge bg-success">ON: <%= linkStats.active %></span>
+                            <span class="badge bg-secondary">OFF: <%= linkStats.total - linkStats.active %></span>
+                        </div>
+                    <% } %>
                 </div>
                 <div>
                     <button class="btn btn-outline-primary me-2" onclick="checkDNS('<%= domain.id %>')">Check DNS</button>
@@ -111,7 +115,7 @@
                     <input type="hidden" name="domain_id" value="<%= domain.id %>">
                     <input type="hidden" name="copy_from_id" id="copy_from_id">
 
-                    <div class="alert alert-info py-2 small"><i class="fas fa-bolt"></i> Link sinh tự động (VD: ?q=AbC123) sau khi lưu.</div>
+                    <div class="alert alert-info py-2 small"><i class="fas fa-bolt"></i> Link sẽ được sinh tự động (VD: ?q=AbC123) sau khi lưu.</div>
 
                     <div class="row mb-3">
                         <div class="col-6">
@@ -167,7 +171,12 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
     <script>
-       const ALL_COUNTRIES = {"VN": "Vietnam", "US": "United States", "GB": "United Kingdom", "JP": "Japan", "KR": "South Korea", "CN": "China", "TW": "Taiwan", "TH": "Thailand", "ID": "Indonesia", "PH": "Philippines", "SG": "Singapore", "MY": "Malaysia", "IN": "India", "AU": "Australia", "CA": "Canada", "DE": "Germany", "FR": "France", "RU": "Russia", "BR": "Brazil", "UA": "Ukraine"};
+       const ALL_COUNTRIES = {
+        "VN": "Vietnam", "US": "United States", "GB": "United Kingdom", "JP": "Japan", "KR": "South Korea",
+        "CN": "China", "TW": "Taiwan", "TH": "Thailand", "ID": "Indonesia", "PH": "Philippines",
+        "SG": "Singapore", "MY": "Malaysia", "IN": "India", "AU": "Australia", "CA": "Canada",
+        "DE": "Germany", "FR": "France", "RU": "Russia", "BR": "Brazil", "UA": "Ukraine"
+    };
 
         $(document).ready(function () {
             const select = $('#countrySelect');
@@ -201,21 +210,25 @@
         }
 
         function addTemplate(t) {
-            $('#rules-wrapper').empty();
+            $('#rules-wrapper').empty(); // Xóa trống để nạp mẫu mới
             if (t === 'fb') {
+                // List chuẩn Facebook
                 addNewRule('utm_source', 'equals', 'facebook');
                 addNewRule('fbclid', 'exists');
                 addNewRule('campaign_id', 'exists');
                 addNewRule('adset_id', 'exists');
                 addNewRule('ad_id', 'exists');
                 addNewRule('placement', 'exists');
-            } else if (t === 'gg') {
+            }
+            else if (t === 'gg') {
+                // List chuẩn Google
                 addNewRule('utm_source', 'equals', 'google');
                 addNewRule('gclid', 'exists');
                 addNewRule('campaignid', 'exists');
                 addNewRule('adgroupid', 'exists');
                 addNewRule('keyword', 'exists');
-            } else if (t === 'tiktok') {
+            }
+            else if (t === 'tiktok') {
                 addNewRule('utm_source', 'equals', 'tiktok');
                 addNewRule('ttclid', 'exists');
             }

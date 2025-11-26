@@ -255,6 +255,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
     } catch (e) {
       return res.send("Rules khong hop le");
     }
+    let rulesPayloadJson = JSON.stringify(rulesPayload || []);
     const dup = await db.query(
       `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) LIMIT 1`,
       [domain_id, name]
@@ -275,8 +276,10 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
       if (rCfg.rowCount) {
         rulesPayload = rCfg.rows[0].rules || [];
         filters = rCfg.rows[0].filters || {};
+        rulesPayloadJson = JSON.stringify(rulesPayload || []);
       }
     }
+    const filtersJson = JSON.stringify(filters || {});
 
     const autoKey = "q";
     const autoValue = generateCode(8);
@@ -293,8 +296,8 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
         autoKey,
         autoValue,
         target_url,
-        rulesPayload,
-        filters || {},
+        rulesPayloadJson,
+        filtersJson,
         req.session.user.id,
       ]
     );
@@ -371,6 +374,7 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
   } catch (e) {
     return res.send("Rules khong hop le");
   }
+  const rulesPayloadJson = JSON.stringify(rulesPayload || []);
   if (allowed_countries)
     filters.countries = Array.isArray(allowed_countries)
       ? allowed_countries
@@ -381,13 +385,14 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
   );
   if (dup.rowCount) return res.send("Ten link bi trung trong domain");
 
+  const filtersJson = JSON.stringify(filters || {});
   await db.query(
     `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, updated_by=$5 WHERE id=$6`,
     [
       name,
       target_url,
-      rulesPayload,
-      filters,
+      rulesPayloadJson,
+      filtersJson,
       req.session.user.id,
       req.params.id,
     ]

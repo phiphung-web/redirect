@@ -12,33 +12,68 @@
             <a href="/" class="btn btn-outline-secondary btn-sm">Quay lại Dashboard</a>
         </div>
         <div class="row g-3 mb-4">
-            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Uptime (OS)</div><h5 class="fw-bold"><%= Math.round(uptime/3600) %> h</h5></div></div></div>
-            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Uptime (App)</div><h5 class="fw-bold"><%= Math.round(procUptime/3600) %> h</h5></div></div></div>
-            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Load 1m</div><h5 class="fw-bold"><%= load1.toFixed(2) %></h5></div></div></div>
-            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">DB</div><h5 class="fw-bold <%= dbStatus==='ok' ? 'text-success' : 'text-danger' %>"><%= dbStatus %></h5></div></div></div>
+            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Uptime (OS)</div><h5 class="fw-bold" id="uptimeOs"><%= Math.round(uptime/3600) %> h</h5></div></div></div>
+            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Uptime (App)</div><h5 class="fw-bold" id="uptimeApp"><%= Math.round(procUptime/3600) %> h</h5></div></div></div>
+            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Load 1m</div><h5 class="fw-bold" id="load1"><%= load1.toFixed(2) %></h5></div></div></div>
+            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">DB</div><h5 class="fw-bold <%= dbStatus==='ok' ? 'text-success' : 'text-danger' %>" id="dbStatus"><%= dbStatus %></h5></div></div></div>
         </div>
-        <div class="row g-3">
+        <div class="row g-3 mb-3">
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-white fw-bold">Memory</div>
                     <div class="card-body">
-                        <p>Tổng: <%= Math.round(memTotal/1024/1024) %> MB</p>
-                        <p>Đang dùng: <%= Math.round(memUsed/1024/1024) %> MB</p>
-                        <p>Còn trống: <%= Math.round(memFree/1024/1024) %> MB</p>
+                        <p>Tổng: <span id="memTotal"><%= Math.round(memTotal/1024/1024) %></span> MB</p>
+                        <p>Đang dùng: <span id="memUsed"><%= Math.round(memUsed/1024/1024) %></span> MB</p>
+                        <p>Còn trống: <span id="memFree"><%= Math.round(memFree/1024/1024) %></span> MB</p>
                     </div>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white fw-bold">Process</div>
+                    <div class="card-header bg-white fw-bold">Process / DB</div>
                     <div class="card-body">
                         <p>Platform: <%= platform %> <%= release %></p>
                         <p>CPUs: <%= cpus %></p>
-                        <p>Process RSS: <%= Math.round(procMem.rss/1024/1024) %> MB</p>
+                        <p>Process RSS: <span id="procRss"><%= Math.round(procMem.rss/1024/1024) %></span> MB</p>
+                        <p>DB Version: <span id="dbVersion"><%= (dbInfo && dbInfo.version) || '-' %></span></p>
+                        <p>Kết nối: <span id="dbConn"><%= dbInfo?.connections || 0 %></span> (Active: <span id="dbActive"><%= dbInfo?.active_connections || 0 %></span>)</p>
+                        <p>DB Size: <span id="dbSize"><%= dbInfo?.db_size ? Math.round(dbInfo.db_size/1024/1024) : 0 %></span> MB</p>
                     </div>
                 </div>
             </div>
         </div>
+        <div class="text-muted small">Tự động cập nhật mỗi 10s.</div>
     </div>
+    <script>
+        const fmtMB = (val) => Math.round(val / 1024 / 1024);
+        const fmtGB = (val) => (val / 1024 / 1024 / 1024).toFixed(2);
+        const update = (data) => {
+            document.getElementById('uptimeOs').innerText = Math.round(data.uptime/3600) + ' h';
+            document.getElementById('uptimeApp').innerText = Math.round(data.procUptime/3600) + ' h';
+            document.getElementById('load1').innerText = data.load1.toFixed(2);
+            const dbNode = document.getElementById('dbStatus');
+            dbNode.innerText = data.dbStatus;
+            dbNode.className = 'fw-bold ' + (data.dbStatus==='ok' ? 'text-success' : 'text-danger');
+            document.getElementById('memTotal').innerText = fmtMB(data.memTotal);
+            document.getElementById('memUsed').innerText = fmtMB(data.memUsed);
+            document.getElementById('memFree').innerText = fmtMB(data.memFree);
+            document.getElementById('procRss').innerText = fmtMB(data.procMem.rss);
+            document.getElementById('dbVersion').innerText = data.dbInfo?.version || '-';
+            document.getElementById('dbConn').innerText = data.dbInfo?.connections || 0;
+            document.getElementById('dbActive').innerText = data.dbInfo?.active_connections || 0;
+            document.getElementById('dbSize').innerText = data.dbInfo?.db_size ? fmtMB(data.dbInfo.db_size) : 0;
+        };
+        async function refreshSystem() {
+            try {
+                const res = await fetch('/admin/system/data');
+                if (!res.ok) return;
+                const json = await res.json();
+                update(json);
+            } catch (e) {
+                console.error('Refresh system error', e);
+            }
+        }
+        setInterval(refreshSystem, 10000);
+    </script>
 </body>
 </html>

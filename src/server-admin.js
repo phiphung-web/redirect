@@ -240,14 +240,38 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
 });
 
 app.post("/campaigns/create", checkAuth, async (req, res) => {
-  const { domain_id, name, target_url, rules_json, allowed_countries } =
-    req.body;
+  const {
+    domain_id,
+    name,
+    target_url,
+    rules_json,
+    allowed_countries,
+    copy_from_id,
+  } = req.body;
   try {
+    const dup = await db.query(
+      `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) LIMIT 1`,
+      [domain_id, name]
+    );
+    if (dup.rowCount) return res.send("Ten link bi trung trong domain");
+
     let filters = {};
+    let rulesPayload = rules_json || "[]";
     if (allowed_countries)
       filters.countries = Array.isArray(allowed_countries)
         ? allowed_countries
         : allowed_countries.split(",");
+
+    if (copy_from_id) {
+      const rCfg = await db.query(
+        `SELECT rules, filters FROM campaigns WHERE id=$1 AND domain_id=$2`,
+        [copy_from_id, domain_id]
+      );
+      if (rCfg.rowCount) {
+        rulesPayload = rCfg.rows[0].rules || "[]";
+        filters = rCfg.rows[0].filters || {};
+      }
+    }
 
     const autoKey = "q";
     const autoValue = generateCode(8);
@@ -264,8 +288,8 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
         autoKey,
         autoValue,
         target_url,
-        rules_json || "[]",
-        filters,
+        rulesPayload,
+        filters || {},
         req.session.user.id,
       ]
     );
@@ -314,10 +338,15 @@ app.get("/campaigns/edit/:id", checkAuth, async (req, res) => {
   const d = await db.query(`SELECT * FROM domains WHERE id=$1`, [
     r.rows[0].domain_id,
   ]);
+  const others = await db.query(
+    `SELECT id, name FROM campaigns WHERE domain_id=$1 ORDER BY id DESC`,
+    [r.rows[0].domain_id]
+  );
   res.render("admin/campaign_edit", {
     user: req.session.user,
     camp: r.rows[0],
     domain: d.rows[0],
+    otherCamps: others.rows.filter((c) => c.id !== r.rows[0].id),
   });
 });
 
@@ -329,6 +358,12 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
     filters.countries = Array.isArray(allowed_countries)
       ? allowed_countries
       : allowed_countries.split(",");
+  const dup = await db.query(
+    `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3 LIMIT 1`,
+    [domain_id, name, req.params.id]
+  );
+  if (dup.rowCount) return res.send("Ten link bi trung trong domain");
+
   await db.query(
     `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, updated_by=$5 WHERE id=$6`,
     [
@@ -362,88 +397,120 @@ app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
 });
 
 // ...
-app.get('/campaigns/:id/report', checkAuth, async (req, res) => {
-    const campId = req.params.id;
-    const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [campId]);
-    if (!rCamp.rowCount) return res.redirect("/");
-    
-    const stats = await db.query(
-      `
-        SELECT date(created_at) as day, 
+app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
+  const campId = req.params.id;
+  const range = req.query.range || "7d"; // 7d / week / month
+  const grouping =
+    range === "month" ? "month" : range === "week" ? "week" : "day";
+  const window =
+    range === "month" ? "90 days" : range === "week" ? "30 days" : "7 days";
+  const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
+    campId,
+  ]);
+  if (!rCamp.rowCount) return res.redirect("/");
+
+  const stats = await db.query(
+    `
+        SELECT date_trunc($2, created_at) as day, 
                COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
                COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
         FROM traffic_logs 
         WHERE campaign_id = $1 
-          AND created_at >= date_trunc('day', now() - interval '30 days')
+          AND created_at >= now() - interval '${window}'
         GROUP BY day 
         ORDER BY day ASC
       `,
-      [campId]
-    );
+    [campId, grouping]
+  );
 
-    const totals = await db.query(
-      `
+  const totals = await db.query(
+    `
         SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
                COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
                COUNT(*) as total
         FROM traffic_logs 
         WHERE campaign_id = $1 
-          AND created_at >= date_trunc('day', now() - interval '30 days')
+          AND created_at >= now() - interval '${window}'
       `,
-      [campId]
-    );
+    [campId]
+  );
 
-    const prevTotals = await db.query(
-      `
+  const prevTotals = await db.query(
+    `
         SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
                COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
                COUNT(*) as total
         FROM traffic_logs 
         WHERE campaign_id = $1 
-          AND created_at >= date_trunc('day', now() - interval '60 days')
-          AND created_at < date_trunc('day', now() - interval '30 days')
+          AND created_at >= now() - interval '${window}' - interval '${window}'
+          AND created_at < now() - interval '${window}'
       `,
-      [campId]
-    );
+    [campId]
+  );
 
-    const countryStats = await db.query(
-      `
+  const countryStats = await db.query(
+    `
         SELECT country, 
                COUNT(*) as hits,
                COUNT(*) FILTER (WHERE action='redirect') as redirects
         FROM traffic_logs
         WHERE campaign_id=$1 
-          AND created_at >= date_trunc('day', now() - interval '30 days')
+          AND created_at >= now() - interval '${window}'
         GROUP BY country
         ORDER BY hits DESC
         LIMIT 6
       `,
-      [campId]
-    );
+    [campId]
+  );
 
-    const logs = await db.query(
-      `SELECT * FROM traffic_logs WHERE campaign_id=$1 ORDER BY id DESC LIMIT 150`,
-      [campId]
-    );
+  const logs = await db.query(
+    `SELECT * FROM traffic_logs WHERE campaign_id=$1 ORDER BY id DESC LIMIT 50`,
+    [campId]
+  );
 
-    const summary = totals.rows[0] || { redirects: 0, safe: 0, total: 0 };
-    const previous = prevTotals.rows[0] || { redirects: 0, safe: 0, total: 0 };
-    summary.pass_rate = summary.total
-      ? Math.round((summary.redirects / summary.total) * 1000) / 10
-      : 0;
-    summary.delta_redirects = summary.redirects - (previous.redirects || 0);
-    summary.redirect_growth =
-      previous.redirects > 0
-        ? Math.round((summary.delta_redirects / previous.redirects) * 1000) / 10
-        : null;
+  const summary = totals.rows[0] || { redirects: 0, safe: 0, total: 0 };
+  const previous = prevTotals.rows[0] || { redirects: 0, safe: 0, total: 0 };
+  summary.pass_rate = summary.total
+    ? Math.round((summary.redirects / summary.total) * 1000) / 10
+    : 0;
+  summary.delta_redirects = summary.redirects - (previous.redirects || 0);
+  summary.redirect_growth =
+    previous.redirects > 0
+      ? Math.round((summary.delta_redirects / previous.redirects) * 1000) / 10
+      : null;
 
-    res.render("admin/report", {
-      camp: rCamp.rows[0],
-      stats: stats.rows,
-      logs: logs.rows,
-      summary,
-      countryStats: countryStats.rows,
+  res.render("admin/report", {
+    camp: rCamp.rows[0],
+    stats: stats.rows,
+    logs: logs.rows,
+    summary,
+    countryStats: countryStats.rows,
     previous,
+    range,
+  });
+});
+
+app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {
+  const campId = req.params.id;
+  const action = req.query.action;
+  const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
+  const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
+    campId,
+  ]);
+  if (!rCamp.rowCount) return res.redirect("/");
+  let sql = `SELECT * FROM traffic_logs WHERE campaign_id=$1`;
+  const params = [campId];
+  if (action) {
+    params.push(action);
+    sql += ` AND action=$${params.length}`;
+  }
+  sql += ` ORDER BY id DESC LIMIT ${limit}`;
+  const logs = await db.query(sql, params);
+  res.render("admin/logs", {
+    camp: rCamp.rows[0],
+    logs: logs.rows,
+    action,
+    limit,
   });
 });
 
@@ -517,6 +584,7 @@ app.get("/users", requireRole(["super_admin", "admin"]), async (req, res) => {
     user: req.session.user,
     users: u.rows,
     roles: roles.rows,
+    currentUserRole,
   });
 });
 
@@ -542,6 +610,44 @@ app.post(
     } catch (e) {
       res.send("Lỗi: Username đã tồn tại");
     }
+  }
+);
+
+app.get("/users/:id", requireRole(["super_admin", "admin"]), async (req, res) => {
+  const userId = req.params.id;
+  const u = await db.query(
+    `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name, u.role_id 
+     FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.id=$1`,
+    [userId]
+  );
+  if (!u.rowCount) return res.redirect("/users");
+  const recentDomains = await db.query(
+    `SELECT id, domain_url, created_at FROM domains WHERE user_id=$1 ORDER BY id DESC LIMIT 5`,
+    [userId]
+  );
+  const recentCamps = await db.query(
+    `SELECT id, name, created_at FROM campaigns WHERE user_id=$1 ORDER BY id DESC LIMIT 5`,
+    [userId]
+  );
+  const roles = await db.query(`SELECT * FROM roles`);
+  res.render("admin/user_detail", {
+    viewer: req.session.user,
+    target: u.rows[0],
+    recentDomains: recentDomains.rows,
+    recentCamps: recentCamps.rows,
+    roles: roles.rows,
+  });
+});
+
+app.post(
+  "/users/:id/role",
+  requireRole(["super_admin"]),
+  async (req, res) => {
+    await db.query(`UPDATE users SET role_id=$1 WHERE id=$2`, [
+      req.body.role_id,
+      req.params.id,
+    ]);
+    res.redirect("/users/" + req.params.id);
   }
 );
 

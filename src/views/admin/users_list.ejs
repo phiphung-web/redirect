@@ -1,97 +1,70 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Quản lý Users</title>
+    <title>Quản lý Người dùng</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body class="bg-light">
-    <nav class="navbar navbar-dark bg-dark px-4 mb-4">
-        <a href="/" class="navbar-brand">⬅ Quay lại Dashboard</a>
-        <span class="text-white">Vai trò của bạn: <b><%= user.role_name.toUpperCase() %></b></span>
-    </nav>
-
+<body class="bg-light p-4">
     <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3>Danh sách Người dùng</h3>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">+ Thêm User Mới</button>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0">Người dùng</h3>
+            <a href="/" class="btn btn-outline-secondary">Quay lại</a>
+        </div>
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white fw-bold">Danh sách</div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr><th>#</th><th>Tài khoản</th><th>Role</th><th>Trạng thái</th><th>Ngày tạo</th><th class="text-end">Hành động</th></tr>
+                    </thead>
+                    <tbody>
+                        <% users.forEach((u, idx) => { %>
+                            <tr>
+                                <td><%= idx + 1 %></td>
+                                <td><%= u.username %></td>
+                                <td><span class="badge <%= u.role_name==='super_admin' ? 'bg-danger' : u.role_name==='admin' ? 'bg-primary' : 'bg-secondary' %>"><%= u.role_name %></span></td>
+                                <td><span class="badge <%= u.is_active ? 'bg-success' : 'bg-warning' %>"><%= u.is_active ? 'Active' : 'Inactive' %></span></td>
+                                <td><%= new Date(u.created_at).toLocaleString('vi-VN') %></td>
+                                <td class="text-end">
+                                    <a href="/users/<%= u.id %>" class="btn btn-sm btn-outline-primary">Chi tiết</a>
+                                    <% if (currentUserRole==='super_admin' || (currentUserRole==='admin' && u.role_name==='user')) { %>
+                                        <a href="/users/delete/<%= u.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Xóa?')">Xóa</a>
+                                    <% } %>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="card shadow-sm">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>ID</th>
-                        <th>Tài khoản</th>
-                        <th>Vai trò (Role)</th>
-                        <th>Trạng thái</th>
-                        <th>Ngày tạo</th>
-                        <th>Hành động</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% users.forEach(u => { %>
-                        <tr>
-                            <td><%= u.id %></td>
-                            <td class="fw-bold"><%= u.username %></td>
-                            <td>
-                                <% if(u.role_name === 'super_admin') { %>
-                                    <span class="badge bg-danger">SUPER ADMIN</span>
-                                <% } else if(u.role_name === 'admin') { %>
-                                    <span class="badge bg-warning text-dark">ADMIN</span>
-                                <% } else { %>
-                                    <span class="badge bg-info text-dark">USER</span>
-                                <% } %>
-                            </td>
-                            <td>
-                                <span class="badge <%= u.is_active ? 'bg-success' : 'bg-secondary' %>">
-                                    <%= u.is_active ? 'Active' : 'Banned' %>
-                                </span>
-                            </td>
-                            <td><%= new Date(u.created_at).toLocaleDateString() %></td>
-                            <td>
-                                <% if (user.role_name === 'super_admin' || (user.role_name === 'admin' && u.role_name === 'user')) { %>
-                                    <a href="/users/delete/<%= u.id %>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Xóa user này?')">Xóa</a>
-                                <% } else { %>
-                                    <span class="text-muted small">No Action</span>
-                                <% } %>
-                            </td>
-                        </tr>
-                    <% }) %>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="modal fade" id="addUserModal">
-        <div class="modal-dialog">
-            <form class="modal-content" action="/users/create" method="POST">
-                <div class="modal-header"><h5 class="modal-title">Thêm User</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label>Username</label>
+            <div class="card-header bg-white fw-bold">Tạo người dùng</div>
+            <form class="card-body" action="/users/create" method="POST">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Username</label>
                         <input type="text" name="username" class="form-control" required>
                     </div>
-                    <div class="mb-3">
-                        <label>Password</label>
-                        <input type="text" name="password" class="form-control" required placeholder="VD: 123456">
+                    <div class="col-md-4">
+                        <label class="form-label">Password</label>
+                        <input type="text" name="password" class="form-control" required>
                     </div>
-                    <div class="mb-3">
-                        <label>Phân Quyền</label>
+                    <div class="col-md-4">
+                        <label class="form-label">Role</label>
                         <select name="role_id" class="form-select">
-                            <% roles.forEach(r => { %>
-                                <option value="<%= r.id %>"><%= r.name.toUpperCase() %></option>
+                            <% roles.rows.forEach(r => { %>
+                                <option value="<%= r.id %>"><%= r.name %></option>
                             <% }) %>
                         </select>
-                        <% if(user.role_name === 'admin') { %>
-                            <div class="form-text text-warning">Bạn là Admin, bạn chỉ được tạo User thường.</div>
-                        <% } %>
                     </div>
                 </div>
-                <div class="modal-footer"><button class="btn btn-primary">Tạo User</button></div>
+                <div class="mt-3 text-end">
+                    <button class="btn btn-primary">Tạo</button>
+                </div>
             </form>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

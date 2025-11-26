@@ -1,0 +1,71 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Chi tiết User</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-4">
+    <div class="container" style="max-width: 800px;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0">User: <%= target.username %></h3>
+            <a href="/users" class="btn btn-outline-secondary btn-sm">Quay lại</a>
+        </div>
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <p><b>Role:</b> <span class="badge <%= target.role_name==='super_admin' ? 'bg-danger' : target.role_name==='admin' ? 'bg-primary' : 'bg-secondary' %>"><%= target.role_name %></span></p>
+                <p><b>Trạng thái:</b> <%= target.is_active ? 'Active' : 'Inactive' %></p>
+                <p><b>Tạo lúc:</b> <%= new Date(target.created_at).toLocaleString('vi-VN') %></p>
+            </div>
+        </div>
+        <% if (viewer.role_name === 'super_admin') { %>
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white fw-bold">Đổi role</div>
+            <form class="card-body" action="/users/<%= target.id %>/role" method="POST">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-8">
+                        <select name="role_id" class="form-select">
+                            <% roles.forEach(r => { %>
+                                <option value="<%= r.id %>" <%= r.id === target.role_id ? 'selected' : '' %>><%= r.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <button class="btn btn-primary">Cập nhật</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <% } %>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-white fw-bold">Domain gần đây</div>
+                    <div class="card-body">
+                        <% if(recentDomains.length===0){ %><div class="text-muted">Không có</div><% } %>
+                        <ul class="list-group list-group-flush">
+                            <% recentDomains.forEach(d => { %>
+                                <li class="list-group-item">#<%= d.id %> - <%= d.domain_url %> <br><small class="text-muted"><%= new Date(d.created_at).toLocaleString('vi-VN') %></small></li>
+                            <% }) %>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-white fw-bold">Link gần đây</div>
+                    <div class="card-body">
+                        <% if(recentCamps.length===0){ %><div class="text-muted">Không có</div><% } %>
+                        <ul class="list-group list-group-flush">
+                            <% recentCamps.forEach(c => { %>
+                                <li class="list-group-item">#<%= c.id %> - <%= c.name %> <br><small class="text-muted"><%= new Date(c.created_at).toLocaleString('vi-VN') %></small></li>
+                            <% }) %>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

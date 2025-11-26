@@ -9,7 +9,12 @@
     <div class="container">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h3 class="mb-0">Người dùng</h3>
-            <a href="/" class="btn btn-outline-secondary">Quay lại</a>
+            <div class="d-flex gap-2">
+                <% if (user.role_name === 'super_admin') { %>
+                <a href="/admin/system" class="btn btn-sm btn-outline-warning">System</a>
+                <% } %>
+                <a href="/" class="btn btn-outline-secondary">Quay lại</a>
+            </div>
         </div>
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white fw-bold">Danh sách</div>

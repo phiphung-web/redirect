@@ -11,7 +11,12 @@
                 <h4 class="mb-0">Lịch sử log: <span class="text-primary"><%= camp.name %></span></h4>
                 <small class="text-muted">ID: <%= camp.id %></small>
             </div>
-            <a href="/campaigns/<%= camp.id %>/report" class="btn btn-outline-secondary btn-sm">Quay lại báo cáo</a>
+            <div class="d-flex gap-2">
+                <% if (user.role_name === 'super_admin') { %>
+                <a href="/admin/system" class="btn btn-sm btn-outline-warning">System</a>
+                <% } %>
+                <a href="/campaigns/<%= camp.id %>/report" class="btn btn-outline-secondary btn-sm">Quay lại báo cáo</a>
+            </div>
         </div>
         <form class="row g-2 mb-3" method="GET">
             <div class="col-auto">

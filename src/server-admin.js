@@ -472,7 +472,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     end = new Date(start);
     end.setDate(start.getDate() + 1);
-    groupingVal = "hour";
+    groupingVal = "day";
   }
 
   if (!end || end <= start) {

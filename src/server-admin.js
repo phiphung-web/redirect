@@ -6,7 +6,7 @@ const dns = require("dns");
 const db = require("./config/db");
 
 const app = express();
-const PORT = 4002;
+const PORT = process.env.PORT || 4002;
 const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
 
 // Hàm sinh mã

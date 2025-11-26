@@ -16,6 +16,9 @@
                 <small class="text-muted">Khoảng: <%= rangeLabel %></small>
             </div>
             <div class="d-flex gap-2 align-items-center">
+                <% if (user.role_name === 'super_admin') { %>
+                <a href="/admin/system" class="btn btn-sm btn-outline-warning">System</a>
+                <% } %>
                 <form class="d-flex align-items-center" method="GET">
                     <select class="form-select form-select-sm me-2" name="range" onchange="toggleCustom(this.value)">
                         <option value="today" <%= range==='today' ? 'selected' : '' %>>Hôm nay</option>

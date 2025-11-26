@@ -17,6 +17,9 @@
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="/"><i class="fas fa-rocket me-2"></i>REDIRECT PRO V2</a>
             <div class="d-flex text-white align-items-center">
+                <% if (user.role_name === 'super_admin') { %>
+                <a href="/admin/system" class="btn btn-sm btn-outline-warning me-3">System</a>
+                <% } %>
                 <div class="me-3">
                     <small class="text-white-50">User:</small> <b><%= user.username %></b>
                 </div>

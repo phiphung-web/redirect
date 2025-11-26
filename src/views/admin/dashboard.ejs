@@ -34,14 +34,14 @@
                         <%= user.username %>
                     </b>
                 </div>
-                <a href="/logout" class="btn btn-sm btn-outline-light">Đăng xuất <i
+                <a href="/logout" class="btn btn-sm btn-outline-light">�ang xu?t <i
                         class="fas fa-sign-out-alt ms-1"></i></a>
             </div>
         </div>
     </nav>
 <% if (user.role_name === 'super_admin' || user.role_name === 'admin') { %>
     <div class="container mb-3">
-        <a href="/users" class="btn btn-dark w-100"><i class="fas fa-users-cog me-2"></i> Quản trị Người dùng & Phân quyền</a>
+        <a href="/users" class="btn btn-dark w-100"><i class="fas fa-users-cog me-2"></i> Qu?n tr? Ngu?i d�ng & Ph�n quy?n</a>
     </div>
     <% } %>
 
@@ -64,7 +64,7 @@
                         <div class="card card-stat text-white bg-success shadow-sm h-100">
                             <div class="card-body d-flex justify-content-between align-items-center">
                                 <div>
-                                    <h6 class="text-white-50 text-uppercase fw-bold">Chiến dịch (Links)</h6>
+                                    <h6 class="text-white-50 text-uppercase fw-bold">Chi?n d?ch (Links)</h6>
                                     <h2 class="mb-0 fw-bold">
                                         <%= stats.total_links || 0 %>
                                     </h2>
@@ -77,7 +77,7 @@
                         <div class="card card-stat text-white bg-dark shadow-sm h-100">
                             <div class="card-body d-flex justify-content-between align-items-center">
                                 <div>
-                                    <h6 class="text-white-50 text-uppercase fw-bold">Tổng Traffic</h6>
+                                    <h6 class="text-white-50 text-uppercase fw-bold">T?ng Traffic</h6>
                                     <h2 class="mb-0 fw-bold">
                                         <%= stats.total_traffic || 0 %>
                                     </h2>
@@ -90,11 +90,11 @@
 
                 <div class="card shadow border-0">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 text-primary fw-bold"><i class="fas fa-list me-2"></i>Danh sách Domain Vệ tinh
+                        <h5 class="mb-0 text-primary fw-bold"><i class="fas fa-list me-2"></i>Danh s�ch Domain V? tinh
                         </h5>
                         <button class="btn btn-primary shadow-sm" data-bs-toggle="modal"
                             data-bs-target="#addDomainModal">
-                            <i class="fas fa-plus me-1"></i> Thêm Domain
+                            <i class="fas fa-plus me-1"></i> Th�m Domain
                         </button>
                     </div>
                     <div class="card-body p-0 table-responsive">
@@ -103,16 +103,19 @@
                                 <tr>
                                     <th class="ps-4">ID</th>
                                     <th>Domain URL</th>
-                                    <th>Giao diện sạch</th>
-                                    <th>Trạng thái</th>
-                                    <th class="text-end pe-4">Hành động</th>
+                                    <th>Giao di?n s?ch</th>
+                                    <th>Tr?ng th�i</th>
+                                    <th>Links</th>
+                                    <th class="text-end pe-4">H�nh d?ng</th>
+                                    <th>Tr?ng th�i</th>
+                                    <th class="text-end pe-4">H�nh d?ng</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <% if (domains.length===0) { %>
                                     <tr>
-                                        <td colspan="5" class="text-center py-5 text-muted">Chưa có domain nào. Hãy thêm
-                                            mới!</td>
+                                        <td colspan="5" class="text-center py-5 text-muted">Chua c� domain n�o. H�y th�m
+                                            m?i!</td>
                                     </tr>
                                     <% } %>
 
@@ -135,10 +138,10 @@
                                                 <td>
                                                     <% if(d.status==='active' ) { %>
                                                         <span class="badge bg-success"><i
-                                                                class="fas fa-check-circle me-1"></i>Hoạt động</span>
+                                                                class="fas fa-check-circle me-1"></i>Ho?t d?ng</span>
                                                         <% } else { %>
                                                             <span class="badge bg-danger"><i
-                                                                    class="fas fa-ban me-1"></i>Đã tắt</span>
+                                                                    class="fas fa-ban me-1"></i>�� t?t</span>
                                                             <% } %>
                                                 </td>
                                                 <td class="text-end pe-4">
@@ -147,13 +150,13 @@
                                                         <i class="fas fa-power-off"></i>
                                                     </a>
                                                     <a href="/domains/<%= d.id %>" class="btn btn-sm btn-primary px-3">
-                                                        Quản lý Link
+                                                        Qu?n l� Link
                                                     </a>
 
                                                     <% if (user.role_name==='super_admin' ) { %>
                                                         <a href="/domains/delete/<%= d.id %>"
                                                             class="btn btn-sm btn-danger ms-1"
-                                                            onclick="return confirm('CẢNH BÁO: Xóa domain sẽ xóa tất cả link bên trong. Tiếp tục?')">
+                                                            onclick="return confirm('C?NH B�O: X�a domain s? x�a t?t c? link b�n trong. Ti?p t?c?')">
                                                             <i class="fas fa-trash"></i>
                                                         </a>
                                                         <% } %>
@@ -170,7 +173,7 @@
                 <div class="modal-dialog modal-dialog-centered">
                     <form class="modal-content" action="/domains/create" method="POST">
                         <div class="modal-header bg-light">
-                            <h5 class="modal-title fw-bold">Thêm Domain Mới</h5>
+                            <h5 class="modal-title fw-bold">Th�m Domain M?i</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
@@ -181,18 +184,17 @@
                                     <input type="text" name="domain_url" class="form-control" required
                                         placeholder="news24h.com">
                                 </div>
-                                <div class="form-text">Chỉ nhập tên miền, không nhập http/https.</div>
+                                <div class="form-text">Ch? nh?p t�n mi?n, kh�ng nh?p http/https.</div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label fw-bold">Giao diện Sạch (Safe Page)</label>
                                 <select name="safe_template" class="form-select">
-                                    <option value="news">Mẫu 1</option>
+                                    <option value="news">M?u 1</option>
                                 </select>
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                            <button type="submit" class="btn btn-primary">Lưu Domain</button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">H?y</button>
+                            <button type="submit" class="btn btn-primary">Luu Domain</button>
                         </div>
                     </form>
                 </div>
@@ -202,3 +204,4 @@
 </body>
 
 </html>
+

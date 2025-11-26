@@ -97,7 +97,9 @@ app.get("/logout", (req, res) => {
 app.get("/", checkAuth, async (req, res) => {
   const rDom = await db.query(
     `
-      SELECT d.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      SELECT d.*, cu.username AS created_by_name, uu.username AS updated_by_name,
+             (SELECT COUNT(*) FROM campaigns c WHERE c.domain_id = d.id) AS link_count,
+             (SELECT COUNT(*) FROM campaigns c WHERE c.domain_id = d.id AND c.is_active) AS link_active
       FROM domains d
       LEFT JOIN users cu ON d.user_id = cu.id
       LEFT JOIN users uu ON d.updated_by = uu.id
@@ -200,6 +202,16 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     [domainId]
   );
 
+  const linkStats = await db.query(
+    `
+      SELECT COUNT(*) AS total,
+             COUNT(*) FILTER (WHERE is_active) AS active,
+             COUNT(*) FILTER (WHERE NOT is_active) AS inactive
+      FROM campaigns WHERE domain_id=$1
+    `,
+    [domainId]
+  );
+
   const links = rLinks.rows.map((l) => {
     const key = l.param_key || "q";
     const val = l.param_value || l.id;
@@ -236,6 +248,7 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     user: req.session.user,
     domain: rDom.rows[0],
     links,
+    linkStats: linkStats.rows[0],
   });
 });
 
@@ -268,7 +281,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
         ? allowed_countries
         : allowed_countries.split(",");
 
-    if (copy_from_id) {
+    if (copy_from_id && rulesPayload.length === 0 && !allowed_countries) {
       const rCfg = await db.query(
         `SELECT rules, filters FROM campaigns WHERE id=$1 AND domain_id=$2`,
         [copy_from_id, domain_id]
@@ -467,6 +480,12 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
     end.setDate(start.getDate() + 1);
   }
 
+  const prevStart = new Date(start);
+  const prevEnd = new Date(end);
+  const diffMs = end.getTime() - start.getTime();
+  prevStart.setTime(start.getTime() - diffMs);
+  prevEnd.setTime(end.getTime() - diffMs);
+
   const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
     campId,
   ]);
@@ -507,10 +526,10 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
                COUNT(*) as total
         FROM traffic_logs 
         WHERE campaign_id = $1 
-          AND created_at >= $2 - ($3 - $2)
-          AND created_at < $2
+          AND created_at >= $2
+          AND created_at < $3
       `,
-    [campId, start, end]
+    [campId, prevStart, prevEnd]
   );
 
   const countryStats = await db.query(

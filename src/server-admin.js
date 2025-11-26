@@ -438,7 +438,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   const now = new Date();
   let start = new Date(now);
   let end = new Date(now);
-  const grouping = "day";
+  let groupingVal = "day";
 
   const parseDate = (s) => {
     const d = new Date(s);
@@ -447,32 +447,32 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
 
   if (range === "7d") {
     start.setDate(start.getDate() - 7);
-    grouping = "day";
+    groupingVal = "day";
   } else if (range === "week") {
     const day = start.getDay();
     const diff = day === 0 ? -6 : 1 - day; // Monday as start
     start.setDate(start.getDate() + diff);
     end = new Date(start);
     end.setDate(start.getDate() + 7);
-    grouping = "day";
+    groupingVal = "day";
   } else if (range === "month") {
     start = new Date(now.getFullYear(), now.getMonth(), 1);
     end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    grouping = "day";
+    groupingVal = "day";
   } else if (range === "custom" && req.query.start_date && req.query.end_date) {
     const s = parseDate(req.query.start_date);
     const e = parseDate(req.query.end_date);
     if (s && e && e > s) {
       start = s;
       end = e;
-      grouping = "day";
+      groupingVal = "day";
     }
   } else {
     // today
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     end = new Date(start);
     end.setDate(start.getDate() + 1);
-    grouping = "hour";
+    groupingVal = "hour";
   }
 
   if (!end || end <= start) {
@@ -493,17 +493,17 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
 
   const stats = await db.query(
     `
-        SELECT date_trunc('day', created_at) as day, 
+        SELECT date_trunc($4::text, created_at) as day, 
                COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
                COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
         FROM traffic_logs 
         WHERE campaign_id = $1 
           AND created_at >= $2
-          AND created_at < $4
+          AND created_at < $3
         GROUP BY day 
         ORDER BY day ASC
       `,
-    [campId, start, end]
+    [campId, start, end, groupingVal]
   );
 
   const totals = await db.query(
@@ -574,7 +574,9 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
       ? Math.round((summary.delta_redirects / previous.redirects) * 1000) / 10
       : null;
 
-  const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${end.toLocaleDateString("vi-VN")}`;
+  const labelEnd = new Date(end);
+  if (range !== "today") labelEnd.setDate(labelEnd.getDate() - 1);
+  const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${labelEnd.toLocaleDateString("vi-VN")}`;
 
   res.render("admin/report", {
     camp: rCamp.rows[0],

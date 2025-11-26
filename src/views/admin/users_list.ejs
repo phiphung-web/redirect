@@ -27,7 +27,7 @@
                                 <td><span class="badge <%= u.is_active ? 'bg-success' : 'bg-warning' %>"><%= u.is_active ? 'Active' : 'Inactive' %></span></td>
                                 <td><%= new Date(u.created_at).toLocaleString('vi-VN') %></td>
                                 <td class="text-end">
-                                    <a href="/users/<%= u.id %>" class="btn btn-sm btn-outline-primary">Chi tiết</a>
+                                    <a href="/users/view/<%= u.id %>" class="btn btn-sm btn-outline-primary">Chi tiết</a>
                                     <% if (currentUserRole==='super_admin' || (currentUserRole==='admin' && u.role_name==='user')) { %>
                                         <a href="/users/delete/<%= u.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Xóa?')">Xóa</a>
                                     <% } %>

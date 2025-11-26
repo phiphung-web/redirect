@@ -12,16 +12,21 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h3 class="mb-1">Báo cáo: <span class="text-primary"><%= camp.name %></span></h3>
-                <small class="text-muted">ID: <%= camp.id %> | Domain: <%= camp.domain_id %></small>
+                <small class="text-muted">ID: <%= camp.id %> | Domain: <%= camp.domain_id %></small><br>
+                <small class="text-muted">Khoảng: <%= rangeLabel %></small>
             </div>
             <div class="d-flex gap-2 align-items-center">
                 <form class="d-flex align-items-center" method="GET">
-                    <label class="me-2">Khoảng:</label>
-                    <select class="form-select form-select-sm" name="range" onchange="this.form.submit()">
+                    <select class="form-select form-select-sm me-2" name="range" onchange="toggleCustom(this.value)">
+                        <option value="today" <%= range==='today' ? 'selected' : '' %>>Hôm nay</option>
                         <option value="7d" <%= range==='7d' ? 'selected' : '' %>>7 ngày</option>
-                        <option value="week" <%= range==='week' ? 'selected' : '' %>>4 tuần</option>
-                        <option value="month" <%= range==='month' ? 'selected' : '' %>>3 tháng</option>
+                        <option value="week" <%= range==='week' ? 'selected' : '' %>>Tuần này</option>
+                        <option value="month" <%= range==='month' ? 'selected' : '' %>>Tháng này</option>
+                        <option value="custom" <%= range==='custom' ? 'selected' : '' %>>Chọn ngày</option>
                     </select>
+                    <input type="date" class="form-control form-control-sm me-2" name="start_date" id="startDate" value="<%= (range==='custom' && start) ? new Date(start).toISOString().slice(0,10) : '' %>" style="<%= range==='custom' ? '' : 'display:none;' %>">
+                    <input type="date" class="form-control form-control-sm me-2" name="end_date" id="endDate" value="<%= (range==='custom' && end) ? new Date(end).toISOString().slice(0,10) : '' %>" style="<%= range==='custom' ? '' : 'display:none;' %>">
+                    <button class="btn btn-primary btn-sm" type="submit">Lọc</button>
                 </form>
                 <a href="/campaigns/<%= camp.id %>/report/export" class="btn btn-outline-primary btn-sm"><i class="fas fa-file-export me-1"></i>Xuất CSV</a>
                 <a href="/domains/<%= camp.domain_id %>" class="btn btn-outline-secondary btn-sm">Quay lại</a>
@@ -71,7 +76,7 @@
                 <thead class="table-light"><tr><th>Ngày</th><th class="text-success">Redirect</th><th class="text-danger">Safe</th><th>Pass %</th></tr></thead>
                 <tbody>
                     <% if(stats.length === 0) { %><tr><td colspan="4" class="text-center text-muted">Chưa có dữ liệu</td></tr><% } %>
-                    <% stats.forEach(s => { const total = (s.redirects||0) + (s.safe||0); const rate = total ? Math.round((s.redirects/total)*1000)/10 : 0; %>
+                    <% stats.forEach(s => { const redirects = Number(s.redirects || 0); const safe = Number(s.safe || 0); const total = redirects + safe; const rate = total ? Math.round((redirects/total)*1000)/10 : 0; %>
                         <tr><td><%= new Date(s.day).toLocaleDateString('vi-VN') %></td><td class="text-success fw-bold"><%= s.redirects || 0 %></td><td class="text-danger fw-bold"><%= s.safe || 0 %></td><td><%= rate %>%</td></tr>
                     <% }) %>
                 </tbody>
@@ -117,6 +122,11 @@
     </div>
 
     <script>
+        function toggleCustom(val) {
+            const show = val === 'custom';
+            document.getElementById('startDate').style.display = show ? '' : 'none';
+            document.getElementById('endDate').style.display = show ? '' : 'none';
+        }
         const statsData = <%- JSON.stringify(stats || []) %>;
         const labels = statsData.map(s => new Date(s.day).toLocaleDateString('vi-VN'));
         const redirectSeries = statsData.map(s => s.redirects || 0);
@@ -125,6 +135,7 @@
         if (ctx && statsData.length) {
             new Chart(ctx, { type: 'line', data: { labels, datasets: [{ label: 'Redirect', data: redirectSeries, borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.1)', tension: 0.3 }, { label: 'Safe', data: safeSeries, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.3 }] }, options: { responsive: true, plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } } });
         }
+        toggleCustom('<%= range %>');
     </script>
 </body>
 </html>

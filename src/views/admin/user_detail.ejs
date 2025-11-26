@@ -21,7 +21,7 @@
         <% if (viewer.role_name === 'super_admin') { %>
         <div class="card shadow-sm mb-3">
             <div class="card-header bg-white fw-bold">Đổi role</div>
-            <form class="card-body" action="/users/<%= target.id %>/role" method="POST">
+            <form class="card-body" action="/users/view/<%= target.id %>/role" method="POST">
                 <div class="row g-3 align-items-center">
                     <div class="col-md-8">
                         <select name="role_id" class="form-select">

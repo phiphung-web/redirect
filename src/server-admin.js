@@ -249,6 +249,12 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
     copy_from_id,
   } = req.body;
   try {
+    let rulesPayload = [];
+    try {
+      rulesPayload = rules_json ? JSON.parse(rules_json) : [];
+    } catch (e) {
+      return res.send("Rules khong hop le");
+    }
     const dup = await db.query(
       `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) LIMIT 1`,
       [domain_id, name]
@@ -256,7 +262,6 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
     if (dup.rowCount) return res.send("Ten link bi trung trong domain");
 
     let filters = {};
-    let rulesPayload = rules_json || "[]";
     if (allowed_countries)
       filters.countries = Array.isArray(allowed_countries)
         ? allowed_countries
@@ -268,7 +273,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
         [copy_from_id, domain_id]
       );
       if (rCfg.rowCount) {
-        rulesPayload = rCfg.rows[0].rules || "[]";
+        rulesPayload = rCfg.rows[0].rules || [];
         filters = rCfg.rows[0].filters || {};
       }
     }
@@ -332,9 +337,15 @@ app.get(
 );
 
 app.get("/campaigns/edit/:id", checkAuth, async (req, res) => {
-  const r = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
-    req.params.id,
-  ]);
+  const r = await db.query(
+    `SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name 
+     FROM campaigns c
+     LEFT JOIN users cu ON c.user_id = cu.id
+     LEFT JOIN users uu ON c.updated_by = uu.id
+     WHERE c.id=$1`,
+    [req.params.id]
+  );
+  if (!r.rowCount) return res.redirect("/");
   const d = await db.query(`SELECT * FROM domains WHERE id=$1`, [
     r.rows[0].domain_id,
   ]);
@@ -354,6 +365,12 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
   const { name, target_url, rules_json, allowed_countries, domain_id } =
     req.body;
   let filters = {};
+  let rulesPayload = [];
+  try {
+    rulesPayload = rules_json ? JSON.parse(rules_json) : [];
+  } catch (e) {
+    return res.send("Rules khong hop le");
+  }
   if (allowed_countries)
     filters.countries = Array.isArray(allowed_countries)
       ? allowed_countries
@@ -369,7 +386,7 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
     [
       name,
       target_url,
-      rules_json || "[]",
+      rulesPayload,
       filters,
       req.session.user.id,
       req.params.id,
@@ -399,11 +416,52 @@ app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
 // ...
 app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   const campId = req.params.id;
-  const range = req.query.range || "7d"; // 7d / week / month
-  const grouping =
-    range === "month" ? "month" : range === "week" ? "week" : "day";
-  const window =
-    range === "month" ? "90 days" : range === "week" ? "30 days" : "7 days";
+  const range = req.query.range || "today"; // today / 7d / week / month / custom
+  const now = new Date();
+  let start = new Date(now);
+  let end = new Date(now);
+  let grouping = "day";
+
+  const parseDate = (s) => {
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  };
+
+  if (range === "7d") {
+    start.setDate(start.getDate() - 7);
+    grouping = "day";
+  } else if (range === "week") {
+    const day = start.getDay();
+    const diff = day === 0 ? -6 : 1 - day; // Monday as start
+    start.setDate(start.getDate() + diff);
+    end = new Date(start);
+    end.setDate(start.getDate() + 7);
+    grouping = "day";
+  } else if (range === "month") {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    grouping = "day";
+  } else if (range === "custom" && req.query.start_date && req.query.end_date) {
+    const s = parseDate(req.query.start_date);
+    const e = parseDate(req.query.end_date);
+    if (s && e && e > s) {
+      start = s;
+      end = e;
+      grouping = "day";
+    }
+  } else {
+    // today
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    end = new Date(start);
+    end.setDate(start.getDate() + 1);
+    grouping = "hour";
+  }
+
+  if (!end || end <= start) {
+    end = new Date(start);
+    end.setDate(start.getDate() + 1);
+  }
+
   const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
     campId,
   ]);
@@ -411,16 +469,17 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
 
   const stats = await db.query(
     `
-        SELECT date_trunc($2, created_at) as day, 
+        SELECT date_trunc($3, created_at) as day, 
                COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
                COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
         FROM traffic_logs 
         WHERE campaign_id = $1 
-          AND created_at >= now() - interval '${window}'
+          AND created_at >= $2
+          AND created_at < $4
         GROUP BY day 
         ORDER BY day ASC
       `,
-    [campId, grouping]
+    [campId, start, grouping, end]
   );
 
   const totals = await db.query(
@@ -430,9 +489,10 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
                COUNT(*) as total
         FROM traffic_logs 
         WHERE campaign_id = $1 
-          AND created_at >= now() - interval '${window}'
+          AND created_at >= $2
+          AND created_at < $3
       `,
-    [campId]
+    [campId, start, end]
   );
 
   const prevTotals = await db.query(
@@ -442,10 +502,10 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
                COUNT(*) as total
         FROM traffic_logs 
         WHERE campaign_id = $1 
-          AND created_at >= now() - interval '${window}' - interval '${window}'
-          AND created_at < now() - interval '${window}'
+          AND created_at >= $2 - ($3 - $2)
+          AND created_at < $2
       `,
-    [campId]
+    [campId, start, end]
   );
 
   const countryStats = await db.query(
@@ -455,29 +515,42 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
                COUNT(*) FILTER (WHERE action='redirect') as redirects
         FROM traffic_logs
         WHERE campaign_id=$1 
-          AND created_at >= now() - interval '${window}'
+          AND created_at >= $2
+          AND created_at < $3
         GROUP BY country
         ORDER BY hits DESC
         LIMIT 6
       `,
-    [campId]
+    [campId, start, end]
   );
 
   const logs = await db.query(
-    `SELECT * FROM traffic_logs WHERE campaign_id=$1 ORDER BY id DESC LIMIT 50`,
-    [campId]
+    `SELECT * FROM traffic_logs WHERE campaign_id=$1 AND created_at >= $2 AND created_at < $3 ORDER BY id DESC LIMIT 50`,
+    [campId, start, end]
   );
 
-  const summary = totals.rows[0] || { redirects: 0, safe: 0, total: 0 };
-  const previous = prevTotals.rows[0] || { redirects: 0, safe: 0, total: 0 };
+  const summary = {
+    redirects: Number(totals.rows[0]?.redirects || 0),
+    safe: Number(totals.rows[0]?.safe || 0),
+  };
+  summary.total = summary.redirects + summary.safe;
+
+  const previous = {
+    redirects: Number(prevTotals.rows[0]?.redirects || 0),
+    safe: Number(prevTotals.rows[0]?.safe || 0),
+  };
+  previous.total = previous.redirects + previous.safe;
+
   summary.pass_rate = summary.total
     ? Math.round((summary.redirects / summary.total) * 1000) / 10
     : 0;
-  summary.delta_redirects = summary.redirects - (previous.redirects || 0);
+  summary.delta_redirects = summary.redirects - previous.redirects;
   summary.redirect_growth =
     previous.redirects > 0
       ? Math.round((summary.delta_redirects / previous.redirects) * 1000) / 10
       : null;
+
+  const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${end.toLocaleDateString("vi-VN")}`;
 
   res.render("admin/report", {
     camp: rCamp.rows[0],
@@ -487,6 +560,9 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
     countryStats: countryStats.rows,
     previous,
     range,
+    start,
+    end,
+    rangeLabel,
   });
 });
 
@@ -613,7 +689,7 @@ app.post(
   }
 );
 
-app.get("/users/:id", requireRole(["super_admin", "admin"]), async (req, res) => {
+app.get("/users/view/:id", requireRole(["super_admin", "admin"]), async (req, res) => {
   const userId = req.params.id;
   const u = await db.query(
     `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name, u.role_id 
@@ -640,14 +716,14 @@ app.get("/users/:id", requireRole(["super_admin", "admin"]), async (req, res) =>
 });
 
 app.post(
-  "/users/:id/role",
+  "/users/view/:id/role",
   requireRole(["super_admin"]),
   async (req, res) => {
     await db.query(`UPDATE users SET role_id=$1 WHERE id=$2`, [
       req.body.role_id,
       req.params.id,
     ]);
-    res.redirect("/users/" + req.params.id);
+    res.redirect("/users/view/" + req.params.id);
   }
 );
 

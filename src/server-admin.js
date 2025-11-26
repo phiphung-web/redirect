@@ -3,6 +3,7 @@ const express = require("express");
 const session = require("express-session");
 const path = require("path");
 const dns = require("dns");
+const os = require("os");
 const db = require("./config/db");
 
 const app = express();
@@ -472,7 +473,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     end = new Date(start);
     end.setDate(start.getDate() + 1);
-    groupingVal = "day";
+    groupingVal = "hour";
   }
 
   if (!end || end <= start) {
@@ -789,5 +790,34 @@ app.get(
     res.redirect("/users");
   }
 );
+
+app.get("/admin/system", requireRole(["super_admin"]), async (req, res) => {
+  let dbStatus = "ok";
+  try {
+    await db.query("SELECT 1");
+  } catch (e) {
+    dbStatus = "error";
+  }
+  const load = os.loadavg();
+  const memTotal = os.totalmem();
+  const memFree = os.freemem();
+  const memUsed = memTotal - memFree;
+  res.render("admin/system", {
+    user: req.session.user,
+    uptime: os.uptime(),
+    load1: load[0],
+    load5: load[1],
+    load15: load[2],
+    memTotal,
+    memUsed,
+    memFree,
+    dbStatus,
+    procMem: process.memoryUsage(),
+    procUptime: process.uptime(),
+    platform: os.platform(),
+    release: os.release(),
+    cpus: os.cpus().length,
+  });
+});
 
 app.listen(PORT, () => console.log(`Admin V2 running on ${PORT}`));

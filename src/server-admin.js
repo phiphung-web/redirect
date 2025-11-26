@@ -438,7 +438,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   const now = new Date();
   let start = new Date(now);
   let end = new Date(now);
-  let grouping = "day";
+  const grouping = "day";
 
   const parseDate = (s) => {
     const d = new Date(s);
@@ -493,7 +493,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
 
   const stats = await db.query(
     `
-        SELECT date_trunc($3, created_at) as day, 
+        SELECT date_trunc('day', created_at) as day, 
                COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
                COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
         FROM traffic_logs 
@@ -503,7 +503,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
         GROUP BY day 
         ORDER BY day ASC
       `,
-    [campId, start, grouping, end]
+    [campId, start, end]
   );
 
   const totals = await db.query(
@@ -594,12 +594,21 @@ app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {
   const campId = req.params.id;
   const action = req.query.action;
   const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
+  const now = new Date();
+  const start =
+    req.query.start_date && !isNaN(new Date(req.query.start_date))
+      ? new Date(req.query.start_date)
+      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const end =
+    req.query.end_date && !isNaN(new Date(req.query.end_date))
+      ? new Date(req.query.end_date)
+      : now;
   const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
     campId,
   ]);
   if (!rCamp.rowCount) return res.redirect("/");
-  let sql = `SELECT * FROM traffic_logs WHERE campaign_id=$1`;
-  const params = [campId];
+  let sql = `SELECT * FROM traffic_logs WHERE campaign_id=$1 AND created_at >= $2 AND created_at < $3`;
+  const params = [campId, start, end];
   if (action) {
     params.push(action);
     sql += ` AND action=$${params.length}`;
@@ -611,6 +620,8 @@ app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {
     logs: logs.rows,
     action,
     limit,
+    start,
+    end,
   });
 });
 

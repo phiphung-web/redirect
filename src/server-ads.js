@@ -7,7 +7,7 @@ const db = require("./config/db");
 const { logTraffic } = require("./services/logger");
 
 const app = express();
-const PORT = 4001;
+const PORT = process.env.PORT || 4001;
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views")); // Cùng cấp src

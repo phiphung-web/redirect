@@ -1,23 +1,27 @@
 ﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
-    <title>Sửa Chiến Dịch - <%= camp.name %></title>
+    <title>Chi tiết/Chỉnh sửa - <%= camp.name %></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <style>
-        .select2-container { width: 100% !important; }
-        .select2-selection__choice { background-color: #0d6efd !important; color: white !important; border: none; }
-    </style>
+    <style>.select2-container{width:100% !important;} .select2-selection__choice{background-color:#0d6efd !important;color:white !important;border:none;}</style>
 </head>
 <body class="bg-light p-4">
     <div class="container bg-white p-4 rounded shadow-sm" style="max-width: 900px;">
         <div class="d-flex justify-content-between mb-4">
-            <h3>Sửa Chiến Dịch: <span class="text-primary"><%= camp.name %></span></h3>
-            <a href="/domains/<%= domain.id %>" class="btn btn-secondary">Hủy bỏ</a>
+            <div>
+                <h3 class="mb-0">Chi tiết link: <span class="text-primary"><%= camp.name %></span></h3>
+                <small class="text-muted">ID: <%= camp.id %> | Domain: <%= domain.domain_url %></small>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyConfig()">Copy cấu hình</button>
+                <a href="/domains/<%= domain.id %>" class="btn btn-secondary btn-sm">Hủy</a>
+            </div>
         </div>
 
         <form action="/campaigns/update/<%= camp.id %>" method="POST" id="editForm">
             <input type="hidden" name="domain_id" value="<%= camp.domain_id %>">
+            <input type="hidden" name="rules_json" id="rules_json">
 
             <div class="row mb-3">
                 <div class="col-md-6">
@@ -30,30 +34,29 @@
                 </div>
             </div>
 
-            <hr>
-
             <div class="mb-3">
                 <label class="fw-bold">Quốc gia cho phép</label>
-                <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple" id="countrySelect">
-                    </select>
+                <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple" id="countrySelect"></select>
                 <small class="text-muted">Để trống = Tất cả quốc gia.</small>
             </div>
-            <div class="mb-3">
-                <label class="fw-bold">Dan cau hinh (JSON)</label>
-                <textarea class="form-control" rows="3" id="configPaste" placeholder='{"rules":[], "filters":{"countries":["VN","US"]}}'></textarea>
-                <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="applyConfigFromTextarea()">Ap dung cau hinh</button>
-            </div>
 
-            <hr>
+            <div class="mb-3">
+                <label class="fw-bold">Sao chép cấu hình từ link khác</label>
+                <select class="form-control" id="copyFromSelect" onchange="loadConfigFromSelect()">
+                    <option value="">-- Không sao chép --</option>
+                    <% otherCamps.forEach(c => { %>
+                        <option value="<%= c.id %>"><%= c.name %></option>
+                    <% }) %>
+                </select>
+                <div class="border rounded mt-2 p-2 bg-light" id="configPreview" style="min-height:60px;font-size:0.9rem;">Chọn link để xem cấu hình.</div>
+            </div>
 
             <label class="fw-bold mb-2">Quy tắc Tham số (Rules)</label>
             <div id="rules-wrapper" class="bg-light p-3 rounded border mb-3"></div>
             <button type="button" class="btn btn-sm btn-secondary" onclick="addNewRule()">+ Thêm điều kiện</button>
-            
-            <input type="hidden" name="rules_json" id="rules_json">
 
             <div class="mt-4 text-end">
-                <button type="submit" class="btn btn-primary px-5">Lưu Thay Đổi</button>
+                <button type="submit" class="btn btn-primary px-5">Lưu Thay đổi</button>
             </div>
         </form>
     </div>
@@ -61,80 +64,18 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
-        // FULL COUNTRY LIST
-       const ALL_COUNTRIES = {
-        "VN": "Vietnam", "US": "United States", "GB": "United Kingdom", "JP": "Japan", "KR": "South Korea",
-        "CN": "China", "TW": "Taiwan", "TH": "Thailand", "ID": "Indonesia", "PH": "Philippines",
-        "SG": "Singapore", "MY": "Malaysia", "IN": "India", "AU": "Australia", "CA": "Canada",
-        "DE": "Germany", "FR": "France", "RU": "Russia", "BR": "Brazil", "UA": "Ukraine",
-        "AF": "Afghanistan", "AX": "Åland Islands", "AL": "Albania", "DZ": "Algeria", "AS": "American Samoa",
-        "AD": "Andorra", "AO": "Angola", "AI": "Anguilla", "AQ": "Antarctica", "AG": "Antigua and Barbuda",
-        "AR": "Argentina", "AM": "Armenia", "AW": "Aruba", "AT": "Austria", "AZ": "Azerbaijan",
-        "BS": "Bahamas", "BH": "Bahrain", "BD": "Bangladesh", "BB": "Barbados", "BY": "Belarus",
-        "BE": "Belgium", "BZ": "Belize", "BJ": "Benin", "BM": "Bermuda", "BT": "Bhutan",
-        "BO": "Bolivia", "BQ": "Bonaire, Sint Eustatius and Saba", "BA": "Bosnia and Herzegovina", "BW": "Botswana", "BV": "Bouvet Island",
-        "IO": "British Indian Ocean Territory", "BN": "Brunei Darussalam", "BG": "Bulgaria", "BF": "Burkina Faso", "BI": "Burundi",
-        "CV": "Cabo Verde", "KH": "Cambodia", "CM": "Cameroon", "KY": "Cayman Islands", "CF": "Central African Republic",
-        "TD": "Chad", "CL": "Chile", "CX": "Christmas Island", "CC": "Cocos (Keeling) Islands", "CO": "Colombia",
-        "KM": "Comoros", "CG": "Congo", "CD": "Congo (Democratic Republic)", "CK": "Cook Islands", "CR": "Costa Rica",
-        "CI": "Côte d'Ivoire", "HR": "Croatia", "CU": "Cuba", "CW": "Curaçao", "CY": "Cyprus",
-        "CZ": "Czechia", "DK": "Denmark", "DJ": "Djibouti", "DM": "Dominica", "DO": "Dominican Republic",
-        "EC": "Ecuador", "EG": "Egypt", "SV": "El Salvador", "GQ": "Equatorial Guinea", "ER": "Eritrea",
-        "EE": "Estonia", "SZ": "Eswatini", "ET": "Ethiopia", "FK": "Falkland Islands", "FO": "Faroe Islands",
-        "FJ": "Fiji", "FI": "Finland", "GF": "French Guiana", "PF": "French Polynesia", "TF": "French Southern Territories",
-        "GA": "Gabon", "GM": "Gambia", "GE": "Georgia", "GH": "Ghana", "GI": "Gibraltar",
-        "GR": "Greece", "GL": "Greenland", "GD": "Grenada", "GP": "Guadeloupe", "GU": "Guam",
-        "GT": "Guatemala", "GG": "Guernsey", "GN": "Guinea", "GW": "Guinea-Bissau", "GY": "Guyana",
-        "HT": "Haiti", "HM": "Heard Island and McDonald Islands", "VA": "Holy See", "HN": "Honduras", "HK": "Hong Kong",
-        "HU": "Hungary", "IS": "Iceland", "IR": "Iran", "IQ": "Iraq", "IE": "Ireland",
-        "IM": "Isle of Man", "IL": "Israel", "IT": "Italy", "JM": "Jamaica", "JE": "Jersey",
-        "JO": "Jordan", "KZ": "Kazakhstan", "KE": "Kenya", "KI": "Kiribati", "KP": "North Korea",
-        "KW": "Kuwait", "KG": "Kyrgyzstan", "LA": "Lao People's Democratic Republic", "LV": "Latvia", "LB": "Lebanon",
-        "LS": "Lesotho", "LR": "Liberia", "LY": "Libya", "LI": "Liechtenstein", "LT": "Lithuania",
-        "LU": "Luxembourg", "MO": "Macao", "MG": "Madagascar", "MW": "Malawi", "MV": "Maldives",
-        "ML": "Mali", "MT": "Malta", "MH": "Marshall Islands", "MQ": "Martinique", "MR": "Mauritania",
-        "MU": "Mauritius", "YT": "Mayotte", "MX": "Mexico", "FM": "Micronesia", "MD": "Moldova",
-        "MC": "Monaco", "MN": "Mongolia", "ME": "Montenegro", "MS": "Montserrat", "MA": "Morocco",
-        "MZ": "Mozambique", "MM": "Myanmar", "NA": "Namibia", "NR": "Nauru", "NP": "Nepal",
-        "NL": "Netherlands", "NC": "New Caledonia", "NZ": "New Zealand", "NI": "Nicaragua", "NE": "Niger",
-        "NG": "Nigeria", "NU": "Niue", "NF": "Norfolk Island", "MK": "North Macedonia", "MP": "Northern Mariana Islands",
-        "NO": "Norway", "OM": "Oman", "PK": "Pakistan", "PW": "Palau", "PS": "Palestine, State of",
-        "PA": "Panama", "PG": "Papua New Guinea", "PY": "Paraguay", "PE": "Peru", "PN": "Pitcairn",
-        "PL": "Poland", "PT": "Portugal", "PR": "Puerto Rico", "QA": "Qatar", "RE": "Réunion",
-        "RO": "Romania", "RW": "Rwanda", "BL": "Saint Barthélemy", "SH": "Saint Helena", "KN": "Saint Kitts and Nevis",
-        "LC": "Saint Lucia", "MF": "Saint Martin (French part)", "PM": "Saint Pierre and Miquelon", "VC": "Saint Vincent and the Grenadines", "WS": "Samoa",
-        "SM": "San Marino", "ST": "Sao Tome and Principe", "SA": "Saudi Arabia", "SN": "Senegal", "RS": "Serbia",
-        "SC": "Seychelles", "SL": "Sierra Leone", "SX": "Sint Maarten (Dutch part)", "SK": "Slovakia", "SI": "Slovenia",
-        "SB": "Solomon Islands", "SO": "Somalia", "ZA": "South Africa", "GS": "South Georgia and the South Sandwich Islands", "SS": "South Sudan",
-        "ES": "Spain", "LK": "Sri Lanka", "SD": "Sudan", "SR": "Suriname", "SJ": "Svalbard and Jan Mayen",
-        "SE": "Sweden", "CH": "Switzerland", "SY": "Syria", "TJ": "Tajikistan", "TZ": "Tanzania",
-        "TL": "Timor-Leste", "TG": "Togo", "TK": "Tokelau", "TO": "Tonga", "TT": "Trinidad and Tobago",
-        "TN": "Tunisia", "TR": "Turkey", "TM": "Turkmenistan", "TC": "Turks and Caicos Islands", "TV": "Tuvalu",
-        "UG": "Uganda", "AE": "United Arab Emirates", "UY": "Uruguay", "UZ": "Uzbekistan", "VU": "Vanuatu",
-        "VE": "Venezuela", "VG": "Virgin Islands (British)", "VI": "Virgin Islands (U.S.)", "WF": "Wallis and Futuna", "EH": "Western Sahara",
-        "YE": "Yemen", "ZM": "Zambia", "ZW": "Zimbabwe"
-    };
-
-        // Dữ liệu cũ
+        const ALL_COUNTRIES = {"VN": "Vietnam", "US": "United States", "GB": "United Kingdom", "JP": "Japan", "KR": "South Korea", "SG": "Singapore", "MY": "Malaysia", "AU": "Australia", "CA": "Canada", "DE": "Germany", "FR": "France", "BR": "Brazil"};
         const oldRules = <%- JSON.stringify(camp.rules || []) %>;
         const oldCountryFilter = <%- JSON.stringify(camp.filters?.countries || []) %>;
 
         $(document).ready(function() {
             const select = $('#countrySelect');
-            select.append(new Option("Vietnam (VN)", "VN"));
-            select.append(new Option("United States (US)", "US"));
             for(let [code, name] of Object.entries(ALL_COUNTRIES)) {
-                if(!['VN','US'].includes(code)) select.append(new Option(`${name} (${code})`, code));
+                select.append(new Option(`${name} (${code})`, code));
             }
-            
-            // Khởi tạo Select2 và set giá trị cũ
             select.select2().val(oldCountryFilter).trigger('change');
-
-            if(oldRules.length > 0) {
-                oldRules.forEach(r => addNewRule(r.key, r.operator, r.value));
-            } else {
-                addNewRule('utm_source', 'exists', '');
-            }
+            if(oldRules.length > 0) oldRules.forEach(r => addNewRule(r.key, r.operator, r.value));
+            else addNewRule('utm_source', 'exists', '');
         });
 
         function addNewRule(key='', op='exists', val='') {
@@ -148,7 +89,7 @@
                         </select>
                     </div>
                     <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-val" value="${val}" ${op==='exists'?'disabled':''}></div>
-                    <div class="col-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove()">×</button></div>
+                    <div class="col-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove()">x</button></div>
                 </div>`;
             $('#rules-wrapper').append(html);
         }
@@ -159,33 +100,37 @@
             if(inp.disabled) inp.value = '';
         }
 
-        function applyConfigFromTextarea() {
-            const txt = document.getElementById('configPaste').value.trim();
-            if (!txt) return;
-            try {
-                const cfg = JSON.parse(txt);
-                fillConfigForm(cfg);
-            } catch (e) {
-                alert("JSON khong hop le");
-            }
+        function loadConfigFromSelect() {
+            const id = document.getElementById('copyFromSelect').value;
+            if (!id) { document.getElementById('configPreview').innerText = 'Chọn link để xem cấu hình.'; return; }
+            fetch(`/api/campaigns/${id}/config`).then(r => r.json()).then(cfg => {
+                $('#rules-wrapper').empty();
+                (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value));
+                $('#countrySelect').val(cfg.filters?.countries || []).trigger('change');
+                const rulesTxt = (cfg.rules || []).map(r => `${r.key} (${r.operator}${r.value?':'+r.value:''})`).join(', ');
+                const countriesTxt = (cfg.filters?.countries || []).join(', ') || 'All';
+                document.getElementById('configPreview').innerText = `Rules: ${rulesTxt || 'Mặc định'} | Countries: ${countriesTxt}`;
+            }).catch(() => document.getElementById('configPreview').innerText = 'Không tải được cấu hình');
         }
 
-        function fillConfigForm(cfg) {
-            $('#rules-wrapper').empty();
-            (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value));
-            const countries = (cfg.filters && cfg.filters.countries) || [];
-            $('#countrySelect').val(countries).trigger('change');
+        function copyConfig() {
+            const payload = JSON.stringify({ rules: collectRules(), filters: { countries: $('#countrySelect').val() || [] } }, null, 2);
+            navigator.clipboard.writeText(payload).then(() => alert('Đã copy cấu hình')); 
         }
 
-        $('#editForm').on('submit', function() {
-            let rules = [];
+        function collectRules() {
+            const rules = [];
             $('.rule-row').each(function() {
                 let k = $(this).find('.rule-key').val();
                 let o = $(this).find('.rule-op').val();
                 let v = $(this).find('.rule-val').val();
                 if(k) rules.push({ key: k, operator: o, value: v });
             });
-            $('#rules_json').val(JSON.stringify(rules));
+            return rules;
+        }
+
+        $('#editForm').on('submit', function() {
+            $('#rules_json').val(JSON.stringify(collectRules()));
         });
     </script>
 </body>

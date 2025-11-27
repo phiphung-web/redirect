@@ -523,7 +523,190 @@ app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
   });
 });
 
-// ...
+// ... 기존 routes ...
+app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
+  const campId = req.params.id;
+  const unit = req.query.unit || "day"; // day/week/month/year/all/custom
+  const preset = req.query.preset || "today"; // today/this_week/this_month/this_year/all/custom
+  const now = new Date();
+
+  const parseDate = (s) => {
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  };
+
+  const computeRange = () => {
+    let start, end;
+    if (preset === "custom" && req.query.start_date) {
+      const s = parseDate(req.query.start_date) || now;
+      const e = parseDate(req.query.end_date) || s;
+      start = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+      end = new Date(e.getFullYear(), e.getMonth(), e.getDate() + 1);
+    } else if (preset === "this_week") {
+      const base = now;
+      const day = base.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      start = new Date(base);
+      start.setDate(start.getDate() + diff);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(start);
+      end.setDate(start.getDate() + 7);
+    } else if (preset === "this_month") {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    } else if (preset === "this_year") {
+      start = new Date(now.getFullYear(), 0, 1);
+      end = new Date(now.getFullYear() + 1, 0, 1);
+    } else if (preset === "all") {
+      end = new Date(now);
+      start = new Date(now);
+      start.setFullYear(start.getFullYear() - 1);
+    } else {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      end = new Date(start);
+      end.setDate(start.getDate() + 1);
+    }
+    return { start, end };
+  };
+
+  const { start, end } = computeRange();
+  const diffMs = end.getTime() - start.getTime();
+  const prevStart = new Date(start.getTime() - diffMs);
+  const prevEnd = new Date(end.getTime() - diffMs);
+
+  let bucket = "day";
+  if (unit === "day") bucket = "hour";
+  else if (unit === "week") bucket = "day";
+  else if (unit === "month") bucket = "week";
+  else if (unit === "year" || unit === "all") bucket = "month";
+
+  const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
+    campId,
+  ]);
+  if (!rCamp.rowCount) return res.redirect("/redirect");
+
+  const stats = await db.query(
+    `
+        SELECT date_trunc($4::text, created_at) as bucket, 
+               COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
+               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
+        FROM traffic_logs 
+        WHERE campaign_id = $1 
+          AND created_at >= $2
+          AND created_at < $3
+        GROUP BY bucket 
+        ORDER BY bucket ASC
+      `,
+    [campId, start, end, bucket]
+  );
+
+  const totals = await db.query(
+    `
+        SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
+               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
+               COUNT(*) as total
+        FROM traffic_logs 
+        WHERE campaign_id = $1 
+          AND created_at >= $2
+          AND created_at < $3
+      `,
+    [campId, start, end]
+  );
+
+  const prevTotals = await db.query(
+    `
+        SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
+               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
+               COUNT(*) as total
+        FROM traffic_logs 
+        WHERE campaign_id = $1 
+          AND created_at >= $2
+          AND created_at < $3
+      `,
+    [campId, prevStart, prevEnd]
+  );
+
+  const countryStats = await db.query(
+    `
+        SELECT country, 
+               COUNT(*) FILTER (WHERE action='redirect') as redirects, 
+               COUNT(*) as hits
+        FROM traffic_logs 
+        WHERE campaign_id=$1 
+          AND created_at >= $2 
+          AND created_at < $3
+        GROUP BY country 
+        ORDER BY hits DESC 
+        LIMIT 10
+    `,
+    [campId, start, end]
+  );
+
+  const logs = await db.query(
+    `SELECT * FROM traffic_logs WHERE campaign_id=$1 AND created_at >= $2 AND created_at < $3 ORDER BY id DESC LIMIT 50`,
+    [campId, start, end]
+  );
+
+  const summary = totals.rows[0] || { redirects: 0, safe: 0, total: 0 };
+  summary.redirects = Number(summary.redirects || 0);
+  summary.safe = Number(summary.safe || 0);
+  summary.total = Number(summary.total || 0);
+  summary.fail = summary.safe;
+  summary.pass_rate =
+    summary.total > 0
+      ? Math.round((summary.redirects / summary.total) * 1000) / 10
+      : 0;
+
+  const previous = prevTotals.rows[0] || { redirects: 0, safe: 0, total: 0 };
+  previous.redirects = Number(previous.redirects || 0);
+  previous.safe = Number(previous.safe || 0);
+  previous.total = Number(previous.total || 0);
+  previous.pass_rate =
+    previous.total > 0
+      ? Math.round((previous.redirects / previous.total) * 1000) / 10
+      : 0;
+
+  const delta = {
+    redirects: summary.redirects - previous.redirects,
+    safe: summary.safe - previous.safe,
+    pass_rate: summary.pass_rate - previous.pass_rate,
+  };
+  const growth = {
+    redirects:
+      previous.redirects > 0
+        ? Math.round((delta.redirects / previous.redirects) * 1000) / 10
+        : null,
+    safe:
+      previous.safe > 0
+        ? Math.round((delta.safe / previous.safe) * 1000) / 10
+        : null,
+    pass_rate:
+      previous.pass_rate !== null
+        ? Math.round(delta.pass_rate * 10) / 10
+        : null,
+  };
+
+  const labelEnd = new Date(end);
+  labelEnd.setDate(labelEnd.getDate() - 1);
+  const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${labelEnd.toLocaleDateString("vi-VN")}`;
+
+  res.render("admin/report_v2", {
+    user: req.session.user,
+    camp: rCamp.rows[0],
+    stats: stats.rows,
+    logs: logs.rows.map(parseLogMeta),
+    summary,
+    previous,
+    delta,
+    growth,
+    countryStats: countryStats.rows,
+    unit,
+    preset,
+    rangeLabel,
+    start,
+    end,
+  });
+});
 app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   const campId = req.params.id;
   const range = req.query.range || "today"; // today / 7d / week / month / custom

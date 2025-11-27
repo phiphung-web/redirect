@@ -131,7 +131,13 @@
             document.getElementById('endDate').style.display = show ? '' : 'none';
         }
         const statsData = <%- JSON.stringify(stats || []) %>;
-        const labels = statsData.map(s => new Date(s.day).toLocaleDateString('vi-VN'));
+        const isToday = '<%= range %>' === 'today';
+        const labels = statsData.map(s => {
+            const d = new Date(s.day);
+            return isToday
+                ? d.toLocaleTimeString('vi-VN', { hour: '2-digit' }) + ':00'
+                : d.toLocaleDateString('vi-VN');
+        });
         const redirectSeries = statsData.map(s => s.redirects || 0);
         const safeSeries = statsData.map(s => s.safe || 0);
         const ctx = document.getElementById('trafficChart');
@@ -140,6 +146,7 @@
         }
         toggleCustom('<%= range %>');
     </script>
+    <%- include('../partials/footer') %>
 </body>
 </html>
 

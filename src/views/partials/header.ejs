@@ -3,19 +3,42 @@
     <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
       <i class="fas fa-rocket me-2"></i>REDIRECT PRO V2
     </a>
-    <div class="d-flex align-items-center text-white">
-      <% if (user && user.role_name === 'super_admin') { %>
-        <a href="/admin/system" class="btn btn-sm btn-outline-warning me-3">System</a>
-      <% } %>
-      <% if (user) { %>
-        <div class="me-3"><small class="text-white-50">User:</small> <b><%= user.username %></b></div>
-        <a href="/logout" class="btn btn-sm btn-outline-light">Đăng xuất <i class="fas fa-sign-out-alt ms-1"></i></a>
-      <% } %>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="/">Redirect</a></li>
+        <% if (user && (user.role_name === 'super_admin' || user.role_name === 'admin')) { %>
+          <li class="nav-item"><a class="nav-link" href="/users">Quản trị user</a></li>
+        <% } %>
+        <% if (user && user.role_name === 'super_admin') { %>
+          <li class="nav-item"><a class="nav-link" href="/admin/system">Trạng thái hệ thống</a></li>
+        <% } %>
+      </ul>
+      <div class="d-flex align-items-center text-white">
+        <% if (user) { %>
+          <div class="me-3"><small class="text-white-50">User:</small> <b><%= user.username %></b></div>
+          <a href="/logout" class="btn btn-sm btn-outline-light">Đăng xuất <i class="fas fa-sign-out-alt ms-1"></i></a>
+        <% } %>
+      </div>
     </div>
   </div>
 </nav>
-<% if (typeof backUrl !== 'undefined' && backUrl) { %>
+<% if (typeof breadcrumb !== 'undefined' && breadcrumb && breadcrumb.length) { %>
   <div class="bg-white border-bottom px-4 py-2">
+    <% breadcrumb.forEach((bc, idx) => { %>
+      <% if (bc.url) { %>
+        <a href="<%= bc.url %>" class="text-decoration-none"><%= bc.label %></a>
+      <% } else { %>
+        <span><%= bc.label %></span>
+      <% } %>
+      <% if (idx < breadcrumb.length - 1) { %> / <% } %>
+    <% }) %>
+  </div>
+<% } %>
+<% if (typeof backUrl !== 'undefined' && backUrl) { %>
+  <div class="bg-light px-4 py-2">
     <a href="<%= backUrl %>" class="text-decoration-none"><i class="fas fa-arrow-left me-1"></i>Quay lại</a>
   </div>
 <% } %>

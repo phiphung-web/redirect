@@ -182,7 +182,7 @@ app.post("/domains/create", checkAuth, async (req, res) => {
         req.session.user.id,
       ]
     );
-    res.redirect("/");
+    res.redirect("/redirect");
   } catch (e) {
     res.send("Lá»—i: Domain Ä‘Ã£ tá»“n táº¡i");
   }
@@ -193,7 +193,7 @@ app.get("/domains/toggle/:id", checkAuth, async (req, res) => {
     `UPDATE domains SET status = CASE WHEN status='active' THEN 'inactive' ELSE 'active' END, updated_by=$2 WHERE id=$1`,
     [req.params.id, req.session.user.id]
   );
-  res.redirect("/");
+  res.redirect("/redirect");
 });
 
 // CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A DOMAIN
@@ -205,7 +205,7 @@ app.get(
       // XÃ³a cascade trong DB sáº½ tá»± xÃ³a link, nhÆ°ng cáº§n xÃ³a log thá»§ cÃ´ng náº¿u chÆ°a set cascade cho log
       // á»ž Ä‘Ã¢y giáº£ sá»­ DB set cascade rá»“i.
       await db.query(`DELETE FROM domains WHERE id=$1`, [req.params.id]);
-      res.redirect("/");
+      res.redirect("/redirect");
     } catch (e) {
       res.send("Lá»—i khi xÃ³a domain: " + e.message);
     }
@@ -399,7 +399,7 @@ app.get(
       await db.query(`DELETE FROM campaigns WHERE id=$1`, [req.params.id]);
       res.redirect("/domains/" + r.rows[0].domain_id);
     } else {
-      res.redirect("/");
+      res.redirect("/redirect");
     }
   }
 );
@@ -855,4 +855,5 @@ app.get("/admin/system/data", requireRole(["super_admin"]), async (req, res) => 
 });
 
 app.listen(PORT, () => console.log(`Admin V2 running on ${PORT}`));
+
 

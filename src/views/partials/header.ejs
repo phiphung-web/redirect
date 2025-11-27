@@ -3,6 +3,8 @@
   const isAdmin = user && (user.role_name === 'super_admin' || user.role_name === 'admin');
   const isSuper = user && user.role_name === 'super_admin';
   const initials = user && user.username ? user.username.substring(0, 2).toUpperCase() : 'AC';
+  const crumbList = (typeof breadcrumb !== 'undefined' && Array.isArray(breadcrumb)) ? breadcrumb : [];
+  const backLink = (typeof backUrl !== 'undefined' && backUrl) ? backUrl : null;
 %>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 <link href="/css/app.css" rel="stylesheet">
@@ -64,22 +66,22 @@
 </nav>
 
 <main class="app-main">
-  <% if ((typeof breadcrumb !== 'undefined' && breadcrumb && breadcrumb.length) || (typeof backUrl !== 'undefined' && backUrl)) { %>
+  <% if ((crumbList && crumbList.length) || backLink) { %>
     <div class="container-xxl d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <% if (breadcrumb && breadcrumb.length) { %>
+      <% if (crumbList && crumbList.length) { %>
         <div class="breadcrumb-bar">
-          <% breadcrumb.forEach((bc, idx) => { %>
+          <% crumbList.forEach((bc, idx) => { %>
             <% if (bc.url) { %>
               <a href="<%= bc.url %>" class="text-decoration-none"><%= bc.label %></a>
             <% } else { %>
               <span><%= bc.label %></span>
             <% } %>
-            <% if (idx < breadcrumb.length - 1) { %> / <% } %>
+            <% if (idx < crumbList.length - 1) { %> / <% } %>
           <% }) %>
         </div>
       <% } %>
-      <% if (backUrl) { %>
-        <a href="<%= backUrl %>" class="back-link"><i class="fa-solid fa-arrow-left"></i> Quay lai</a>
+      <% if (backLink) { %>
+        <a href="<%= backLink %>" class="back-link"><i class="fa-solid fa-arrow-left"></i> Quay lai</a>
       <% } %>
     </div>
   <% } %>

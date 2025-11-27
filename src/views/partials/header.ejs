@@ -1,44 +1,76 @@
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4 shadow-sm">
+﻿<%
+  const currentMenu = typeof active === 'string' ? active : '';
+  const isAdmin = user && (user.role_name === 'super_admin' || user.role_name === 'admin');
+  const isSuper = user && user.role_name === 'super_admin';
+  const initials = user && user.username ? user.username.substring(0, 2).toUpperCase() : 'AC';
+%>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<link href="/css/app.css" rel="stylesheet">
+
+<nav class="navbar navbar-expand-lg navbar-dark app-navbar px-3 px-lg-4">
   <div class="container-fluid">
-    <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
-      <i class="fas fa-rocket me-2"></i>REDIRECT PRO V2
+    <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+      <div class="brand-mark">RC</div>
+      <div class="brand-text">
+        <div class="fw-bold">Redirect Control</div>
+        <small class="text-white-50">MVP Suite</small>
+      </div>
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-        <li class="nav-item"><a class="nav-link" href="/">Redirect</a></li>
-        <% if (user && (user.role_name === 'super_admin' || user.role_name === 'admin')) { %>
-          <li class="nav-item"><a class="nav-link" href="/users">Quản trị user</a></li>
-        <% } %>
-        <% if (user && user.role_name === 'super_admin') { %>
-          <li class="nav-item"><a class="nav-link" href="/admin/system">Trạng thái hệ thống</a></li>
-        <% } %>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle <%= ['redirect','system','users'].includes(currentMenu) ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Chuc nang
+          </a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item <%= currentMenu === 'redirect' ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-shuffle me-2 text-primary"></i>Redirect</a></li>
+            <% if (isSuper) { %>
+              <li><a class="dropdown-item <%= currentMenu === 'system' ? 'active' : '' %>" href="/admin/system"><i class="fa-solid fa-server me-2 text-primary"></i>He thong</a></li>
+            <% } %>
+            <% if (isAdmin) { %>
+              <li><a class="dropdown-item <%= currentMenu === 'users' ? 'active' : '' %>" href="/users"><i class="fa-solid fa-users-gear me-2 text-primary"></i>Quan tri nguoi dung</a></li>
+            <% } %>
+          </ul>
+        </li>
       </ul>
-      <div class="d-flex align-items-center text-white">
+
+      <div class="d-flex align-items-center gap-3 text-white ms-lg-auto">
         <% if (user) { %>
-          <div class="me-3"><small class="text-white-50">User:</small> <b><%= user.username %></b></div>
-          <a href="/logout" class="btn btn-sm btn-outline-light">Đăng xuất <i class="fas fa-sign-out-alt ms-1"></i></a>
+          <div class="account-pill">
+            <div class="avatar"><%= initials %></div>
+            <div class="small lh-sm">
+              <div class="text-white-50">Tai khoan</div>
+              <div class="fw-bold text-white"><%= user.username %></div>
+              <div class="text-white-50"><%= user.role_name %></div>
+            </div>
+          </div>
+          <a href="/logout" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-arrow-right-from-bracket me-1"></i>Dang xuat</a>
         <% } %>
       </div>
     </div>
   </div>
 </nav>
-<% if (typeof breadcrumb !== 'undefined' && breadcrumb && breadcrumb.length) { %>
-  <div class="bg-white border-bottom px-4 py-2">
-    <% breadcrumb.forEach((bc, idx) => { %>
-      <% if (bc.url) { %>
-        <a href="<%= bc.url %>" class="text-decoration-none"><%= bc.label %></a>
-      <% } else { %>
-        <span><%= bc.label %></span>
+
+<main class="app-main">
+  <% if ((typeof breadcrumb !== 'undefined' && breadcrumb && breadcrumb.length) || (typeof backUrl !== 'undefined' && backUrl)) { %>
+    <div class="container-xxl d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <% if (breadcrumb && breadcrumb.length) { %>
+        <div class="breadcrumb-bar">
+          <% breadcrumb.forEach((bc, idx) => { %>
+            <% if (bc.url) { %>
+              <a href="<%= bc.url %>" class="text-decoration-none"><%= bc.label %></a>
+            <% } else { %>
+              <span><%= bc.label %></span>
+            <% } %>
+            <% if (idx < breadcrumb.length - 1) { %> / <% } %>
+          <% }) %>
+        </div>
       <% } %>
-      <% if (idx < breadcrumb.length - 1) { %> / <% } %>
-    <% }) %>
-  </div>
-<% } %>
-<% if (typeof backUrl !== 'undefined' && backUrl) { %>
-  <div class="bg-light px-4 py-2">
-    <a href="<%= backUrl %>" class="text-decoration-none"><i class="fas fa-arrow-left me-1"></i>Quay lại</a>
-  </div>
-<% } %>
+      <% if (backUrl) { %>
+        <a href="<%= backUrl %>" class="back-link"><i class="fa-solid fa-arrow-left"></i> Quay lai</a>
+      <% } %>
+    </div>
+  <% } %>

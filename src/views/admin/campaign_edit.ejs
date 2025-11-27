@@ -8,19 +8,15 @@
     <style>.select2-container{width:100% !important;} .select2-selection__choice{background-color:#0d6efd !important;color:white !important;border:none;}</style>
 </head>
 <body class="bg-light p-4">
-    <div class="container bg-white p-4 rounded shadow-sm" style="max-width: 900px;">
+    <%- include('../partials/header', { user, backUrl: '/domains/' + domain.id }) %>
+    <div class="container bg-white p-4 rounded shadow-sm mt-3" style="max-width: 900px;">
         <div class="d-flex justify-content-between mb-4">
             <div>
                 <h3 class="mb-0">Chi tiết link: <span class="text-primary"><%= camp.name %></span></h3>
                 <small class="text-muted">ID: <%= camp.id %> | Domain: <%= domain.domain_url %></small><br>
                 <small class="text-muted">Tạo: <%= camp.created_by_name || 'N/A' %> @ <%= new Date(camp.created_at).toLocaleString('vi-VN') %> | Cập nhật: <%= camp.updated_by_name || camp.created_by_name || '-' %> @ <%= camp.updated_at ? new Date(camp.updated_at).toLocaleString('vi-VN') : '-' %></small>
             </div>
-            <div class="d-flex gap-2">
-                <% if (user.role_name === 'super_admin') { %>
-                <a href="/admin/system" class="btn btn-sm btn-outline-warning">System</a>
-                <% } %>
-                <a href="/domains/<%= domain.id %>" class="btn btn-secondary btn-sm">Quay lại</a>
-            </div>
+            <div></div>
         </div>
 
         <div class="card mb-3">

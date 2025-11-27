@@ -13,12 +13,7 @@
     </style>
 </head>
 <body class="bg-light">
-    <nav class="navbar navbar-dark bg-dark px-4 mb-4">
-        <a href="/" class="navbar-brand btn btn-outline-light border-0 text-start">← Quay lại Dashboard</a>
-        <% if (user.role_name === 'super_admin') { %>
-            <a href="/admin/system" class="btn btn-sm btn-outline-warning">System</a>
-        <% } %>
-    </nav>
+    <%- include('../partials/header', { user, backUrl: '/' }) %>
 
     <div class="container pb-5">
         <div class="card mb-4 shadow-sm">

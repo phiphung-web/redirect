@@ -1,0 +1,21 @@
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4 shadow-sm">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
+      <i class="fas fa-rocket me-2"></i>REDIRECT PRO V2
+    </a>
+    <div class="d-flex align-items-center text-white">
+      <% if (user && user.role_name === 'super_admin') { %>
+        <a href="/admin/system" class="btn btn-sm btn-outline-warning me-3">System</a>
+      <% } %>
+      <% if (user) { %>
+        <div class="me-3"><small class="text-white-50">User:</small> <b><%= user.username %></b></div>
+        <a href="/logout" class="btn btn-sm btn-outline-light">Đăng xuất <i class="fas fa-sign-out-alt ms-1"></i></a>
+      <% } %>
+    </div>
+  </div>
+</nav>
+<% if (typeof backUrl !== 'undefined' && backUrl) { %>
+  <div class="bg-white border-bottom px-4 py-2">
+    <a href="<%= backUrl %>" class="text-decoration-none"><i class="fas fa-arrow-left me-1"></i>Quay lại</a>
+  </div>
+<% } %>

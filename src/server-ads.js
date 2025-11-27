@@ -9,6 +9,8 @@ const { logTraffic } = require("./services/logger");
 const app = express();
 const PORT = process.env.PORT || 4001;
 
+app.set("trust proxy", true);
+
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views")); // Cùng cấp src
 
@@ -33,7 +35,8 @@ app.get(/.*/, async (req, res) => {
     const browserName = ua.browser?.name || "Unknown";
     const geo = geoip.lookup(ip);
     const country = geo ? geo.country : "VN";
-    const requestUrl = `${req.protocol}://${host}${req.originalUrl}`;
+    const proto = req.get("x-forwarded-proto") || req.protocol || "http";
+    const requestUrl = `${proto}://${host}${req.originalUrl}`;
 
     // 1. Lấy Domain & Config
     const rDom = await db.query(

@@ -13,7 +13,14 @@
     </style>
 </head>
 <body>
-    <%- include('../partials/header', { user, backUrl: '/', active: 'redirect' }) %>
+    <%- include('../partials/header', {
+        user,
+        active: 'redirect',
+        breadcrumb: [
+            { label: 'Redirect', url: '/redirect' },
+            { label: domain.domain_url }
+        ]
+    }) %>
 
     <div class="container pb-5 mt-3">
         <div class="card mb-4 shadow-sm">
@@ -207,9 +214,8 @@
         }
 
         function addTemplate(t) {
-            $('#rules-wrapper').empty(); // Xóa trống để nạp mẫu mới
+            $('#rules-wrapper').empty();
             if (t === 'fb') {
-                // List chuẩn Facebook
                 addNewRule('utm_source', 'equals', 'facebook');
                 addNewRule('fbclid', 'exists');
                 addNewRule('campaign_id', 'exists');
@@ -218,7 +224,6 @@
                 addNewRule('placement', 'exists');
             }
             else if (t === 'gg') {
-                // List chuẩn Google
                 addNewRule('utm_source', 'equals', 'google');
                 addNewRule('gclid', 'exists');
                 addNewRule('campaignid', 'exists');

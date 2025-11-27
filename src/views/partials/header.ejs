@@ -25,7 +25,7 @@
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle <%= currentMenu === 'redirect' ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            Chuc nang
+            Chức năng
           </a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item <%= currentMenu === 'redirect' ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-shuffle me-2 text-primary"></i>Redirect</a></li>
@@ -34,14 +34,14 @@
         <% if (isAdmin) { %>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle <%= ['system','users'].includes(currentMenu) ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Quan tri
+              Quản trị
             </a>
             <ul class="dropdown-menu">
               <% if (isSuper) { %>
-                <li><a class="dropdown-item <%= currentMenu === 'system' ? 'active' : '' %>" href="/admin/system"><i class="fa-solid fa-server me-2 text-primary"></i>He thong</a></li>
+                <li><a class="dropdown-item <%= currentMenu === 'system' ? 'active' : '' %>" href="/admin/system"><i class="fa-solid fa-server me-2 text-primary"></i>Hệ thống</a></li>
               <% } %>
               <% if (isAdmin) { %>
-                <li><a class="dropdown-item <%= currentMenu === 'users' ? 'active' : '' %>" href="/users"><i class="fa-solid fa-users-gear me-2 text-primary"></i>User</a></li>
+                <li><a class="dropdown-item <%= currentMenu === 'users' ? 'active' : '' %>" href="/users"><i class="fa-solid fa-users-gear me-2 text-primary"></i>Người dùng</a></li>
               <% } %>
             </ul>
           </li>
@@ -53,12 +53,12 @@
           <div class="account-pill">
             <div class="avatar"><%= initials %></div>
             <div class="small lh-sm">
-              <div class="text-white-50">Tai khoan</div>
+              <div class="text-white-50">Tài khoản</div>
               <div class="fw-bold text-white"><%= user.username %></div>
               <div class="text-white-50"><%= user.role_name %></div>
             </div>
           </div>
-          <a href="/logout" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-arrow-right-from-bracket me-1"></i>Dang xuat</a>
+          <a href="/logout" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-arrow-right-from-bracket me-1"></i>Đăng xuất</a>
         <% } %>
       </div>
     </div>
@@ -81,7 +81,7 @@
         </div>
       <% } %>
       <% if (backLink) { %>
-        <a href="<%= backLink %>" class="back-link"><i class="fa-solid fa-arrow-left"></i> Quay lai</a>
+        <a href="<%= backLink %>" class="back-link"><i class="fa-solid fa-arrow-left"></i> Quay lại</a>
       <% } %>
     </div>
   <% } %>

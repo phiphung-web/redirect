@@ -1,15 +1,23 @@
 ﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
-    <title>L?ch s? log - <%= camp.name %></title>
+    <title>Lịch sử log - <%= camp.name %></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <%- include('../partials/header', { user, backUrl: '/campaigns/' + camp.id + '/report', active: 'redirect' }) %>
+    <%- include('../partials/header', {
+        user,
+        active: 'redirect',
+        breadcrumb: [
+            { label: 'Redirect', url: '/redirect' },
+            { label: 'Chiến dịch: ' + camp.name, url: '/campaigns/' + camp.id + '/report' },
+            { label: 'Log' }
+        ]
+    }) %>
     <div class="container bg-white p-4 rounded shadow-sm mt-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h4 class="mb-0">L?ch s? log: <span class="text-primary"><%= camp.name %></span></h4>
+                <h4 class="mb-0">Lịch sử log: <span class="text-primary"><%= camp.name %></span></h4>
                 <small class="text-muted">ID: <%= camp.id %></small>
             </div>
             <div></div>
@@ -18,7 +26,7 @@
             <div class="col-auto">
                 <label class="form-label">Action</label>
                 <select name="action" class="form-select form-select-sm">
-                    <option value="" <%= !action ? 'selected' : '' %>>T?t c?</option>
+                    <option value="" <%= !action ? 'selected' : '' %>>Tất cả</option>
                     <option value="redirect" <%= action==='redirect' ? 'selected' : '' %>>redirect</option>
                     <option value="safe_page" <%= action==='safe_page' ? 'selected' : '' %>>safe_page</option>
                     <option value="safe_page_wrong_country" <%= action==='safe_page_wrong_country' ? 'selected' : '' %>>wrong_country</option>
@@ -27,36 +35,36 @@
                 </select>
             </div>
             <div class="col-auto">
-                <label class="form-label">T? ng�y</label>
+                <label class="form-label">Từ ngày</label>
                 <input type="date" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
             </div>
             <div class="col-auto">
-                <label class="form-label">D?n ng�y</label>
+                <label class="form-label">Đến ngày</label>
                 <input type="date" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
             </div>
             <div class="col-auto">
-                <label class="form-label">S? d�ng</label>
+                <label class="form-label">Số dòng</label>
                 <input type="number" name="limit" value="<%= limit %>" min="50" max="2000" class="form-control form-control-sm">
             </div>
             <div class="col-auto align-self-end">
-                <button class="btn btn-primary btn-sm" type="submit">L?c</button>
+                <button class="btn btn-primary btn-sm" type="submit">Lọc</button>
             </div>
         </form>
         <div class="table-responsive">
             <table class="table table-sm table-striped table-hover table-log">
                 <thead class="table-dark">
                     <tr>
-                        <th>Th?i gian (VN)</th>
+                        <th>Thời gian (VN)</th>
                         <th>IP</th>
-                        <th>Qu?c gia</th>
-                        <th>Thi?t b? / OS</th>
-                        <th>Tr?ng th�i</th>
-                        <th>Ly do</th>
+                        <th>Quốc gia</th>
+                        <th>Thiết bị / OS</th>
+                        <th>Trạng thái</th>
+                        <th>Lý do</th>
                         <th>Referer</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <% if(logs.length===0) { %><tr><td colspan="7" class="text-center text-muted">Kh�ng c� log</td></tr><% } %>
+                    <% if(logs.length===0) { %><tr><td colspan="7" class="text-center text-muted">Không có log</td></tr><% } %>
                     <% logs.forEach(log => { const meta = log.meta || {}; %>
                         <tr>
                             <td><%= new Date(log.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
@@ -66,15 +74,15 @@
                             <td><span class="badge <%= log.action === 'redirect' ? 'bg-success' : 'bg-danger' %> badge-status"><%= log.action === 'redirect' ? 'PASS' : 'FAIL' %></span></td>
                             <td>
                                 <% if(log.action === 'redirect') { %>
-                                    <span class="text-success small">Chuy?n hu?ng OK</span>
+                                    <span class="text-success small">Chuyển hướng OK</span>
                                 <% } else if (log.action === 'safe_page_inactive') { %>
-                                    <span class="text-warning small">Link dang t?t</span>
+                                    <span class="text-warning small">Link đang tắt</span>
                                 <% } else if (log.action === 'safe_page_wrong_country') { %>
-                                    <span class="text-danger small">Sai qu?c gia</span>
-                                    <% if (meta.detail) { %><div class="text-muted small">Chi ti?t: <%= meta.detail %></div><% } %>
+                                    <span class="text-danger small">Sai quốc gia</span>
+                                    <% if (meta.detail) { %><div class="text-muted small">Chi tiết: <%= meta.detail %></div><% } %>
                                 <% } else if (log.action === 'safe_page_wrong_param_val' || log.action === 'safe_page_missing_param') { %>
-                                    <span class="text-danger small">Tham s? sai/thieu</span>
-                                    <% if (meta.detail) { %><div class="text-muted small">Chi ti?t: <%= meta.detail %></div><% } %>
+                                    <span class="text-danger small">Tham số sai/thiếu</span>
+                                    <% if (meta.detail) { %><div class="text-muted small">Chi tiết: <%= meta.detail %></div><% } %>
                                 <% } else { %>
                                     <span class="text-muted small">Trang safe</span>
                                 <% } %>

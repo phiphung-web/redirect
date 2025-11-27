@@ -8,7 +8,15 @@
     <style>.table-log td{font-size:0.85rem;vertical-align:middle}.badge-status{min-width:60px}</style>
 </head>
 <body>
-    <%- include('../partials/header', { user, backUrl: '/domains/' + camp.domain_id, active: 'redirect' }) %>
+    <%- include('../partials/header', {
+        user,
+        active: 'redirect',
+        breadcrumb: [
+            { label: 'Redirect', url: '/redirect' },
+            { label: 'Domain #' + camp.domain_id, url: '/domains/' + camp.domain_id },
+            { label: camp.name }
+        ]
+    }) %>
     <div class="container bg-white p-4 rounded shadow-sm mt-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
@@ -33,7 +41,6 @@
                     <button class="btn btn-primary btn-sm" type="submit">Lọc</button>
                 </form>
                 <a href="/campaigns/<%= camp.id %>/report/export" class="btn btn-outline-primary btn-sm"><i class="fas fa-file-export me-1"></i>Xuất CSV</a>
-                <a href="/domains/<%= camp.domain_id %>" class="btn btn-outline-secondary btn-sm">Quay lại</a>
             </div>
         </div>
 
@@ -119,7 +126,7 @@
                                         <span class="text-danger small">Sai quốc gia</span>
                                         <% if (meta.detail) { %><div class="text-muted small">Chi tiết: <%= meta.detail %></div><% } %>
                                     <% } else if (log.action === 'safe_page_wrong_param_val' || log.action === 'safe_page_missing_param') { %>
-                                        <span class="text-danger small">Tham số sai/thieu</span>
+                                        <span class="text-danger small">Tham số sai/thiếu</span>
                                         <% if (meta.detail) { %><div class="text-muted small">Chi tiết: <%= meta.detail %></div><% } %>
                                     <% } else { %>
                                         <span class="text-muted small">Trang safe</span>

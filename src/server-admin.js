@@ -90,7 +90,7 @@ const parseLogMeta = (row) => {
       else if (p.startsWith("url=")) meta.url = p.slice(4);
       else if (p.startsWith("detail=")) meta.detail = p.slice(7);
     });
-    if (!meta.ref) meta.ref = row.referer;
+    if (!meta.ref && !meta.url) meta.ref = row.referer;
   }
   return { ...row, meta };
 };

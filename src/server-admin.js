@@ -131,7 +131,7 @@ app.post("/login", async (req, res) => {
 
   if (r.rowCount > 0 && password === r.rows[0].password_hash) {
     req.session.user = r.rows[0];
-    return res.redirect("/redirect");
+    return res.redirect("/");
   }
   res.render("admin/login", { error: "Sai thÃ´ng tin" });
 });

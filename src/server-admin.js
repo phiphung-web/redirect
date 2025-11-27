@@ -526,7 +526,6 @@ app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
 // ... 기존 routes ...
 app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
   const campId = req.params.id;
-  const unit = req.query.unit || "day"; // day/week/month/year/all/custom
   const preset = req.query.preset || "today"; // today/this_week/this_month/this_year/all/custom
   const now = new Date();
 
@@ -534,56 +533,87 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
     const d = new Date(s);
     return isNaN(d) ? null : d;
   };
-
-  const computeRange = () => {
-    let start, end;
-    if (preset === "custom" && req.query.start_date) {
-      const s = parseDate(req.query.start_date) || now;
-      const e = parseDate(req.query.end_date) || s;
-      start = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-      end = new Date(e.getFullYear(), e.getMonth(), e.getDate() + 1);
-    } else if (preset === "this_week") {
-      const base = now;
-      const day = base.getDay();
-      const diff = day === 0 ? -6 : 1 - day;
-      start = new Date(base);
-      start.setDate(start.getDate() + diff);
-      start.setHours(0, 0, 0, 0);
-      end = new Date(start);
-      end.setDate(start.getDate() + 7);
-    } else if (preset === "this_month") {
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    } else if (preset === "this_year") {
-      start = new Date(now.getFullYear(), 0, 1);
-      end = new Date(now.getFullYear() + 1, 0, 1);
-    } else if (preset === "all") {
-      end = new Date(now);
-      start = new Date(now);
-      start.setFullYear(start.getFullYear() - 1);
-    } else {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      end = new Date(start);
-      end.setDate(start.getDate() + 1);
-    }
-    return { start, end };
+  const startOfDay = (d) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const rangeLabelText = (s, e) => {
+    const endDisplay = new Date(e);
+    endDisplay.setDate(endDisplay.getDate() - 1);
+    return `${s.toLocaleDateString("vi-VN")} - ${endDisplay.toLocaleDateString("vi-VN")}`;
   };
-
-  const { start, end } = computeRange();
-  const diffMs = end.getTime() - start.getTime();
-  const prevStart = new Date(start.getTime() - diffMs);
-  const prevEnd = new Date(end.getTime() - diffMs);
-
-  let bucket = "day";
-  if (unit === "day") bucket = "hour";
-  else if (unit === "week") bucket = "day";
-  else if (unit === "month") bucket = "week";
-  else if (unit === "year" || unit === "all") bucket = "month";
+  const presetLabels = {
+    today: "Hôm nay",
+    this_week: "Tuần này",
+    this_month: "Tháng này",
+    this_year: "Năm nay",
+    all: "Tất cả",
+    custom: "Tùy chọn",
+  };
+  const bucketByPreset = {
+    today: "hour",
+    this_week: "day",
+    this_month: "week",
+    this_year: "month",
+    all: "month",
+    custom: "day",
+  };
 
   const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
     campId,
   ]);
   if (!rCamp.rowCount) return res.redirect("/redirect");
+  const camp = rCamp.rows[0];
+
+  let start;
+  let end;
+  let bucketType = bucketByPreset[preset] || "hour";
+
+  if (preset === "this_week") {
+    const today = startOfDay(now);
+    const dow = today.getDay();
+    const diff = dow === 0 ? -6 : 1 - dow; // Monday start
+    start = new Date(today);
+    start.setDate(start.getDate() + diff);
+    end = new Date(start);
+    end.setDate(start.getDate() + 7);
+  } else if (preset === "this_month") {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  } else if (preset === "this_year") {
+    start = new Date(now.getFullYear(), 0, 1);
+    end = new Date(now.getFullYear() + 1, 0, 1);
+  } else if (preset === "all") {
+    const earliest = await db.query(
+      `SELECT MIN(created_at) AS min_date FROM traffic_logs WHERE campaign_id=$1`,
+      [campId]
+    );
+    const minRaw =
+      earliest.rows[0]?.min_date || camp.created_at || startOfDay(now);
+    const minDate = new Date(minRaw);
+    start = startOfDay(minDate);
+    end = startOfDay(now);
+    end.setDate(end.getDate() + 1);
+  } else if (preset === "custom") {
+    const s = parseDate(req.query.start_date) || now;
+    const e = parseDate(req.query.end_date) || s;
+    start = startOfDay(s);
+    end = startOfDay(e);
+    end.setDate(end.getDate() + 1);
+  } else {
+    start = startOfDay(now);
+    end = new Date(start);
+    end.setDate(start.getDate() + 1);
+    bucketType = "hour";
+  }
+
+  if (!end || end <= start) {
+    end = new Date(start);
+    end.setDate(start.getDate() + 1);
+  }
+  const rangeLabel = rangeLabelText(start, end);
+
+  const diffMs = end.getTime() - start.getTime();
+  const prevStart = new Date(start.getTime() - diffMs);
+  const prevEnd = new Date(end.getTime() - diffMs);
 
   const stats = await db.query(
     `
@@ -597,7 +627,7 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
         GROUP BY bucket 
         ORDER BY bucket ASC
       `,
-    [campId, start, end, bucket]
+    [campId, start, end, bucketType]
   );
 
   const totals = await db.query(
@@ -686,13 +716,9 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
         : null,
   };
 
-  const labelEnd = new Date(end);
-  labelEnd.setDate(labelEnd.getDate() - 1);
-  const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${labelEnd.toLocaleDateString("vi-VN")}`;
-
   res.render("admin/report_v2", {
     user: req.session.user,
-    camp: rCamp.rows[0],
+    camp,
     stats: stats.rows,
     logs: logs.rows.map(parseLogMeta),
     summary,
@@ -700,8 +726,9 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
     delta,
     growth,
     countryStats: countryStats.rows,
-    unit,
     preset,
+    presetLabel: presetLabels[preset] || "Tùy chọn",
+    bucketType,
     rangeLabel,
     start,
     end,

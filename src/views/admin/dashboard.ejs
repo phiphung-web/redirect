@@ -12,7 +12,7 @@
         .card-stat:hover { transform: translateY(-5px); }
     </style>
 </head>
-<body class="bg-light">
+<body>
     <%- include('../partials/header', { user, active: 'redirect' }) %>
     <% if (user.role_name === 'super_admin' || user.role_name === 'admin') { %>
     <div class="container mb-3">

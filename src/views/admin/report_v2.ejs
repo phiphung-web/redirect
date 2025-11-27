@@ -1,182 +1,338 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <title>Báo cáo V2 - <%= camp.name %></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>.table-log td{font-size:0.85rem;vertical-align:middle}.badge-status{min-width:60px}</style>
+  <meta charset="UTF-8">
+  <title>Báo cáo V2 - <%= camp.name %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background: #f4f6f8; }
+    .metric-card .label { color: #6c757d; font-size: 0.9rem; }
+    .metric-card .value { font-size: 1.8rem; }
+    .metric-card .delta { font-size: 0.9rem; }
+    .table-log td { font-size: 0.9rem; vertical-align: middle; }
+    code.url-snippet { word-break: break-all; white-space: normal; }
+    .breadcrumb-bar + .container-xxl { margin-top: 0; }
+  </style>
 </head>
-<body>
-    <%- include('../partials/header', {
-        user,
-        active: 'redirect',
-        backUrl: '/domains/' + camp.domain_id,
-        breadcrumb: [
-            { label: 'Redirect', url: '/redirect' },
-            { label: 'Domain #' + camp.domain_id, url: '/domains/' + camp.domain_id },
-            { label: camp.name + ' (V2)' }
-        ]
-    }) %>
-    <div class="container bg-white p-4 rounded shadow-sm mt-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-                <h3 class="mb-1">Báo cáo V2: <span class="text-primary"><%= camp.name %></span></h3>
-                <small class="text-muted">ID: <%= camp.id %> | Domain: <%= camp.domain_id %></small><br>
-                <small class="text-muted">Khoảng: <%= rangeLabel %></small>
-            </div>
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-                <form class="d-flex flex-wrap gap-2 align-items-center" method="GET">
-                    <select class="form-select form-select-sm" name="unit">
-                        <option value="day" <%= unit==='day' ? 'selected' : '' %>>Ngày</option>
-                        <option value="week" <%= unit==='week' ? 'selected' : '' %>>Tuần</option>
-                        <option value="month" <%= unit==='month' ? 'selected' : '' %>>Tháng</option>
-                        <option value="year" <%= unit==='year' ? 'selected' : '' %>>Năm</option>
-                        <option value="all" <%= unit==='all' ? 'selected' : '' %>>Tất cả (12 tháng)</option>
-                    </select>
-                    <select class="form-select form-select-sm" name="preset" id="presetSelect">
-                        <option value="today" <%= preset==='today' ? 'selected' : '' %>>Hôm nay</option>
-                        <option value="this_week" <%= preset==='this_week' ? 'selected' : '' %>>Tuần này</option>
-                        <option value="this_month" <%= preset==='this_month' ? 'selected' : '' %>>Tháng này</option>
-                        <option value="this_year" <%= preset==='this_year' ? 'selected' : '' %>>Năm nay</option>
-                        <option value="all" <%= preset==='all' ? 'selected' : '' %>>Tất cả</option>
-                        <option value="custom" <%= preset==='custom' ? 'selected' : '' %>>Tùy chọn</option>
-                    </select>
-                    <input type="date" class="form-control form-control-sm" name="start_date" id="startDate" value="<%= (preset==='custom' && start) ? new Date(start).toISOString().slice(0,10) : '' %>" style="<%= preset==='custom' ? '' : 'display:none;' %>">
-                    <input type="date" class="form-control form-control-sm" name="end_date" id="endDate" value="<%= (preset==='custom' && end) ? new Date(end).toISOString().slice(0,10) : '' %>" style="<%= preset==='custom' ? '' : 'display:none;' %>">
-                    <button class="btn btn-primary btn-sm" type="submit">Lọc</button>
-                </form>
-                <a href="/campaigns/<%= camp.id %>/report/export" class="btn btn-outline-primary btn-sm"><i class="fas fa-file-export me-1"></i>Xuất CSV</a>
-            </div>
-        </div>
+<body class="bg-light">
+  <%- include('../partials/header', {
+    user,
+    active: 'redirect',
+    backUrl: '/domains/' + camp.domain_id,
+    breadcrumb: [
+      { label: 'Redirect', url: '/redirect' },
+      { label: 'Domain #' + camp.domain_id, url: '/domains/' + camp.domain_id },
+      { label: 'Báo cáo' }
+    ]
+  }) %>
 
-        <div class="row g-3 mb-4">
-            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Redirect</div><h3 class="text-success fw-bold"><%= summary.redirects || 0 %></h3><div class="small text-muted">Δ: <%= delta.redirects %> (<%= growth.redirects ?? 'N/A' %>%)</div></div></div></div>
-            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Fail</div><h3 class="text-danger fw-bold"><%= summary.fail || 0 %></h3><div class="small text-muted">Δ: <%= delta.safe %> (<%= growth.safe ?? 'N/A' %>%)</div></div></div></div>
-            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Pass rate</div><h3 class="fw-bold"><%= summary.pass_rate || 0 %>%</h3><div class="small text-muted">Δ: <%= delta.pass_rate %> pts</div></div></div></div>
-            <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Kỳ so sánh</div><h5 class="fw-bold"><%= rangeLabel %></h5><div class="small text-muted">So với kỳ trước cùng độ dài</div></div></div></div>
-        </div>
-
-        <div class="row g-4 mb-4">
-            <div class="col-lg-8">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white"><b>Traffic</b></div>
-                    <div class="card-body"><canvas id="trafficChart" height="120"></canvas></div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white"><b>Top quốc gia</b></div>
-                    <div class="card-body p-0">
-                        <table class="table table-sm mb-0">
-                            <thead><tr><th>Quốc gia</th><th class="text-end">Hit</th><th class="text-end">Pass</th></tr></thead>
-                            <tbody>
-                                <% if(!countryStats || countryStats.length === 0) { %>
-                                    <tr><td colspan="3" class="text-center text-muted py-3">Chưa có dữ liệu</td></tr>
-                                <% } %>
-                                <% countryStats && countryStats.forEach(c => { %>
-                                    <tr><td><%= c.country || 'N/A' %></td><td class="text-end"><%= c.hits %></td><td class="text-end"><%= c.redirects %></td></tr>
-                                <% }) %>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="mb-0">Bảng thống kê (<%= unit %>)</h5>
-            </div>
-            <table class="table table-bordered text-center">
-                <thead class="table-light"><tr><th>Khoảng</th><th class="text-success">Redirect</th><th class="text-danger">Fail</th><th>Pass %</th></tr></thead>
-                <tbody>
-                    <% if(stats.length === 0) { %><tr><td colspan="4" class="text-center text-muted">Chưa có dữ liệu</td></tr><% } %>
-                    <% stats.forEach(s => { 
-                        const redirects = Number(s.redirects || 0); 
-                        const safe = Number(s.safe || 0); 
-                        const total = redirects + safe; 
-                        const rate = total ? Math.round((redirects/total)*1000)/10 : 0; 
-                        const d = new Date(s.bucket);
-                        let label = d.toLocaleDateString('vi-VN');
-                        if (unit === 'day') label = d.toLocaleTimeString('vi-VN', { hour: '2-digit' });
-                        if (unit === 'week') label = d.toLocaleDateString('vi-VN');
-                        if (unit === 'month' || unit === 'year' || unit === 'all') label = `${d.getMonth()+1}/${d.getFullYear()}`;
-                    %>
-                        <tr>
-                            <td><%= label %></td>
-                            <td class="text-success fw-bold"><%= redirects %></td>
-                            <td class="text-danger fw-bold"><%= safe %></td>
-                            <td><%= rate %>%</td>
-                        </tr>
-                    <% }) %>
-                </tbody>
-            </table>
-        </div>
-
+  <div class="container-xxl py-3">
+    <div class="card shadow-sm mb-3">
+      <div class="card-body d-flex flex-wrap justify-content-between align-items-start gap-3">
         <div>
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="mb-0">Log mới (50)</h5>
-                <a href="/campaigns/<%= camp.id %>/logs" class="btn btn-link btn-sm">Xem tất cả</a>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-sm table-striped table-hover table-log">
-                    <thead class="table-dark"><tr><th>Thời gian (VN)</th><th>IP</th><th>Quốc gia</th><th>Thiết bị / OS</th><th>Trạng thái</th><th>Lý do</th><th>Referer</th></tr></thead>
-                    <tbody>
-                        <% logs.forEach(log => { const meta = log.meta || {}; %>
-                            <tr>
-                                <td><%= new Date(log.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
-                                <td class="font-monospace"><%= log.ip %></td>
-                                <td><span class="badge bg-info text-dark"><%= log.country %></span></td>
-                                <td><%= log.device_type || 'PC' %> / <%= log.os_name || 'Unknown' %></td>
-                                <td><span class="badge <%= log.action === 'redirect' ? 'bg-success' : 'bg-danger' %> badge-status"><%= log.action === 'redirect' ? 'PASS' : 'FAIL' %></span></td>
-                                <td>
-                                    <% if(log.action === 'redirect') { %>
-                                        <span class="text-success small">Chuyển hướng OK</span>
-                                    <% } else if (log.action === 'safe_page_inactive') { %>
-                                        <span class="text-warning small">Link đang tắt</span>
-                                    <% } else if (log.action === 'safe_page_wrong_country') { %>
-                                        <span class="text-danger small">Sai quốc gia</span>
-                                        <% if (meta.detail) { %><div class="text-muted small">Chi tiết: <%= meta.detail %></div><% } %>
-                                    <% } else if (log.action === 'safe_page_wrong_param_val' || log.action === 'safe_page_missing_param') { %>
-                                        <span class="text-danger small">Tham số sai/thiếu</span>
-                                        <% if (meta.detail) { %><div class="text-muted small">Chi tiết: <%= meta.detail %></div><% } %>
-                                    <% } else { %>
-                                        <span class="text-muted small">Trang safe</span>
-                                    <% } %>
-                                </td>
-                                <td class="text-truncate" style="max-width: 150px;" title="<%= meta.url || meta.ref || log.referer %>">
-                                    <% if (meta.ref) { %><div class="text-break"><%= meta.ref %></div><% } %>
-                                    <% if (!meta.ref && log.referer) { %><div class="text-break"><%= log.referer %></div><% } %>
-                                    <% if (meta.url) { %><div class="text-muted small text-break">URL: <%= meta.url %></div><% } %>
-                                    <% if (!meta.ref && !meta.url && !log.referer) { %><div>-</div><% } %>
-                                    <% if (meta.url || meta.ref) { %>
-                                        <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-bs-toggle="modal" data-bs-target="#urlModalTop<%= log.id %>">
-                                            <i class="fa-regular fa-eye me-1"></i>Xem chi tiết
-                                        </button>
-                                        <div class="modal fade" id="urlModalTop<%= log.id %>" tabindex="-1" aria-hidden="true">
-                                            <div class="modal-dialog modal-dialog-centered">
-                                                <div class="modal-content">
-                                                    <div class="modal-header">
-                                                        <h6 class="modal-title">Chi tiết URL</h6>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <div class="mb-2"><b>Referrer:</b><br><code class="text-break d-block small" style="word-break: break-all; white-space: normal;"><%= meta.ref || '-' %></code></div>
-                                                        <div class="mb-2"><b>Request URL:</b><br><code class="text-break d-block small" style="word-break: break-all; white-space: normal;"><%= meta.url || '-' %></code></div>
-                                                        <% if (meta.detail) { %><div class="alert alert-warning py-2 mb-0 small"><b>Chi tiết:</b> <%= meta.detail %></div><% } %>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    <% } %>
-                                </td>
-                            </tr>
-                        <% }) %>
-                    </tbody>
-                </table>
-            </div>
+          <div class="text-muted small">Chiến dịch</div>
+          <h4 class="mb-1"><%= camp.name %></h4>
+          <div class="text-muted small">Khoảng: <%= rangeLabel %></div>
+          <div class="text-muted small">Nhóm theo: <%= bucketType === 'hour' ? 'Khung giờ' : bucketType === 'day' ? 'Ngày' : bucketType === 'week' ? 'Tuần' : 'Tháng' %></div>
         </div>
+        <form class="d-flex flex-wrap align-items-end gap-2" method="get">
+          <div class="form-floating">
+            <select class="form-select" id="presetSelect" name="preset" onchange="toggleCustomPreset(this.value)">
+              <option value="today" <%= preset === 'today' ? 'selected' : '' %>>Hôm nay</option>
+              <option value="this_week" <%= preset === 'this_week' ? 'selected' : '' %>>Tuần này</option>
+              <option value="this_month" <%= preset === 'this_month' ? 'selected' : '' %>>Tháng này</option>
+              <option value="this_year" <%= preset === 'this_year' ? 'selected' : '' %>>Năm nay</option>
+              <option value="all" <%= preset === 'all' ? 'selected' : '' %>>Tất cả</option>
+              <option value="custom" <%= preset === 'custom' ? 'selected' : '' %>>Tùy chọn</option>
+            </select>
+            <label for="presetSelect">Mốc thời gian</label>
+          </div>
+          <div class="form-floating custom-range d-none" id="startWrap">
+            <input type="date" class="form-control" id="startDate" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>">
+            <label for="startDate">Từ ngày</label>
+          </div>
+          <div class="form-floating custom-range d-none" id="endWrap">
+            <input type="date" class="form-control" id="endDate" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>">
+            <label for="endDate">Đến ngày</label>
+          </div>
+          <button class="btn btn-primary" type="submit">Lọc</button>
+        </form>
+      </div>
     </div>
-\n    <script>\n        function toggleCustom(val) {\n            const show = val === 'custom';\n            document.getElementById('startDate').style.display = show ? '' : 'none';\n            document.getElementById('endDate').style.display = show ? '' : 'none';\n        }\n        toggleCustom(document.getElementById('presetSelect').value);\n        const statsData = <%- JSON.stringify(stats || []) %>;\n        const labels = statsData.map(s => {\n            const d = new Date(s.bucket);\n            if ('<%= unit %>' === 'day') return d.toLocaleTimeString('vi-VN', { hour: '2-digit' });\n            if ('<%= unit %>' === 'month' || '<%= unit %>' === 'year' || '<%= unit %>' === 'all') return `${d.getMonth()+1}/${d.getFullYear()}`;\n            return d.toLocaleDateString('vi-VN');\n        });\n        const redirectSeries = statsData.map(s => s.redirects || 0);\n        const safeSeries = statsData.map(s => s.safe || 0);\n        const ctx = document.getElementById('trafficChart');\n        if (ctx && statsData.length) {\n            new Chart(ctx, { type: 'line', data: { labels, datasets: [{ label: 'Redirect', data: redirectSeries, borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.1)', tension: 0.3 }, { label: 'Fail', data: safeSeries, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.3 }] }, options: { responsive: true, plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } } });\n        }\n    </script>\n    <%- include('../partials/footer') %>\n</body>\n</html>\n*** End Patch
+
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="card shadow-sm metric-card h-100">
+          <div class="card-body">
+            <div class="label">Redirect</div>
+            <div class="value text-success fw-bold"><%= summary.redirects || 0 %></div>
+            <div class="delta text-muted small">So với kỳ trước: <%= delta.redirects >= 0 ? '+' : '' %><%= delta.redirects %></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card shadow-sm metric-card h-100">
+          <div class="card-body">
+            <div class="label">Fail</div>
+            <div class="value text-danger fw-bold"><%= summary.fail || 0 %></div>
+            <div class="delta text-muted small">So với kỳ trước: <%= delta.safe >= 0 ? '+' : '' %><%= delta.safe %></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card shadow-sm metric-card h-100">
+          <div class="card-body">
+            <div class="label">Pass rate</div>
+            <div class="value fw-bold"><%= summary.pass_rate %>%</div>
+            <div class="delta text-muted small">Chênh lệch: <%= delta.pass_rate >= 0 ? '+' : '' %><%= Math.round(delta.pass_rate * 10) / 10 %>%</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card shadow-sm metric-card h-100">
+          <div class="card-body">
+            <div class="label">Tổng lượt</div>
+            <div class="value fw-bold"><%= summary.total || 0 %></div>
+            <div class="delta text-muted small">Kỳ trước: <%= previous.total || 0 %></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mt-3">
+      <div class="col-lg-8">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span><i class="fa-solid fa-chart-line me-2"></i>Biểu đồ lưu lượng</span>
+            <span class="text-muted small"><%= presetLabel %> · <%= rangeLabel %></span>
+          </div>
+          <div class="card-body">
+            <canvas id="trafficChart" height="120"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-white"><b>Top quốc gia</b></div>
+          <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+              <thead class="table-light"><tr><th>Quốc gia</th><th class="text-end">Hit</th><th class="text-end">Pass</th></tr></thead>
+              <tbody>
+                <% if(!countryStats || countryStats.length === 0) { %>
+                  <tr><td colspan="3" class="text-center text-muted py-3">Chưa có dữ liệu</td></tr>
+                <% } %>
+                <% countryStats && countryStats.forEach(c => { %>
+                  <tr>
+                    <td><%= c.country || 'N/A' %></td>
+                    <td class="text-end"><%= c.hits %></td>
+                    <td class="text-end"><%= c.redirects %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <div>
+          <b>Bảng thống kê chi tiết</b>
+          <div class="text-muted small">Bucket: <%= bucketType === 'hour' ? 'Khung giờ' : bucketType === 'day' ? 'Ngày' : bucketType === 'week' ? 'Tuần' : 'Tháng' %></div>
+        </div>
+        <div class="text-muted small"><%= presetLabel %></div>
+      </div>
+      <div class="table-responsive">
+        <%
+          const bucketLabel =
+            bucketType === "hour"
+              ? "Khung giờ"
+              : bucketType === "day"
+              ? "Ngày"
+              : bucketType === "week"
+              ? "Tuần"
+              : "Tháng";
+          const formatBucket = (val) => {
+            const d = new Date(val);
+            if (bucketType === "hour") {
+              const dayLabel = d.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+              const hourLabel = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh" });
+              return `${dayLabel} • ${hourLabel}`;
+            }
+            if (bucketType === "week") {
+              const end = new Date(d);
+              end.setDate(end.getDate() + 6);
+              return `${d.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} - ${end.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}`;
+            }
+            if (bucketType === "month") {
+              return d.toLocaleDateString("vi-VN", { month: "long", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" });
+            }
+            return d.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+          };
+        %>
+        <table class="table table-bordered align-middle text-center mb-0">
+          <thead class="table-light">
+            <tr>
+              <th><%= bucketLabel %></th>
+              <th class="text-success">Redirect</th>
+              <th class="text-danger">Fail</th>
+              <th>Pass %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if(!stats || stats.length === 0) { %>
+              <tr><td colspan="4" class="text-center text-muted py-3">Chưa có dữ liệu</td></tr>
+            <% } %>
+            <% stats && stats.forEach(s => { const redirects = Number(s.redirects || 0); const safe = Number(s.safe || 0); const total = redirects + safe; const rate = total ? Math.round((redirects/total)*1000)/10 : 0; %>
+              <tr>
+                <td class="text-start"><div><%= formatBucket(s.bucket) %></div></td>
+                <td class="text-success fw-bold"><%= redirects %></td>
+                <td class="text-danger fw-bold"><%= safe %></td>
+                <td><%= rate %>%</td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">Log mới (50)</h6>
+        <a class="btn btn-link btn-sm" href="/campaigns/<%= camp.id %>/logs">Xem tất cả</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped table-hover table-log mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Thời gian (VN)</th>
+              <th>IP</th>
+              <th>Quốc gia</th>
+              <th>Thiết bị / OS</th>
+              <th>Trạng thái</th>
+              <th>Lý do</th>
+              <th>Referer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% logs.forEach(log => { const meta = log.meta || {}; %>
+              <tr>
+                <td><%= new Date(log.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
+                <td class="font-monospace"><%= log.ip %></td>
+                <td><span class="badge bg-info text-dark"><%= log.country %></span></td>
+                <td><%= log.device_type || 'PC' %> / <%= log.os_name || 'Unknown' %></td>
+                <td><span class="badge <%= log.action === 'redirect' ? 'bg-success' : 'bg-danger' %> px-3"><%= log.action === 'redirect' ? 'PASS' : 'FAIL' %></span></td>
+                <td>
+                  <% if(log.action === 'redirect') { %>
+                    <span class="text-success small">Chuyển hướng OK</span>
+                  <% } else if (log.action === 'safe_page_inactive') { %>
+                    <span class="text-warning small">Link đang tắt</span>
+                  <% } else if (log.action === 'safe_page_wrong_country') { %>
+                    <span class="text-danger small">Sai quốc gia</span>
+                    <% if (meta.detail) { %><div class="text-muted small">Chi tiết: <%= meta.detail %></div><% } %>
+                  <% } else if (log.action === 'safe_page_wrong_param_val' || log.action === 'safe_page_missing_param') { %>
+                    <span class="text-danger small">Tham số sai/thiếu</span>
+                    <% if (meta.detail) { %><div class="text-muted small">Chi tiết: <%= meta.detail %></div><% } %>
+                  <% } else { %>
+                    <span class="text-muted small">Trang safe</span>
+                  <% } %>
+                </td>
+                <td class="text-truncate" style="max-width: 170px;" title="<%= meta.url || meta.ref || log.referer %>">
+                  <% if (meta.ref) { %><div class="text-break"><%= meta.ref %></div><% } %>
+                  <% if (!meta.ref && log.referer) { %><div class="text-break"><%= log.referer %></div><% } %>
+                  <% if (meta.url) { %><div class="text-muted small text-break">URL: <%= meta.url %></div><% } %>
+                  <% if (!meta.ref && !meta.url && !log.referer) { %><div>-</div><% } %>
+                  <% if (meta.url || meta.ref) { %>
+                    <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-bs-toggle="modal" data-bs-target="#urlModal<%= log.id %>">
+                      <i class="fa-regular fa-eye me-1"></i>Xem chi tiết
+                    </button>
+                    <div class="modal fade" id="urlModal<%= log.id %>" tabindex="-1" aria-hidden="true">
+                      <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                          <div class="modal-header">
+                            <h6 class="modal-title">Chi tiết URL</h6>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                          </div>
+                          <div class="modal-body">
+                            <div class="mb-3">
+                              <b>Referrer:</b>
+                              <code class="url-snippet d-block mt-1 small"><%= meta.ref || '-' %></code>
+                            </div>
+                            <div class="mb-3">
+                              <b>Request URL:</b>
+                              <code class="url-snippet d-block mt-1 small"><%= meta.url || '-' %></code>
+                            </div>
+                            <% if (meta.detail) { %>
+                              <div class="alert alert-warning py-2 mb-0 small"><b>Chi tiết:</b> <%= meta.detail %></div>
+                            <% } %>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    function toggleCustomPreset(val) {
+      const isCustom = val === 'custom';
+      document.querySelectorAll('.custom-range').forEach(el => {
+        el.classList.toggle('d-none', !isCustom);
+      });
+    }
+    toggleCustomPreset('<%= preset %>');
+
+    const statsData = <%- JSON.stringify(stats || []) %>;
+    const bucketType = '<%= bucketType %>';
+
+    const formatLabel = (raw) => {
+      const d = new Date(raw);
+      if (bucketType === 'hour') {
+        return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' });
+      }
+      if (bucketType === 'week') {
+        const end = new Date(d);
+        end.setDate(end.getDate() + 6);
+        return `${d.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} - ${end.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}`;
+      }
+      if (bucketType === 'month') {
+        return d.toLocaleDateString('vi-VN', { month: 'short', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' });
+      }
+      return d.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+    };
+
+    const labels = statsData.map(s => formatLabel(s.bucket));
+    const redirectSeries = statsData.map(s => Number(s.redirects || 0));
+    const safeSeries = statsData.map(s => Number(s.safe || 0));
+    const ctx = document.getElementById('trafficChart');
+    if (ctx && statsData.length) {
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Redirect', data: redirectSeries, borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.1)', tension: 0.3 },
+            { label: 'Fail', data: safeSeries, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: true } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+    }
+  </script>
+  <%- include('../partials/footer') %>
+</body>
+</html>

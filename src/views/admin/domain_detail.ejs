@@ -1,204 +1,503 @@
 ﻿<!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
-    <title>Quản lý - <%= domain.domain_url %></title>
+    <title>Quản lý - <%= domain.domain_url %>
+    </title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <style>
-        body { background-color: #f8f9fa; font-family: sans-serif; }
-        .select2-container { width: 100% !important; z-index: 9999; }
-        .suggestion-box { background: #fff3cd; padding: 6px; border-radius: 4px; font-size: 0.85rem; margin-top: 6px; }
+        body {
+            background-color: #f8f9fa;
+            font-family: sans-serif;
+        }
+
+        .select2-container {
+            width: 100% !important;
+            z-index: 9999;
+        }
+
+        .suggestion-box {
+            background: #fff3cd;
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-top: 6px;
+        }
     </style>
 </head>
-<body>
-    <%- include('../partials/header', {
-        user,
-        active: 'redirect',
-        backUrl: '/redirect',
-        breadcrumb: [
-            { label: 'Redirect', url: '/redirect' },
-            { label: domain.domain_url }
-        ]
-    }) %>
 
-    <div class="container pb-5 mt-3">
-        <div class="card mb-4 shadow-sm">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <h3 class="mb-1 text-primary"><%= domain.domain_url %></h3>
-                    <span class="badge bg-secondary">Giao diện sách: <%= domain.safe_template %></span>
-                    <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>"><%= domain.status.toUpperCase() %></span>
-                    <div class="text-muted small mt-1">Tạo: <%= domain.created_by_name || 'N/A' %> @ <%= new Date(domain.created_at).toLocaleString('vi-VN') %> | Cập nhật: <%= domain.updated_by_name || domain.created_by_name || '-' %> @ <%= domain.updated_at ? new Date(domain.updated_at).toLocaleString('vi-VN') : '-' %></div>
-                    <% if (linkStats) { %>
-                        <div class="mt-2">
-                            <span class="badge bg-primary">Tổng link: <%= linkStats.total %></span>
-                            <span class="badge bg-success">ON: <%= linkStats.active %></span>
-                            <span class="badge bg-secondary">OFF: <%= linkStats.total - linkStats.active %></span>
+<body>
+    <%- include('../partials/header', { user, active: 'redirect' , backUrl: '/redirect' , breadcrumb: [ {
+        label: 'Redirect' , url: '/redirect' }, { label: domain.domain_url } ] }) %>
+
+        <div class="container pb-5 mt-3">
+            <div class="card mb-4 shadow-sm">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="mb-1 text-primary">
+                            <%= domain.domain_url %>
+                        </h3>
+                        <span class="badge bg-secondary">Giao diện sách: <%= domain.safe_template %></span>
+                        <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>">
+                            <%= domain.status.toUpperCase() %>
+                        </span>
+                        <div class="text-muted small mt-1">Tạo: <%= domain.created_by_name || 'N/A' %> @ <%= new
+                                    Date(domain.created_at).toLocaleString('vi-VN') %> | Cập nhật: <%=
+                                        domain.updated_by_name || domain.created_by_name || '-' %> @ <%=
+                                            domain.updated_at ? new Date(domain.updated_at).toLocaleString('vi-VN')
+                                            : '-' %>
                         </div>
-                    <% } %>
+                        <% if (linkStats) { %>
+                            <div class="mt-2">
+                                <span class="badge bg-primary">Tổng link: <%= linkStats.total %></span>
+                                <span class="badge bg-success">ON: <%= linkStats.active %></span>
+                                <span class="badge bg-secondary">OFF: <%= linkStats.total - linkStats.active %></span>
+                            </div>
+                            <% } %>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-primary me-2" onclick="checkDNS('<%= domain.id %>')">Check
+                            DNS</button>
+                        <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#addLinkModal">+
+                            Tạo Link Mới</button>
+                    </div>
                 </div>
-                <div>
-                    <button class="btn btn-outline-primary me-2" onclick="checkDNS('<%= domain.id %>')">Check DNS</button>
-                    <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#addLinkModal">+ Tạo Link Mới</button>
-                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tên Camp</th>
+                            <th>Link Chạy Ads</th>
+                            <th>Rules</th>
+                            <th>Trạng thái</th>
+                            <th>Thống kê</th>
+                            <th class="text-end">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (links.length===0) { %>
+                            <tr>
+                                <td colspan="6" class="text-center py-4">Chưa có link nào.</td>
+                            </tr>
+                            <% } %>
+                                <% links.forEach(l=> { %>
+                                    <tr>
+                                        <td>
+                                            <b>
+                                                <%= l.name %>
+                                            </b><br>
+                                            <small class="text-muted d-block text-truncate" style="max-width: 200px;">
+                                                <%= l.target_url %>
+                                            </small>
+                                            <small class="text-muted">By <%= l.created_by_name || 'N/A' %> | Update: <%=
+                                                        l.updated_by_name || l.created_by_name || '-' %></small>
+                                        </td>
+                                        <td>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" class="form-control bg-white text-primary fw-bold"
+                                                    value="<%= l.full_url %>" readonly id="link-<%= l.id %>">
+                                                <button class="btn btn-primary" onclick="copyLink('link-<%= l.id %>')"
+                                                    title="Copy Link"><i class="fas fa-copy"></i></button>
+                                            </div>
+                                            <div class="mt-1"><span class="badge bg-light text-secondary border">Auto
+                                                    ID: <%= l.param_value %></span></div>
+                                        </td>
+                                        <td>
+                                            <small>
+                                                <% if(l.rules && l.rules.length) { %>
+                                                    Check: <b>
+                                                        <%= l.rules.length %>
+                                                    </b> tham số<br>
+                                                    Quốc gia: <%= (l.filters && l.filters.countries &&
+                                                        l.filters.countries.length) ? l.filters.countries.join(',')
+                                                        : 'All' %>
+                                                        <% } else { %>
+                                                            Mặc định
+                                                            <% } %>
+                                            </small>
+                                        </td>
+                                        <td>
+                                            <a href="/campaigns/toggle/<%= l.id %>"
+                                                class="btn btn-sm <%= l.is_active ? 'btn-success' : 'btn-danger' %>"
+                                                onclick="return confirm('Đổi trạng thái ON/OFF cho link này?')">
+                                                <%= l.is_active ? 'ON' : 'OFF' %>
+                                            </a>
+                                            <% if(l.suggestion) { %>
+                                                <div class="suggestion-box text-warning">Nhiều traffic an toàn 24h: <%=
+                                                        l.safe_24h || 0 %>. Nên bật link.</div>
+                                                <% } %>
+                                        </td>
+                                        <td>
+                                            <div><b>
+                                                    <%= l.stats_redirects %>
+                                                </b> pass</div>
+                                            <div class="text-muted small">Fail 24h: <%= l.safe_24h || 0 %>
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="/campaigns/edit/<%= l.id %>"
+                                                class="btn btn-sm btn-outline-primary">Chi tiết</a>
+                                            <a href="/campaigns/<%= l.id %>/report"
+                                                class="btn btn-sm btn-info text-white"><i
+                                                    class="fas fa-chart-bar"></i></a>
+                                            <% if (user.role_name==='super_admin' ) { %>
+                                                <a href="/campaigns/delete/<%= l.id %>" class="btn btn-sm btn-danger"
+                                                    onclick="return confirm('Cảnh báo: Xóa link sẽ xóa thống kê/log liên quan. Tiếp tục?')"><i
+                                                        class="fas fa-trash"></i></a>
+                                                <% } %>
+                                        </td>
+                                    </tr>
+                                    <% }) %>
+                    </tbody>
+                </table>
             </div>
         </div>
 
-        <div class="card shadow-sm">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Tên Camp</th>
-                        <th>Link Chạy Ads</th>
-                        <th>Rules</th>
-                        <th>Trạng thái</th>
-                        <th>Thống kê</th>
-                        <th class="text-end">Hành động</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% if (links.length===0) { %>
-                        <tr><td colspan="6" class="text-center py-4">Chưa có link nào.</td></tr>
-                    <% } %>
-                    <% links.forEach(l=> { %>
-                        <tr>
-                            <td>
-                                <b><%= l.name %></b><br>
-                                <small class="text-muted d-block text-truncate" style="max-width: 200px;"><%= l.target_url %></small>
-                                <small class="text-muted">By <%= l.created_by_name || 'N/A' %> | Update: <%= l.updated_by_name || l.created_by_name || '-' %></small>
-                            </td>
-                            <td>
-                                <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control bg-white text-primary fw-bold" value="<%= l.full_url %>" readonly id="link-<%= l.id %>">
-                                    <button class="btn btn-primary" onclick="copyLink('link-<%= l.id %>')" title="Copy Link"><i class="fas fa-copy"></i></button>
-                                </div>
-                                <div class="mt-1"><span class="badge bg-light text-secondary border">Auto ID: <%= l.param_value %></span></div>
-                            </td>
-                            <td>
-                                <small>
-                                    <% if(l.rules && l.rules.length) { %>
-                                        Check: <b><%= l.rules.length %></b> tham số<br>
-                                        Quốc gia: <%= (l.filters && l.filters.countries && l.filters.countries.length) ? l.filters.countries.join(',') : 'All' %>
-                                    <% } else { %>
-                                        Mặc định
-                                    <% } %>
-                                </small>
-                            </td>
-                            <td>
-                                <a href="/campaigns/toggle/<%= l.id %>" class="btn btn-sm <%= l.is_active ? 'btn-success' : 'btn-danger' %>" onclick="return confirm('Đổi trạng thái ON/OFF cho link này?')"><%= l.is_active ? 'ON' : 'OFF' %></a>
-                                <% if(l.suggestion) { %>
-                                    <div class="suggestion-box text-warning">Nhiều traffic an toàn 24h: <%= l.safe_24h || 0 %>. Nên bật link.</div>
-                                <% } %>
-                            </td>
-                            <td>
-                                <div><b><%= l.stats_redirects %></b> pass</div>
-                                <div class="text-muted small">Fail 24h: <%= l.safe_24h || 0 %></div>
-                            </td>
-                            <td class="text-end">
-                                <a href="/campaigns/edit/<%= l.id %>" class="btn btn-sm btn-outline-primary">Chi tiết</a>
-                                <a href="/campaigns/<%= l.id %>/report" class="btn btn-sm btn-info text-white"><i class="fas fa-chart-bar"></i></a>
-                                <% if (user.role_name==='super_admin' ) { %>
-                                <a href="/campaigns/delete/<%= l.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Cảnh báo: Xóa link sẽ xóa thống kê/log liên quan. Tiếp tục?')"><i class="fas fa-trash"></i></a>
-                                <% } %>
-                            </td>
-                        </tr>
-                    <% }) %>
-                </tbody>
-            </table>
+        <div class="modal fade" id="addLinkModal" data-bs-backdrop="static">
+            <div class="modal-dialog modal-lg">
+                <form class="modal-content" action="/campaigns/create" method="POST" id="createForm">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Tạo Link Ads Mới</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="domain_id" value="<%= domain.id %>">
+                        <input type="hidden" name="copy_from_id" id="copy_from_id">
+
+                        <div class="alert alert-info py-2 small"><i class="fas fa-bolt"></i> Link sẽ được sinh tự động
+                            (VD: ?q=AbC123) sau khi lưu.</div>
+
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label class="fw-bold">Tên Chiến Dịch</label>
+                                <input type="text" name="name" class="form-control" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="fw-bold">Link Đích (Target)</label>
+                                <input type="url" name="target_url" class="form-control" required>
+                            </div>
+                        </div>
+
+                        <hr>
+                        <div class="mb-3">
+                            <label class="fw-bold">Quốc gia cho phép</label>
+                            <select class="form-control select2-countries" name="allowed_countries[]"
+                                multiple="multiple" id="countrySelect"></select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="fw-bold">Sao chép cấu hình từ link sẵn có</label>
+                            <select class="form-control" id="copyFromSelect" onchange="onCopySelect()">
+                                <option value="">-- Không sao chép --</option>
+                                <% links.forEach(l=> { %>
+                                    <option value="<%= l.id %>">
+                                        <%= l.name %>
+                                    </option>
+                                    <% }) %>
+                            </select>
+                            <div class="border rounded mt-2 p-2 bg-light" id="configPreview"
+                                style="min-height:60px;font-size:0.9rem;">
+                                Chọn link để xem cấu hình.
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="fw-bold">Luật kiểm tra</label>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button"
+                                    data-bs-toggle="dropdown">Mẫu Nhanh</button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" onclick="addTemplate('fb')">Facebook Ads</a>
+                                    </li>
+                                    <li><a class="dropdown-item" href="#" onclick="addTemplate('gg')">Google Ads</a>
+                                    </li>
+                                    <li><a class="dropdown-item" href="#" onclick="addTemplate('tiktok')">TikTok Ads</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div id="rules-wrapper" class="border rounded p-2 mb-2 bg-light"></div>
+                        <button type="button" class="btn btn-sm btn-secondary w-100" onclick="addNewRule()">+ Thêm điều
+                            kiện</button>
+                        <input type="hidden" name="rules_json" id="rules_json">
+                    </div>
+                    <div class="modal-footer"><button class="btn btn-primary w-100">Tạo Link Ngay</button></div>
+                </form>
+            </div>
         </div>
-    </div>
 
-    <div class="modal fade" id="addLinkModal" data-bs-backdrop="static">
-        <div class="modal-dialog modal-lg">
-            <form class="modal-content" action="/campaigns/create" method="POST" id="createForm">
-                <div class="modal-header">
-                    <h5 class="modal-title">Tạo Link Ads Mới</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" name="domain_id" value="<%= domain.id %>">
-                    <input type="hidden" name="copy_from_id" id="copy_from_id">
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-                    <div class="alert alert-info py-2 small"><i class="fas fa-bolt"></i> Link sẽ được sinh tự động (VD: ?q=AbC123) sau khi lưu.</div>
+        <script>
+            const ALL_COUNTRIES = {
+                "AF": "Afghanistan",
+                "AX": "Åland Islands",
+                "AL": "Albania",
+                "DZ": "Algeria",
+                "AS": "American Samoa",
+                "AD": "Andorra",
+                "AO": "Angola",
+                "AI": "Anguilla",
+                "AQ": "Antarctica",
+                "AG": "Antigua and Barbuda",
+                "AR": "Argentina",
+                "AM": "Armenia",
+                "AW": "Aruba",
+                "AU": "Australia",
+                "AT": "Austria",
+                "AZ": "Azerbaijan",
+                "BS": "Bahamas",
+                "BH": "Bahrain",
+                "BD": "Bangladesh",
+                "BB": "Barbados",
+                "BY": "Belarus",
+                "BE": "Belgium",
+                "BZ": "Belize",
+                "BJ": "Benin",
+                "BM": "Bermuda",
+                "BT": "Bhutan",
+                "BO": "Bolivia",
+                "BQ": "Bonaire, Sint Eustatius and Saba",
+                "BA": "Bosnia and Herzegovina",
+                "BW": "Botswana",
+                "BV": "Bouvet Island",
+                "BR": "Brazil",
+                "IO": "British Indian Ocean Territory",
+                "BN": "Brunei Darussalam",
+                "BG": "Bulgaria",
+                "BF": "Burkina Faso",
+                "BI": "Burundi",
+                "KH": "Cambodia",
+                "CM": "Cameroon",
+                "CA": "Canada",
+                "CV": "Cabo Verde",
+                "KY": "Cayman Islands",
+                "CF": "Central African Republic",
+                "TD": "Chad",
+                "CL": "Chile",
+                "CN": "China",
+                "CX": "Christmas Island",
+                "CC": "Cocos (Keeling) Islands",
+                "CO": "Colombia",
+                "KM": "Comoros",
+                "CG": "Congo",
+                "CD": "Congo (DRC)",
+                "CK": "Cook Islands",
+                "CR": "Costa Rica",
+                "CI": "Côte d'Ivoire",
+                "HR": "Croatia",
+                "CU": "Cuba",
+                "CW": "Curaçao",
+                "CY": "Cyprus",
+                "CZ": "Czechia",
+                "DK": "Denmark",
+                "DJ": "Djibouti",
+                "DM": "Dominica",
+                "DO": "Dominican Republic",
+                "EC": "Ecuador",
+                "EG": "Egypt",
+                "SV": "El Salvador",
+                "GQ": "Equatorial Guinea",
+                "ER": "Eritrea",
+                "EE": "Estonia",
+                "SZ": "Eswatini",
+                "ET": "Ethiopia",
+                "FK": "Falkland Islands",
+                "FO": "Faroe Islands",
+                "FJ": "Fiji",
+                "FI": "Finland",
+                "FR": "France",
+                "GF": "French Guiana",
+                "PF": "French Polynesia",
+                "TF": "French Southern Territories",
+                "GA": "Gabon",
+                "GM": "Gambia",
+                "GE": "Georgia",
+                "DE": "Germany",
+                "GH": "Ghana",
+                "GI": "Gibraltar",
+                "GR": "Greece",
+                "GL": "Greenland",
+                "GD": "Grenada",
+                "GP": "Guadeloupe",
+                "GU": "Guam",
+                "GT": "Guatemala",
+                "GG": "Guernsey",
+                "GN": "Guinea",
+                "GW": "Guinea-Bissau",
+                "GY": "Guyana",
+                "HT": "Haiti",
+                "HM": "Heard Island and McDonald Islands",
+                "VA": "Holy See",
+                "HN": "Honduras",
+                "HK": "Hong Kong",
+                "HU": "Hungary",
+                "IS": "Iceland",
+                "IN": "India",
+                "ID": "Indonesia",
+                "IR": "Iran",
+                "IQ": "Iraq",
+                "IE": "Ireland",
+                "IM": "Isle of Man",
+                "IL": "Israel",
+                "IT": "Italy",
+                "JM": "Jamaica",
+                "JP": "Japan",
+                "JE": "Jersey",
+                "JO": "Jordan",
+                "KZ": "Kazakhstan",
+                "KE": "Kenya",
+                "KI": "Kiribati",
+                "KP": "North Korea",
+                "KR": "South Korea",
+                "KW": "Kuwait",
+                "KG": "Kyrgyzstan",
+                "LA": "Lao People's Democratic Republic",
+                "LV": "Latvia",
+                "LB": "Lebanon",
+                "LS": "Lesotho",
+                "LR": "Liberia",
+                "LY": "Libya",
+                "LI": "Liechtenstein",
+                "LT": "Lithuania",
+                "LU": "Luxembourg",
+                "MO": "Macao",
+                "MG": "Madagascar",
+                "MW": "Malawi",
+                "MY": "Malaysia",
+                "MV": "Maldives",
+                "ML": "Mali",
+                "MT": "Malta",
+                "MH": "Marshall Islands",
+                "MQ": "Martinique",
+                "MR": "Mauritania",
+                "MU": "Mauritius",
+                "YT": "Mayotte",
+                "MX": "Mexico",
+                "FM": "Micronesia",
+                "MD": "Moldova",
+                "MC": "Monaco",
+                "MN": "Mongolia",
+                "ME": "Montenegro",
+                "MS": "Montserrat",
+                "MA": "Morocco",
+                "MZ": "Mozambique",
+                "MM": "Myanmar",
+                "NA": "Namibia",
+                "NR": "Nauru",
+                "NP": "Nepal",
+                "NL": "Netherlands",
+                "NC": "New Caledonia",
+                "NZ": "New Zealand",
+                "NI": "Nicaragua",
+                "NE": "Niger",
+                "NG": "Nigeria",
+                "NU": "Niue",
+                "NF": "Norfolk Island",
+                "MK": "North Macedonia",
+                "MP": "Northern Mariana Islands",
+                "NO": "Norway",
+                "OM": "Oman",
+                "PK": "Pakistan",
+                "PW": "Palau",
+                "PS": "Palestine",
+                "PA": "Panama",
+                "PG": "Papua New Guinea",
+                "PY": "Paraguay",
+                "PE": "Peru",
+                "PH": "Philippines",
+                "PN": "Pitcairn",
+                "PL": "Poland",
+                "PT": "Portugal",
+                "PR": "Puerto Rico",
+                "QA": "Qatar",
+                "RE": "Réunion",
+                "RO": "Romania",
+                "RU": "Russia",
+                "RW": "Rwanda",
+                "BL": "Saint Barthélemy",
+                "SH": "Saint Helena",
+                "KN": "Saint Kitts and Nevis",
+                "LC": "Saint Lucia",
+                "MF": "Saint Martin (French)",
+                "PM": "Saint Pierre and Miquelon",
+                "VC": "Saint Vincent and the Grenadines",
+                "WS": "Samoa",
+                "SM": "San Marino",
+                "ST": "Sao Tome and Principe",
+                "SA": "Saudi Arabia",
+                "SN": "Senegal",
+                "RS": "Serbia",
+                "SC": "Seychelles",
+                "SL": "Sierra Leone",
+                "SG": "Singapore",
+                "SX": "Sint Maarten (Dutch)",
+                "SK": "Slovakia",
+                "SI": "Slovenia",
+                "SB": "Solomon Islands",
+                "SO": "Somalia",
+                "ZA": "South Africa",
+                "GS": "South Georgia and the South Sandwich Islands",
+                "SS": "South Sudan",
+                "ES": "Spain",
+                "LK": "Sri Lanka",
+                "SD": "Sudan",
+                "SR": "Suriname",
+                "SJ": "Svalbard and Jan Mayen",
+                "SE": "Sweden",
+                "CH": "Switzerland",
+                "SY": "Syria",
+                "TW": "Taiwan",
+                "TJ": "Tajikistan",
+                "TZ": "Tanzania",
+                "TH": "Thailand",
+                "TL": "Timor-Leste",
+                "TG": "Togo",
+                "TK": "Tokelau",
+                "TO": "Tonga",
+                "TT": "Trinidad and Tobago",
+                "TN": "Tunisia",
+                "TR": "Turkey",
+                "TM": "Turkmenistan",
+                "TC": "Turks and Caicos Islands",
+                "TV": "Tuvalu",
+                "UG": "Uganda",
+                "UA": "Ukraine",
+                "AE": "United Arab Emirates",
+                "GB": "United Kingdom",
+                "US": "United States",
+                "UM": "United States Minor Outlying Islands",
+                "UY": "Uruguay",
+                "UZ": "Uzbekistan",
+                "VU": "Vanuatu",
+                "VE": "Venezuela",
+                "VN": "Vietnam",
+                "VG": "Virgin Islands (British)",
+                "VI": "Virgin Islands (U.S.)",
+                "WF": "Wallis and Futuna",
+                "EH": "Western Sahara",
+                "YE": "Yemen",
+                "ZM": "Zambia",
+                "ZW": "Zimbabwe"
+            };
 
-                    <div class="row mb-3">
-                        <div class="col-6">
-                            <label class="fw-bold">Tên Chiến Dịch</label>
-                            <input type="text" name="name" class="form-control" required>
-                        </div>
-                        <div class="col-6">
-                            <label class="fw-bold">Link Đích (Target)</label>
-                            <input type="url" name="target_url" class="form-control" required>
-                        </div>
-                    </div>
 
-                    <hr>
-                    <div class="mb-3">
-                        <label class="fw-bold">Quốc gia cho phép</label>
-                        <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple" id="countrySelect"></select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="fw-bold">Sao chép cấu hình từ link sẵn có</label>
-                        <select class="form-control" id="copyFromSelect" onchange="onCopySelect()">
-                            <option value="">-- Không sao chép --</option>
-                            <% links.forEach(l => { %>
-                                <option value="<%= l.id %>"><%= l.name %></option>
-                            <% }) %>
-                        </select>
-                        <div class="border rounded mt-2 p-2 bg-light" id="configPreview" style="min-height:60px;font-size:0.9rem;">
-                            Chọn link để xem cấu hình.
-                        </div>
-                    </div>
+            $(document).ready(function () {
+                const select = $('#countrySelect');
+                for (let [code, name] of Object.entries(ALL_COUNTRIES)) {
+                    select.append(new Option(`${name} (${code})`, code));
+                }
+                select.select2({ placeholder: "Chọn quốc gia...", dropdownParent: $('#addLinkModal') });
+                addNewRule('utm_source', 'exists', '');
+            });
 
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <label class="fw-bold">Luật kiểm tra</label>
-                        <div class="dropdown">
-                            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">Mẫu Nhanh</button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="#" onclick="addTemplate('fb')">Facebook Ads</a></li>
-                                <li><a class="dropdown-item" href="#" onclick="addTemplate('gg')">Google Ads</a></li>
-                                <li><a class="dropdown-item" href="#" onclick="addTemplate('tiktok')">TikTok Ads</a></li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div id="rules-wrapper" class="border rounded p-2 mb-2 bg-light"></div>
-                    <button type="button" class="btn btn-sm btn-secondary w-100" onclick="addNewRule()">+ Thêm điều kiện</button>
-                    <input type="hidden" name="rules_json" id="rules_json">
-                </div>
-                <div class="modal-footer"><button class="btn btn-primary w-100">Tạo Link Ngay</button></div>
-            </form>
-        </div>
-    </div>
-
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
-    <script>
-       const ALL_COUNTRIES = {
-        "VN": "Vietnam", "US": "United States", "GB": "United Kingdom", "JP": "Japan", "KR": "South Korea",
-        "CN": "China", "TW": "Taiwan", "TH": "Thailand", "ID": "Indonesia", "PH": "Philippines",
-        "SG": "Singapore", "MY": "Malaysia", "IN": "India", "AU": "Australia", "CA": "Canada",
-        "DE": "Germany", "FR": "France", "RU": "Russia", "BR": "Brazil", "UA": "Ukraine",
-        "HK": "Hong Kong", "AE": "United Arab Emirates", "SA": "Saudi Arabia", "QA": "Qatar",
-        "KW": "Kuwait", "OM": "Oman", "BH": "Bahrain", "PK": "Pakistan", "BD": "Bangladesh",
-        "ES": "Spain", "IT": "Italy", "SE": "Sweden", "NO": "Norway", "DK": "Denmark",
-        "NL": "Netherlands", "BE": "Belgium", "CH": "Switzerland", "PL": "Poland",
-        "MX": "Mexico", "AR": "Argentina", "CL": "Chile", "NG": "Nigeria", "ZA": "South Africa"
-    };
-
-        $(document).ready(function () {
-            const select = $('#countrySelect');
-            for (let [code, name] of Object.entries(ALL_COUNTRIES)) {
-                select.append(new Option(`${name} (${code})`, code));
-            }
-            select.select2({ placeholder: "Chọn quốc gia...", dropdownParent: $('#addLinkModal') });
-            addNewRule('utm_source', 'exists', '');
-        });
-
-        function addNewRule(key = '', op = 'exists', val = '') {
-            let html = `
+            function addNewRule(key = '', op = 'exists', val = '') {
+                let html = `
                 <div class="row g-2 mb-2 rule-row align-items-center">
                     <div class="col-4"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key (vd: fbclid)" value="${key}"></div>
                     <div class="col-3">
@@ -210,74 +509,75 @@
                     <div class="col-4"><input type="text" class="form-control form-control-sm rule-val" value="${val}" ${op === 'exists' ? 'disabled' : ''} placeholder="Giá trị"></div>
                     <div class="col-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove()">x</button></div>
                 </div>`;
-            $('#rules-wrapper').append(html);
-        }
-
-        function toggleVal(sel) {
-            const inp = sel.closest('.rule-row').querySelector('.rule-val');
-            inp.disabled = (sel.value === 'exists');
-            if (inp.disabled) inp.value = '';
-        }
-
-        function addTemplate(t) {
-            $('#rules-wrapper').empty();
-            if (t === 'fb') {
-                addNewRule('utm_source', 'equals', 'facebook');
-                addNewRule('fbclid', 'exists');
-                addNewRule('campaign_id', 'exists');
-                addNewRule('adset_id', 'exists');
-                addNewRule('ad_id', 'exists');
-                addNewRule('placement', 'exists');
+                $('#rules-wrapper').append(html);
             }
-            else if (t === 'gg') {
-                addNewRule('utm_source', 'equals', 'google');
-                addNewRule('gclid', 'exists');
-                addNewRule('campaignid', 'exists');
-                addNewRule('adgroupid', 'exists');
-                addNewRule('keyword', 'exists');
+
+            function toggleVal(sel) {
+                const inp = sel.closest('.rule-row').querySelector('.rule-val');
+                inp.disabled = (sel.value === 'exists');
+                if (inp.disabled) inp.value = '';
             }
-            else if (t === 'tiktok') {
-                addNewRule('utm_source', 'equals', 'tiktok');
-                addNewRule('ttclid', 'exists');
-            }
-        }
 
-        function checkDNS(id) {
-            fetch(`/domains/${id}/verify`).then(r => r.json()).then(d => { alert(d.msg); location.reload(); });
-        }
-
-        function copyLink(id) {
-            const el = document.getElementById(id);
-            el.select();
-            document.execCommand("copy");
-            alert("Đã copy");
-        }
-
-        function onCopySelect() {
-            const id = document.getElementById('copyFromSelect').value;
-            document.getElementById('copy_from_id').value = id;
-            if (!id) { document.getElementById('configPreview').innerText = 'Chọn link để xem cấu hình.'; return; }
-            fetch(`/api/campaigns/${id}/config`).then(r => r.json()).then(cfg => {
-                const rules = (cfg.rules || []).map(r => `${r.key} (${r.operator}${r.value ? ':'+r.value : ''})`).join(', ');
-                const countries = (cfg.filters && cfg.filters.countries && cfg.filters.countries.length) ? cfg.filters.countries.join(', ') : 'All';
-                document.getElementById('configPreview').innerText = `Rules: ${rules || 'Mặc định'} | Countries: ${countries}`;
+            function addTemplate(t) {
                 $('#rules-wrapper').empty();
-                (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value));
-                $('#countrySelect').val(cfg.filters?.countries || []).trigger('change');
-            }).catch(() => document.getElementById('configPreview').innerText = 'Không tải được cấu hình');
-        }
+                if (t === 'fb') {
+                    addNewRule('utm_source', 'equals', 'facebook');
+                    addNewRule('fbclid', 'exists');
+                    addNewRule('campaign_id', 'exists');
+                    addNewRule('adset_id', 'exists');
+                    addNewRule('ad_id', 'exists');
+                    addNewRule('placement', 'exists');
+                }
+                else if (t === 'gg') {
+                    addNewRule('utm_source', 'equals', 'google');
+                    addNewRule('gclid', 'exists');
+                    addNewRule('campaignid', 'exists');
+                    addNewRule('adgroupid', 'exists');
+                    addNewRule('keyword', 'exists');
+                }
+                else if (t === 'tiktok') {
+                    addNewRule('utm_source', 'equals', 'tiktok');
+                    addNewRule('ttclid', 'exists');
+                }
+            }
 
-        $('#createForm').on('submit', function () {
-            let rules = [];
-            $('.rule-row').each(function () {
-                let k = $(this).find('.rule-key').val();
-                let o = $(this).find('.rule-op').val();
-                let v = $(this).find('.rule-val').val();
-                if (k) rules.push({ key: k, operator: o, value: v });
+            function checkDNS(id) {
+                fetch(`/domains/${id}/verify`).then(r => r.json()).then(d => { alert(d.msg); location.reload(); });
+            }
+
+            function copyLink(id) {
+                const el = document.getElementById(id);
+                el.select();
+                document.execCommand("copy");
+                alert("Đã copy");
+            }
+
+            function onCopySelect() {
+                const id = document.getElementById('copyFromSelect').value;
+                document.getElementById('copy_from_id').value = id;
+                if (!id) { document.getElementById('configPreview').innerText = 'Chọn link để xem cấu hình.'; return; }
+                fetch(`/api/campaigns/${id}/config`).then(r => r.json()).then(cfg => {
+                    const rules = (cfg.rules || []).map(r => `${r.key} (${r.operator}${r.value ? ':' + r.value : ''})`).join(', ');
+                    const countries = (cfg.filters && cfg.filters.countries && cfg.filters.countries.length) ? cfg.filters.countries.join(', ') : 'All';
+                    document.getElementById('configPreview').innerText = `Rules: ${rules || 'Mặc định'} | Countries: ${countries}`;
+                    $('#rules-wrapper').empty();
+                    (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value));
+                    $('#countrySelect').val(cfg.filters?.countries || []).trigger('change');
+                }).catch(() => document.getElementById('configPreview').innerText = 'Không tải được cấu hình');
+            }
+
+            $('#createForm').on('submit', function () {
+                let rules = [];
+                $('.rule-row').each(function () {
+                    let k = $(this).find('.rule-key').val();
+                    let o = $(this).find('.rule-op').val();
+                    let v = $(this).find('.rule-val').val();
+                    if (k) rules.push({ key: k, operator: o, value: v });
+                });
+                $('#rules_json').val(JSON.stringify(rules));
             });
-            $('#rules_json').val(JSON.stringify(rules));
-        });
-    </script>
-    <%- include('../partials/footer') %>
+        </script>
+        <%- include('../partials/footer') %>
 </body>
+
 </html>

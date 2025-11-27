@@ -89,9 +89,13 @@
                                 <% } %>
                             </td>
                             <td class="text-truncate" style="max-width: 220px;" title="<%= meta.url || meta.ref || log.referer %>">
+                                <% if (meta.ref) { %><div class="text-break"><%= meta.ref %></div><% } %>
+                                <% if (!meta.ref && log.referer) { %><div class="text-break"><%= log.referer %></div><% } %>
+                                <% if (meta.url) { %><div class="text-muted small text-break">URL: <%= meta.url %></div><% } %>
+                                <% if (!meta.ref && !meta.url && !log.referer) { %><div>-</div><% } %>
                                 <% if (meta.url || meta.ref) { %>
                                     <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-bs-toggle="modal" data-bs-target="#urlModal<%= log.id %>">
-                                        <i class="fa-regular fa-eye me-1"></i><%= meta.ref || meta.url || 'Xem URL' %>
+                                        <i class="fa-regular fa-eye me-1"></i>Xem chi tiết
                                     </button>
                                     <div class="modal fade" id="urlModal<%= log.id %>" tabindex="-1" aria-hidden="true">
                                         <div class="modal-dialog modal-dialog-centered">
@@ -108,8 +112,6 @@
                                             </div>
                                         </div>
                                     </div>
-                                <% } else { %>
-                                    <div><%= log.referer || '-' %></div>
                                 <% } %>
                             </td>
                         </tr>

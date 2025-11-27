@@ -87,7 +87,7 @@
                                 </small>
                             </td>
                             <td>
-                                <a href="/campaigns/toggle/<%= l.id %>" class="btn btn-sm <%= l.is_active ? 'btn-success' : 'btn-danger' %>"><%= l.is_active ? 'ON' : 'OFF' %></a>
+                                <a href="/campaigns/toggle/<%= l.id %>" class="btn btn-sm <%= l.is_active ? 'btn-success' : 'btn-danger' %>" onclick="return confirm('Đổi trạng thái ON/OFF cho link này?')"><%= l.is_active ? 'ON' : 'OFF' %></a>
                                 <% if(l.suggestion) { %>
                                     <div class="suggestion-box text-warning">Nhiều traffic an toàn 24h: <%= l.safe_24h || 0 %>. Nên bật link.</div>
                                 <% } %>
@@ -100,7 +100,7 @@
                                 <a href="/campaigns/edit/<%= l.id %>" class="btn btn-sm btn-outline-primary">Chi tiết</a>
                                 <a href="/campaigns/<%= l.id %>/report" class="btn btn-sm btn-info text-white"><i class="fas fa-chart-bar"></i></a>
                                 <% if (user.role_name==='super_admin' ) { %>
-                                    <a href="/campaigns/delete/<%= l.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Xóa?')"><i class="fas fa-trash"></i></a>
+                                <a href="/campaigns/delete/<%= l.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Cảnh báo: Xóa link sẽ xóa thống kê/log liên quan. Tiếp tục?')"><i class="fas fa-trash"></i></a>
                                 <% } %>
                             </td>
                         </tr>
@@ -180,7 +180,12 @@
         "VN": "Vietnam", "US": "United States", "GB": "United Kingdom", "JP": "Japan", "KR": "South Korea",
         "CN": "China", "TW": "Taiwan", "TH": "Thailand", "ID": "Indonesia", "PH": "Philippines",
         "SG": "Singapore", "MY": "Malaysia", "IN": "India", "AU": "Australia", "CA": "Canada",
-        "DE": "Germany", "FR": "France", "RU": "Russia", "BR": "Brazil", "UA": "Ukraine"
+        "DE": "Germany", "FR": "France", "RU": "Russia", "BR": "Brazil", "UA": "Ukraine",
+        "HK": "Hong Kong", "AE": "United Arab Emirates", "SA": "Saudi Arabia", "QA": "Qatar",
+        "KW": "Kuwait", "OM": "Oman", "BH": "Bahrain", "PK": "Pakistan", "BD": "Bangladesh",
+        "ES": "Spain", "IT": "Italy", "SE": "Sweden", "NO": "Norway", "DK": "Denmark",
+        "NL": "Netherlands", "BE": "Belgium", "CH": "Switzerland", "PL": "Poland",
+        "MX": "Mexico", "AR": "Argentina", "CL": "Chile", "NG": "Nigeria", "ZA": "South Africa"
     };
 
         $(document).ready(function () {

@@ -15,37 +15,57 @@
             <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Load 1m</div><h5 class="fw-bold" id="load1"><%= load1.toFixed(2) %></h5></div></div></div>
             <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">DB</div><h5 class="fw-bold <%= dbStatus==='ok' ? 'text-success' : 'text-danger' %>" id="dbStatus"><%= dbStatus %></h5></div></div></div>
         </div>
+
         <div class="row g-3 mb-3">
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white fw-bold">Memory</div>
+                    <div class="card-header bg-white fw-bold">Memory & Process</div>
                     <div class="card-body">
-                        <p>Tá»•ng: <span id="memTotal"><%= Math.round(memTotal/1024/1024) %></span> MB</p>
-                        <p>Äang dÃ¹ng: <span id="memUsed"><%= Math.round(memUsed/1024/1024) %></span> MB</p>
-                        <p>CÃ²n trá»‘ng: <span id="memFree"><%= Math.round(memFree/1024/1024) %></span> MB</p>
+                        <p>Tong: <span id="memTotal"><%= Math.round(memTotal/1024/1024) %></span> MB</p>
+                        <p>Dang dung: <span id="memUsed"><%= Math.round(memUsed/1024/1024) %></span> MB</p>
+                        <p>Con trong: <span id="memFree"><%= Math.round(memFree/1024/1024) %></span> MB</p>
+                        <p class="mt-3">Process RSS: <span id="procRss"><%= Math.round(procMem.rss/1024/1024) %></span> MB</p>
                     </div>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white fw-bold">Process / DB</div>
+                    <div class="card-header bg-white fw-bold">Server</div>
                     <div class="card-body">
-                        <p>Platform: <%= platform %> <%= release %></p>
-                        <p>CPUs: <%= cpus %></p>
-                        <p>Process RSS: <span id="procRss"><%= Math.round(procMem.rss/1024/1024) %></span> MB</p>
-                        <p>DB Version: <span id="dbVersion"><%= (dbInfo && dbInfo.version) || '-' %></span></p>
-                        <p>Káº¿t ná»‘i: <span id="dbConn"><%= dbInfo?.connections || 0 %></span> (Active: <span id="dbActive"><%= dbInfo?.active_connections || 0 %></span>)</p>
-                        <p>DB Size: <span id="dbSize"><%= dbInfo?.db_size ? Math.round(dbInfo.db_size/1024/1024) : 0 %></span> MB</p>
+                        <p>Platform: <span id="platform"><%= platform %> <%= release %></span></p>
+                        <p>CPU: <span id="cpuModel"><%= cpuModel %></span> (<span id="cpuCores"><%= cpuCores %></span> cores)</p>
+                        <p>Timezone: <span id="tz"><%= timezone %></span></p>
+                        <p>Node: <span id="nodeVer"><%= nodeVersion %></span></p>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="text-muted small">Tá»± Ä‘á»™ng cáº­p nháº­t má»—i 10s.</div>
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white fw-bold">Database</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p>DB Version: <span id="dbVersion"><%= (dbInfo && dbInfo.version) || '-' %></span></p>
+                        <p>Ket noi: <span id="dbConn"><%= dbInfo?.connections || 0 %></span> (Active: <span id="dbActive"><%= dbInfo?.active_connections || 0 %></span>, Idle: <span id="dbIdle"><%= dbInfo?.idle_connections || 0 %></span>)</p>
+                        <p>DB Size: <span id="dbSize"><%= dbInfo?.db_size ? Math.round(dbInfo.db_size/1024/1024) : 0 %></span> MB</p>
+                        <p>Cache hit: <span id="dbCache"><%= dbInfo?.cache_hit || 'N/A' %></span>%</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p>max_connections: <span id="dbMaxConn"><%= dbInfo?.settings?.max_connections || '-' %></span></p>
+                        <p>shared_buffers: <span id="dbShared"><%= dbInfo?.settings?.shared_buffers || '-' %></span></p>
+                        <p>work_mem: <span id="dbWork"><%= dbInfo?.settings?.work_mem || '-' %></span></p>
+                        <p>maintenance_work_mem: <span id="dbMaint"><%= dbInfo?.settings?.maintenance_work_mem || '-' %></span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-muted small">Tu dong cap nhat moi 10s.</div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <script>
         const fmtMB = (val) => Math.round(val / 1024 / 1024);
-        const fmtGB = (val) => (val / 1024 / 1024 / 1024).toFixed(2);
         const update = (data) => {
             document.getElementById('uptimeOs').innerText = Math.round(data.uptime/3600) + ' h';
             document.getElementById('uptimeApp').innerText = Math.round(data.procUptime/3600) + ' h';
@@ -60,7 +80,18 @@
             document.getElementById('dbVersion').innerText = data.dbInfo?.version || '-';
             document.getElementById('dbConn').innerText = data.dbInfo?.connections || 0;
             document.getElementById('dbActive').innerText = data.dbInfo?.active_connections || 0;
+            document.getElementById('dbIdle').innerText = data.dbInfo?.idle_connections || 0;
             document.getElementById('dbSize').innerText = data.dbInfo?.db_size ? fmtMB(data.dbInfo.db_size) : 0;
+            document.getElementById('dbCache').innerText = data.dbInfo?.cache_hit ?? 'N/A';
+            document.getElementById('dbMaxConn').innerText = data.dbInfo?.settings?.max_connections || '-';
+            document.getElementById('dbShared').innerText = data.dbInfo?.settings?.shared_buffers || '-';
+            document.getElementById('dbWork').innerText = data.dbInfo?.settings?.work_mem || '-';
+            document.getElementById('dbMaint').innerText = data.dbInfo?.settings?.maintenance_work_mem || '-';
+            document.getElementById('platform').innerText = (data.platform || '') + ' ' + (data.release || '');
+            document.getElementById('cpuModel').innerText = data.cpuModel || '-';
+            document.getElementById('cpuCores').innerText = data.cpuCores || '-';
+            document.getElementById('tz').innerText = data.timezone || '-';
+            document.getElementById('nodeVer').innerText = data.nodeVersion || '-';
         };
         async function refreshSystem() {
             try {
@@ -78,5 +109,3 @@
     <%- include('../partials/footer') %>
 </body>
 </html>
-
-

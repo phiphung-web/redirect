@@ -41,20 +41,42 @@ const buildSystemStatus = async () => {
     version: null,
     connections: null,
     active_connections: null,
+    idle_connections: null,
     db_size: null,
+    cache_hit: null,
+    settings: {},
   };
   try {
-    const r = await db.query(
+    const base = await db.query(
       `SELECT version(),
               (SELECT COUNT(*) FROM pg_stat_activity) AS connections,
               (SELECT COUNT(*) FROM pg_stat_activity WHERE state='active') AS active_connections,
+              (SELECT COUNT(*) FROM pg_stat_activity WHERE state='idle') AS idle_connections,
               pg_database_size(current_database()) AS db_size`
     );
+    const settings = await db.query(
+      `SELECT
+          current_setting('max_connections')::int AS max_connections,
+          current_setting('shared_buffers') AS shared_buffers,
+          current_setting('work_mem') AS work_mem,
+          current_setting('maintenance_work_mem') AS maintenance_work_mem`
+    );
+    const cache = await db.query(
+      `SELECT blks_hit, blks_read,
+              CASE WHEN (blks_hit + blks_read) > 0
+                   THEN ROUND(blks_hit * 100.0 / (blks_hit + blks_read), 2)
+                   ELSE NULL END AS cache_hit
+       FROM pg_stat_database
+       WHERE datname = current_database()`
+    );
     dbInfo = {
-      version: r.rows[0].version,
-      connections: Number(r.rows[0].connections || 0),
-      active_connections: Number(r.rows[0].active_connections || 0),
-      db_size: Number(r.rows[0].db_size || 0),
+      version: base.rows[0].version,
+      connections: Number(base.rows[0].connections || 0),
+      active_connections: Number(base.rows[0].active_connections || 0),
+      idle_connections: Number(base.rows[0].idle_connections || 0),
+      db_size: Number(base.rows[0].db_size || 0),
+      cache_hit: cache.rows[0]?.cache_hit || null,
+      settings: settings.rows[0] || {},
     };
   } catch (e) {
     dbStatus = "error";
@@ -63,6 +85,7 @@ const buildSystemStatus = async () => {
   const memTotal = os.totalmem();
   const memFree = os.freemem();
   const memUsed = memTotal - memFree;
+  const cpus = os.cpus();
   return {
     uptime: os.uptime(),
     load1: load[0],
@@ -77,7 +100,10 @@ const buildSystemStatus = async () => {
     procUptime: process.uptime(),
     platform: os.platform(),
     release: os.release(),
-    cpus: os.cpus().length,
+    cpuModel: cpus && cpus.length ? cpus[0].model : "N/A",
+    cpuCores: cpus ? cpus.length : 0,
+    nodeVersion: process.version,
+    timezone: DEFAULT_TIMEZONE,
   };
 };
 

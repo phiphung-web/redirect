@@ -27,6 +27,10 @@ app.get(/.*/, async (req, res) => {
 
   try {
     const parser = new UAParser(uaString);
+    const ua = parser.getResult();
+    const deviceType = ua.device?.type || "pc";
+    const osName = ua.os?.name || "Unknown";
+    const browserName = ua.browser?.name || "Unknown";
     const geo = geoip.lookup(ip);
     const country = geo ? geo.country : "VN";
     const requestUrl = `${req.protocol}://${host}${req.originalUrl}`;
@@ -50,9 +54,9 @@ app.get(/.*/, async (req, res) => {
         ip,
         country,
         city: geo?.city,
-        device: parser.getDevice().type,
-        os: parser.getOS().name,
-        browser: parser.getBrowser().name,
+        device: deviceType,
+        os: osName,
+        browser: browserName,
         action,
         referer: req.headers["referer"],
         requestUrl,
@@ -140,6 +144,9 @@ app.get(/.*/, async (req, res) => {
       action: "redirect",
       referer: req.headers["referer"],
       requestUrl,
+      device: deviceType,
+      os: osName,
+      browser: browserName,
       ua: uaString,
     });
 

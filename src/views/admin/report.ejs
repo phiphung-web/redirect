@@ -11,6 +11,7 @@
     <%- include('../partials/header', {
         user,
         active: 'redirect',
+        backUrl: '/domains/' + camp.domain_id,
         breadcrumb: [
             { label: 'Redirect', url: '/redirect' },
             { label: 'Domain #' + camp.domain_id, url: '/domains/' + camp.domain_id },

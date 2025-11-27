@@ -1,4 +1,4 @@
-require("dotenv").config({ quiet: true });
+﻿require("dotenv").config({ quiet: true });
 const express = require("express");
 const session = require("express-session");
 const path = require("path");
@@ -10,7 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 4002;
 const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
 
-// Hàm sinh mã
+// HÃ m sinh mÃ£
 const generateCode = (len = 8) => {
   const chars =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -96,14 +96,14 @@ app.use(
   })
 );
 
-// --- MIDDLEWARE RBAC (QUẢN LÝ QUYỀN) ---
+// --- MIDDLEWARE RBAC (QUáº¢N LÃ QUYá»€N) ---
 const checkAuth = (req, res, next) => {
   if (!req.session.user) return res.redirect("/login");
   res.locals.currentUser = req.session.user;
   next();
 };
 
-// Middleware cho phép danh sách Role cụ thể truy cập
+// Middleware cho phÃ©p danh sÃ¡ch Role cá»¥ thá»ƒ truy cáº­p
 const requireRole = (rolesArray) => {
   return (req, res, next) => {
     if (!req.session.user) return res.redirect("/login");
@@ -112,7 +112,7 @@ const requireRole = (rolesArray) => {
     if (rolesArray.includes(userRole)) {
       next();
     } else {
-      res.status(403).send(`⛔ Bạn không có quyền (Role: ${userRole})`);
+      res.status(403).send(`â›” Báº¡n khÃ´ng cÃ³ quyá»n (Role: ${userRole})`);
     }
   };
 };
@@ -131,17 +131,22 @@ app.post("/login", async (req, res) => {
 
   if (r.rowCount > 0 && password === r.rows[0].password_hash) {
     req.session.user = r.rows[0];
-    return res.redirect("/");
+    return res.redirect("/redirect");
   }
-  res.render("admin/login", { error: "Sai thông tin" });
+  res.render("admin/login", { error: "Sai thÃ´ng tin" });
 });
 app.get("/logout", (req, res) => {
   req.session.destroy();
   res.redirect("/login");
 });
 
-// --- DASHBOARD ---
+// --- LANDING ---
 app.get("/", checkAuth, async (req, res) => {
+  res.render("admin/welcome", { user: req.session.user });
+});
+
+// --- DASHBOARD ---
+app.get("/redirect", checkAuth, async (req, res) => {
   const rDom = await db.query(
     `
       SELECT d.*, cu.username AS created_by_name, uu.username AS updated_by_name,
@@ -179,7 +184,7 @@ app.post("/domains/create", checkAuth, async (req, res) => {
     );
     res.redirect("/");
   } catch (e) {
-    res.send("Lỗi: Domain đã tồn tại");
+    res.send("Lá»—i: Domain Ä‘Ã£ tá»“n táº¡i");
   }
 });
 
@@ -191,18 +196,18 @@ app.get("/domains/toggle/:id", checkAuth, async (req, res) => {
   res.redirect("/");
 });
 
-// CHỈ SUPER ADMIN ĐƯỢC XÓA DOMAIN
+// CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A DOMAIN
 app.get(
   "/domains/delete/:id",
   requireRole(["super_admin"]),
   async (req, res) => {
     try {
-      // Xóa cascade trong DB sẽ tự xóa link, nhưng cần xóa log thủ công nếu chưa set cascade cho log
-      // Ở đây giả sử DB set cascade rồi.
+      // XÃ³a cascade trong DB sáº½ tá»± xÃ³a link, nhÆ°ng cáº§n xÃ³a log thá»§ cÃ´ng náº¿u chÆ°a set cascade cho log
+      // á»ž Ä‘Ã¢y giáº£ sá»­ DB set cascade rá»“i.
       await db.query(`DELETE FROM domains WHERE id=$1`, [req.params.id]);
       res.redirect("/");
     } catch (e) {
-      res.send("Lỗi khi xóa domain: " + e.message);
+      res.send("Lá»—i khi xÃ³a domain: " + e.message);
     }
   }
 );
@@ -213,7 +218,7 @@ app.get("/domains/:id/verify", checkAuth, async (req, res) => {
   ]);
   if (!r.rowCount) return res.json({ status: "error" });
   dns.resolve4(r.rows[0].domain_url, (err, addrs) => {
-    if (err) return res.json({ status: "error", msg: "Chưa trỏ DNS" });
+    if (err) return res.json({ status: "error", msg: "ChÆ°a trá» DNS" });
     db.query(`UPDATE domains SET status='active', updated_by=$2 WHERE id=$1`, [
       req.params.id,
       req.session.user.id,
@@ -235,7 +240,7 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     `,
     [domainId]
   );
-  if (!rDom.rowCount) return res.redirect("/");
+  if (!rDom.rowCount) return res.redirect("/redirect");
 
   const rLinks = await db.query(
     `
@@ -267,7 +272,7 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     return l;
   });
 
-  // Smart Alert Logic (Đếm truy cập sạch từ quốc gia allow)
+  // Smart Alert Logic (Äáº¿m truy cáº­p sáº¡ch tá»« quá»‘c gia allow)
   const linkIds = links.map((l) => l.id);
   if (linkIds.length) {
     const safeMap = new Map();
@@ -379,7 +384,7 @@ app.get("/campaigns/toggle/:id", checkAuth, async (req, res) => {
   res.redirect("/domains/" + r.rows[0].domain_id);
 });
 
-// CHỈ SUPER ADMIN ĐƯỢC XÓA LINK
+// CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A LINK
 app.get(
   "/campaigns/delete/:id",
   requireRole(["super_admin"]),
@@ -408,7 +413,7 @@ app.get("/campaigns/edit/:id", checkAuth, async (req, res) => {
      WHERE c.id=$1`,
     [req.params.id]
   );
-  if (!r.rowCount) return res.redirect("/");
+  if (!r.rowCount) return res.redirect("/redirect");
   const d = await db.query(`SELECT * FROM domains WHERE id=$1`, [
     r.rows[0].domain_id,
   ]);
@@ -536,7 +541,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
     campId,
   ]);
-  if (!rCamp.rowCount) return res.redirect("/");
+  if (!rCamp.rowCount) return res.redirect("/redirect");
 
   const stats = await db.query(
     `
@@ -656,7 +661,7 @@ app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {
   const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
     campId,
   ]);
-  if (!rCamp.rowCount) return res.redirect("/");
+  if (!rCamp.rowCount) return res.redirect("/redirect");
   let sql = `SELECT * FROM traffic_logs WHERE campaign_id=$1 AND created_at >= $2 AND created_at < $3`;
   const params = [campId, start, end];
   if (action) {
@@ -682,7 +687,7 @@ app.get("/campaigns/:id/report/export", checkAuth, async (req, res) => {
   const rCamp = await db.query(`SELECT name FROM campaigns WHERE id=$1`, [
     campId,
   ]);
-  if (!rCamp.rowCount) return res.redirect("/");
+  if (!rCamp.rowCount) return res.redirect("/redirect");
 
   const data = await db.query(
     `
@@ -718,18 +723,18 @@ app.get("/campaigns/:id/report/export", checkAuth, async (req, res) => {
 });
 // ...
 
-// --- MODULE QUẢN TRỊ USER (PHÂN QUYỀN) ---
-// Chỉ Super Admin và Admin mới được vào xem danh sách
+// --- MODULE QUáº¢N TRá»Š USER (PHÃ‚N QUYá»€N) ---
+// Chá»‰ Super Admin vÃ  Admin má»›i Ä‘Æ°á»£c vÃ o xem danh sÃ¡ch
 app.get("/users", requireRole(["super_admin", "admin"]), async (req, res) => {
   const currentUserRole = req.session.user.role_name;
   let sql = "";
 
   if (currentUserRole === "super_admin") {
-    // Super Admin thấy tất cả
+    // Super Admin tháº¥y táº¥t cáº£
     sql = `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name 
                FROM users u LEFT JOIN roles r ON u.role_id = r.id ORDER BY u.id ASC`;
   } else {
-    // Admin chỉ thấy User thường
+    // Admin chá»‰ tháº¥y User thÆ°á»ng
     sql = `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name 
                FROM users u LEFT JOIN roles r ON u.role_id = r.id 
                WHERE r.name = 'user' ORDER BY u.id ASC`;
@@ -737,9 +742,9 @@ app.get("/users", requireRole(["super_admin", "admin"]), async (req, res) => {
 
   const u = await db.query(sql);
 
-  // Lấy list Role để tạo user mới
+  // Láº¥y list Role Ä‘á»ƒ táº¡o user má»›i
   let roleSql = "SELECT * FROM roles";
-  if (currentUserRole === "admin") roleSql += " WHERE name = 'user'"; // Admin chỉ tạo đc User
+  if (currentUserRole === "admin") roleSql += " WHERE name = 'user'"; // Admin chá»‰ táº¡o Ä‘c User
   const roles = await db.query(roleSql);
 
   res.render("admin/users_list", {
@@ -754,13 +759,13 @@ app.post(
   "/users/create",
   requireRole(["super_admin", "admin"]),
   async (req, res) => {
-    // Validate: Admin không được tạo Super Admin hay Admin khác (Chặn ở backend cho chắc)
+    // Validate: Admin khÃ´ng Ä‘Æ°á»£c táº¡o Super Admin hay Admin khÃ¡c (Cháº·n á»Ÿ backend cho cháº¯c)
     if (req.session.user.role_name === "admin") {
       const rRole = await db.query(`SELECT name FROM roles WHERE id=$1`, [
         req.body.role_id,
       ]);
       if (rRole.rows[0].name !== "user")
-        return res.send("Admin chỉ được tạo User thường!");
+        return res.send("Admin chá»‰ Ä‘Æ°á»£c táº¡o User thÆ°á»ng!");
     }
 
     try {
@@ -770,7 +775,7 @@ app.post(
       );
       res.redirect("/users");
     } catch (e) {
-      res.send("Lỗi: Username đã tồn tại");
+      res.send("Lá»—i: Username Ä‘Ã£ tá»“n táº¡i");
     }
   }
 );
@@ -817,21 +822,21 @@ app.get(
   "/users/delete/:id",
   requireRole(["super_admin", "admin"]),
   async (req, res) => {
-    // Logic chặn xóa
+    // Logic cháº·n xÃ³a
     const targetId = req.params.id;
     const curUser = req.session.user;
 
-    // 1. Không tự xóa mình
-    if (targetId == curUser.id) return res.send("Không thể tự xóa chính mình!");
+    // 1. KhÃ´ng tá»± xÃ³a mÃ¬nh
+    if (targetId == curUser.id) return res.send("KhÃ´ng thá»ƒ tá»± xÃ³a chÃ­nh mÃ¬nh!");
 
-    // 2. Admin không được xóa Super Admin hoặc Admin khác
+    // 2. Admin khÃ´ng Ä‘Æ°á»£c xÃ³a Super Admin hoáº·c Admin khÃ¡c
     if (curUser.role_name === "admin") {
       const rTarget = await db.query(
         `SELECT r.name FROM users u JOIN roles r ON u.role_id=r.id WHERE u.id=$1`,
         [targetId]
       );
       if (rTarget.rows[0].name !== "user")
-        return res.send("Bạn chỉ được xóa User thường!");
+        return res.send("Báº¡n chá»‰ Ä‘Æ°á»£c xÃ³a User thÆ°á»ng!");
     }
 
     await db.query(`DELETE FROM users WHERE id=$1`, [targetId]);
@@ -850,3 +855,4 @@ app.get("/admin/system/data", requireRole(["super_admin"]), async (req, res) => 
 });
 
 app.listen(PORT, () => console.log(`Admin V2 running on ${PORT}`));
+

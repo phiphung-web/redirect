@@ -1,0 +1,124 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Chi tiết Link - <%= camp.name %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>.select2-container{width:100% !important;} .select2-selection__choice{background-color:#0d6efd !important;color:white !important;border:none;}</style>
+</head>
+<body>
+    <%- include('../partials/header', {
+        user,
+        active: 'redirect',
+        breadcrumb: [
+            { label: 'Redirect', url: '/redirect' },
+            { label: domain.domain_url, url: '/domains/' + domain.id },
+            { label: 'Chi tiết link' }
+        ]
+    }) %>
+    <div class="container bg-white p-4 rounded shadow-sm mt-3" style="max-width: 900px;">
+        <div class="d-flex justify-content-between mb-4">
+            <div>
+                <h3 class="mb-0">Chi tiết link: <span class="text-primary"><%= camp.name %></span></h3>
+                <small class="text-muted">ID: <%= camp.id %> | Domain: <%= domain.domain_url %></small><br>
+                <small class="text-muted">Tạo: <%= camp.created_by_name || 'N/A' %> @ <%= new Date(camp.created_at).toLocaleString('vi-VN') %> | Cập nhật: <%= camp.updated_by_name || camp.created_by_name || '-' %> @ <%= camp.updated_at ? new Date(camp.updated_at).toLocaleString('vi-VN') : '-' %></small>
+            </div>
+            <div></div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <p><b>Param key:</b> <%= camp.param_key %> | <b>Param value:</b> <%= camp.param_value %></p>
+                <p><b>Link đích:</b> <span class="text-break"><%= camp.target_url %></span></p>
+            </div>
+        </div>
+
+        <form action="/campaigns/update/<%= camp.id %>" method="POST" id="editForm">
+            <input type="hidden" name="domain_id" value="<%= camp.domain_id %>">
+            <input type="hidden" name="rules_json" id="rules_json">
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="fw-bold">Tên Chiến Dịch</label>
+                    <input type="text" name="name" class="form-control" value="<%= camp.name %>" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="fw-bold">Link Đích (Target)</label>
+                    <input type="url" name="target_url" class="form-control" value="<%= camp.target_url %>" required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="fw-bold">Quốc gia cho phép</label>
+                <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple" id="countrySelect"></select>
+                <small class="text-muted">Để trống = Tất cả quốc gia.</small>
+            </div>
+
+            <label class="fw-bold mb-2">Quy tắc Tham số (Rules)</label>
+            <div id="rules-wrapper" class="bg-light p-3 rounded border mb-3"></div>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="addNewRule()">+ Thêm điều kiện</button>
+
+            <div class="mt-4 text-end">
+                <button type="submit" class="btn btn-primary px-5">Lưu Thay đổi</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        const ALL_COUNTRIES = {"VN": "Vietnam", "US": "United States", "GB": "United Kingdom", "JP": "Japan", "KR": "South Korea", "SG": "Singapore", "MY": "Malaysia", "AU": "Australia", "CA": "Canada", "DE": "Germany", "FR": "France", "BR": "Brazil"};
+        const oldRules = <%- JSON.stringify(camp.rules || []) %>;
+        const oldCountryFilter = <%- JSON.stringify(camp.filters?.countries || []) %>;
+
+        $(document).ready(function() {
+            const select = $('#countrySelect');
+            for(let [code, name] of Object.entries(ALL_COUNTRIES)) {
+                select.append(new Option(`${name} (${code})`, code));
+            }
+            select.select2().val(oldCountryFilter).trigger('change');
+            if(oldRules.length > 0) oldRules.forEach(r => addNewRule(r.key, r.operator, r.value));
+            else addNewRule('utm_source', 'exists', '');
+        });
+
+        function addNewRule(key='', op='exists', val='') {
+            let html = `
+                <div class="row g-2 mb-2 rule-row align-items-center">
+                    <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-key" value="${key}" placeholder="Key"></div>
+                    <div class="col-3">
+                        <select class="form-select form-select-sm rule-op" onchange="toggleVal(this)">
+                            <option value="exists" ${op==='exists'?'selected':''}>Tồn tại</option>
+                            <option value="equals" ${op==='equals'?'selected':''}>Bằng (=)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-val" value="${val}" ${op==='exists'?'disabled':''}></div>
+                    <div class="col-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove()">x</button></div>
+                </div>`;
+            $('#rules-wrapper').append(html);
+        }
+
+        function toggleVal(sel) {
+            const inp = sel.closest('.rule-row').querySelector('.rule-val');
+            inp.disabled = (sel.value === 'exists');
+            if(inp.disabled) inp.value = '';
+        }
+
+        function collectRules() {
+            const rules = [];
+            $('.rule-row').each(function() {
+                let k = $(this).find('.rule-key').val();
+                let o = $(this).find('.rule-op').val();
+                let v = $(this).find('.rule-val').val();
+                if(k) rules.push({ key: k, operator: o, value: v });
+            });
+            return rules;
+        }
+
+        $('#editForm').on('submit', function() {
+            $('#rules_json').val(JSON.stringify(collectRules()));
+        });
+    </script>
+    <%- include('../partials/footer') %>
+</body>
+</html>

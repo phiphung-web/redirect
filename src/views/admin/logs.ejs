@@ -8,6 +8,7 @@
     <%- include('../partials/header', {
         user,
         active: 'redirect',
+        backUrl: '/campaigns/' + camp.id + '/report',
         breadcrumb: [
             { label: 'Redirect', url: '/redirect' },
             { label: 'Chiến dịch: ' + camp.name, url: '/campaigns/' + camp.id + '/report' },

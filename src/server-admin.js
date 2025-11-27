@@ -81,6 +81,20 @@ const buildSystemStatus = async () => {
   };
 };
 
+const parseLogMeta = (row) => {
+  const meta = { ref: null, url: null, detail: null };
+  if (row.referer) {
+    const parts = row.referer.split(" | ");
+    parts.forEach((p) => {
+      if (p.startsWith("ref=")) meta.ref = p.slice(4);
+      else if (p.startsWith("url=")) meta.url = p.slice(4);
+      else if (p.startsWith("detail=")) meta.detail = p.slice(7);
+    });
+    if (!meta.ref) meta.ref = row.referer;
+  }
+  return { ...row, meta };
+};
+
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.urlencoded({ extended: true }));
@@ -604,6 +618,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
     `SELECT * FROM traffic_logs WHERE campaign_id=$1 AND created_at >= $2 AND created_at < $3 ORDER BY id DESC LIMIT 50`,
     [campId, start, end]
   );
+  const logsMapped = logs.rows.map(parseLogMeta);
 
   const summary = {
     redirects: Number(totals.rows[0]?.redirects || 0),
@@ -634,7 +649,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
     user: req.session.user,
     camp: rCamp.rows[0],
     stats: stats.rows,
-    logs: logs.rows,
+    logs: logsMapped,
     summary,
     countryStats: countryStats.rows,
     previous,
@@ -670,10 +685,11 @@ app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {
   }
   sql += ` ORDER BY id DESC LIMIT ${limit}`;
   const logs = await db.query(sql, params);
+  const logsMapped = logs.rows.map(parseLogMeta);
   res.render("admin/logs", {
     user: req.session.user,
     camp: rCamp.rows[0],
-    logs: logs.rows,
+    logs: logsMapped,
     action,
     limit,
     start,

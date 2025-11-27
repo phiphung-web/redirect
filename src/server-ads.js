@@ -29,6 +29,7 @@ app.get(/.*/, async (req, res) => {
     const parser = new UAParser(uaString);
     const geo = geoip.lookup(ip);
     const country = geo ? geo.country : "VN";
+    const requestUrl = `${req.protocol}://${host}${req.originalUrl}`;
 
     // 1. Lấy Domain & Config
     const rDom = await db.query(
@@ -37,7 +38,7 @@ app.get(/.*/, async (req, res) => {
     );
 
     // Render Safe Page Function
-    const renderSafe = (domData, action = "safe_page") => {
+    const renderSafe = (domData, action = "safe_page", detail) => {
       if (!domData) return res.status(404).send("Domain not configured");
 
       const tpl = domData.safe_template || "news";
@@ -54,6 +55,8 @@ app.get(/.*/, async (req, res) => {
         browser: parser.getBrowser().name,
         action,
         referer: req.headers["referer"],
+        requestUrl,
+        detail,
         ua: uaString,
       });
 
@@ -90,12 +93,12 @@ app.get(/.*/, async (req, res) => {
 
     // 3. Check Điều Kiện
     if (!campaign || !campaign.is_active)
-      return renderSafe(domain, "safe_page_inactive");
+      return renderSafe(domain, "safe_page_inactive", "campaign_inactive");
 
     // Check Quốc Gia
     const filters = campaign.filters || {};
     if (filters.countries?.length > 0 && !filters.countries.includes(country)) {
-      return renderSafe(domain, "safe_page_wrong_country");
+      return renderSafe(domain, "safe_page_wrong_country", `country=${country}`);
     }
 
     // Check Rules (Tham số)
@@ -103,12 +106,20 @@ app.get(/.*/, async (req, res) => {
     for (const rule of rules) {
       const val = queryParams[rule.key];
       if (rule.operator === "exists" && (val === undefined || val === ""))
-        return renderSafe(domain, "safe_page_missing_param");
+        return renderSafe(
+          domain,
+          "safe_page_missing_param",
+          `missing:${rule.key}`
+        );
       if (
         rule.operator === "equals" &&
         (!val || val.toLowerCase() !== rule.value.toLowerCase())
       )
-        return renderSafe(domain, "safe_page_wrong_param_val");
+        return renderSafe(
+          domain,
+          "safe_page_wrong_param_val",
+          `expect ${rule.key}=${rule.value}; got=${val || "null"}`
+        );
     }
 
     // 4. Redirect
@@ -128,6 +139,7 @@ app.get(/.*/, async (req, res) => {
       country,
       action: "redirect",
       referer: req.headers["referer"],
+      requestUrl,
       ua: uaString,
     });
 

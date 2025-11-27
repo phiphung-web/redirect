@@ -89,8 +89,28 @@
                                 <% } %>
                             </td>
                             <td class="text-truncate" style="max-width: 220px;" title="<%= meta.url || meta.ref || log.referer %>">
-                                <div><%= meta.ref || log.referer || '-' %></div>
-                                <% if (meta.url) { %><div class="text-muted small">URL: <%= meta.url %></div><% } %>
+                                <% if (meta.url || meta.ref) { %>
+                                    <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-bs-toggle="modal" data-bs-target="#urlModal<%= log.id %>">
+                                        <i class="fa-regular fa-eye me-1"></i><%= meta.ref || meta.url || 'Xem URL' %>
+                                    </button>
+                                    <div class="modal fade" id="urlModal<%= log.id %>" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h6 class="modal-title">Chi tiết URL</h6>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <div class="mb-2"><b>Referrer:</b><br><span class="text-break"><%= meta.ref || '-' %></span></div>
+                                                    <div class="mb-2"><b>Request URL:</b><br><span class="text-break"><%= meta.url || '-' %></span></div>
+                                                    <% if (meta.detail) { %><div class="alert alert-warning py-2 mb-0 small"><b>Chi tiết:</b> <%= meta.detail %></div><% } %>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <% } else { %>
+                                    <div><%= log.referer || '-' %></div>
+                                <% } %>
                             </td>
                         </tr>
                     <% }) %>

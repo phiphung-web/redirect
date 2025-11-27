@@ -101,8 +101,8 @@
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                 </div>
                                                 <div class="modal-body">
-                                                    <div class="mb-2"><b>Referrer:</b><br><code class="text-break d-block"><%= meta.ref || '-' %></code></div>
-                                                    <div class="mb-2"><b>Request URL:</b><br><code class="text-break d-block"><%= meta.url || '-' %></code></div>
+                                                    <div class="mb-2"><b>Referrer:</b><br><code class="text-break d-block small" style="word-break: break-all; white-space: normal;"><%= meta.ref || '-' %></code></div>
+                                                    <div class="mb-2"><b>Request URL:</b><br><code class="text-break d-block small" style="word-break: break-all; white-space: normal;"><%= meta.url || '-' %></code></div>
                                                     <% if (meta.detail) { %><div class="alert alert-warning py-2 mb-0 small"><b>Chi tiết:</b> <%= meta.detail %></div><% } %>
                                                 </div>
                                             </div>

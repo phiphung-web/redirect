@@ -548,6 +548,7 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
     all: "Tất cả",
     custom: "Tùy chọn",
   };
+
   const bucketByPreset = {
     today: "hour",
     this_week: "day",
@@ -736,164 +737,10 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
 });
 app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   const campId = req.params.id;
-  const range = req.query.range || "today"; // today / 7d / week / month / custom
-  const now = new Date();
-  let start = new Date(now);
-  let end = new Date(now);
-  let groupingVal = "day";
-
-  const parseDate = (s) => {
-    const d = new Date(s);
-    return isNaN(d) ? null : d;
-  };
-
-  if (range === "7d") {
-    start.setDate(start.getDate() - 7);
-    groupingVal = "day";
-  } else if (range === "week") {
-    const day = start.getDay();
-    const diff = day === 0 ? -6 : 1 - day; // Monday as start
-    start.setDate(start.getDate() + diff);
-    end = new Date(start);
-    end.setDate(start.getDate() + 7);
-    groupingVal = "day";
-  } else if (range === "month") {
-    start = new Date(now.getFullYear(), now.getMonth(), 1);
-    end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    groupingVal = "day";
-  } else if (range === "custom" && req.query.start_date && req.query.end_date) {
-    const s = parseDate(req.query.start_date);
-    const e = parseDate(req.query.end_date);
-    if (s && e && e > s) {
-      start = s;
-      end = e;
-      groupingVal = "day";
-    }
-  } else {
-    // today
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    end = new Date(start);
-    end.setDate(start.getDate() + 1);
-    groupingVal = "hour";
-  }
-
-  if (!end || end <= start) {
-    end = new Date(start);
-    end.setDate(start.getDate() + 1);
-  }
-
-  const prevStart = new Date(start);
-  const prevEnd = new Date(end);
-  const diffMs = end.getTime() - start.getTime();
-  prevStart.setTime(start.getTime() - diffMs);
-  prevEnd.setTime(end.getTime() - diffMs);
-
-  const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
-    campId,
-  ]);
-  if (!rCamp.rowCount) return res.redirect("/redirect");
-
-  const stats = await db.query(
-    `
-        SELECT date_trunc($4::text, created_at) as day, 
-               COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
-               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
-        FROM traffic_logs 
-        WHERE campaign_id = $1 
-          AND created_at >= $2
-          AND created_at < $3
-        GROUP BY day 
-        ORDER BY day ASC
-      `,
-    [campId, start, end, groupingVal]
-  );
-
-  const totals = await db.query(
-    `
-        SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
-               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
-               COUNT(*) as total
-        FROM traffic_logs 
-        WHERE campaign_id = $1 
-          AND created_at >= $2
-          AND created_at < $3
-      `,
-    [campId, start, end]
-  );
-
-  const prevTotals = await db.query(
-    `
-        SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
-               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
-               COUNT(*) as total
-        FROM traffic_logs 
-        WHERE campaign_id = $1 
-          AND created_at >= $2
-          AND created_at < $3
-      `,
-    [campId, prevStart, prevEnd]
-  );
-
-  const countryStats = await db.query(
-    `
-        SELECT country, 
-               COUNT(*) as hits,
-               COUNT(*) FILTER (WHERE action='redirect') as redirects
-        FROM traffic_logs
-        WHERE campaign_id=$1 
-          AND created_at >= $2
-          AND created_at < $3
-        GROUP BY country
-        ORDER BY hits DESC
-        LIMIT 6
-      `,
-    [campId, start, end]
-  );
-
-  const logs = await db.query(
-    `SELECT * FROM traffic_logs WHERE campaign_id=$1 AND created_at >= $2 AND created_at < $3 ORDER BY id DESC LIMIT 50`,
-    [campId, start, end]
-  );
-  const logsMapped = logs.rows.map(parseLogMeta);
-
-  const summary = {
-    redirects: Number(totals.rows[0]?.redirects || 0),
-    safe: Number(totals.rows[0]?.safe || 0),
-  };
-  summary.total = summary.redirects + summary.safe;
-
-  const previous = {
-    redirects: Number(prevTotals.rows[0]?.redirects || 0),
-    safe: Number(prevTotals.rows[0]?.safe || 0),
-  };
-  previous.total = previous.redirects + previous.safe;
-
-  summary.pass_rate = summary.total
-    ? Math.round((summary.redirects / summary.total) * 1000) / 10
-    : 0;
-  summary.delta_redirects = summary.redirects - previous.redirects;
-  summary.redirect_growth =
-    previous.redirects > 0
-      ? Math.round((summary.delta_redirects / previous.redirects) * 1000) / 10
-      : null;
-
-  const labelEnd = new Date(end);
-  if (range !== "today") labelEnd.setDate(labelEnd.getDate() - 1);
-  const rangeLabel = `${start.toLocaleDateString("vi-VN")} - ${labelEnd.toLocaleDateString("vi-VN")}`;
-
-  res.render("admin/report", {
-    user: req.session.user,
-    camp: rCamp.rows[0],
-    stats: stats.rows,
-    logs: logsMapped,
-    summary,
-    countryStats: countryStats.rows,
-    previous,
-    range,
-    start,
-    end,
-    rangeLabel,
-  });
+  const query = req.originalUrl.includes("?")
+    ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+    : "";
+  return res.redirect(`/campaigns/${campId}/report/v2${query}`);
 });
 
 app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {

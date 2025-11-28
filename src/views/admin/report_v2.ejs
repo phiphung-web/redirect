@@ -145,7 +145,7 @@
         </div>
         <div class="text-muted small"><%= presetLabel %></div>
       </div>
-      <div class="table-responsive">
+      <div class="table-responsive p-3">
         <%
           const bucketLabel =
             bucketType === "hour"
@@ -204,7 +204,7 @@
         <h6 class="mb-0">Log mới (50)</h6>
         <a class="btn btn-link btn-sm" href="/campaigns/<%= camp.id %>/logs">Xem tất cả</a>
       </div>
-      <div class="table-responsive">
+      <div class="table-responsive p-3">
         <table class="table table-sm table-striped table-hover table-log mb-0">
           <thead class="table-dark">
             <tr>
@@ -284,11 +284,23 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    function todayStr() {
+      const now = new Date();
+      const tzOffset = now.getTimezoneOffset() * 60000;
+      return new Date(now.getTime() - tzOffset).toISOString().slice(0, 10);
+    }
+
     function toggleCustomPreset(val) {
       const isCustom = val === 'custom';
       document.querySelectorAll('.custom-range').forEach(el => {
         el.classList.toggle('d-none', !isCustom);
       });
+      if (isCustom) {
+        const startEl = document.getElementById('startDate');
+        const endEl = document.getElementById('endDate');
+        if (startEl && !startEl.value) startEl.value = todayStr();
+        if (endEl && !endEl.value) endEl.value = todayStr();
+      }
     }
     toggleCustomPreset('<%= preset %>');
 

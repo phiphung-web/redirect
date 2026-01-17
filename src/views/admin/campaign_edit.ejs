@@ -349,7 +349,6 @@
                 }
                 select.select2().val(oldCountryFilter).trigger('change');
                 if (oldRules.length > 0) oldRules.forEach(r => addNewRule(r.key, r.operator, r.value));
-                else addNewRule('utm_source', 'exists', '');
             });
 
             function addNewRule(key = '', op = 'exists', val = '') {

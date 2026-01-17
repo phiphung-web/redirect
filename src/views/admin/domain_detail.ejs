@@ -493,7 +493,6 @@
                     select.append(new Option(`${name} (${code})`, code));
                 }
                 select.select2({ placeholder: "Chọn quốc gia...", dropdownParent: $('#addLinkModal') });
-                addNewRule('utm_source', 'exists', '');
             });
 
             function addNewRule(key = '', op = 'exists', val = '') {

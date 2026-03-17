@@ -1,14 +1,46 @@
 ﻿require("dotenv").config({ quiet: true });
 const express = require("express");
 const session = require("express-session");
+const helmet = require("helmet");
 const path = require("path");
 const dns = require("dns");
 const os = require("os");
+const rateLimit = require("express-rate-limit");
+const csrf = require("csurf");
+const {
+  ports,
+  session: sessionConfig,
+  trustProxy,
+  isProduction,
+} = require("./config/app");
 const db = require("./config/db");
+const { requestContext } = require("./middleware/request-context");
+const {
+  buildFilters,
+  normalizeDomainUrl,
+  normalizeSafeTemplate,
+  normalizeTargetUrl,
+  parseRules,
+  validateName,
+  validateParamKey,
+  validateParamValue,
+} = require("./utils/validation");
+const {
+  hashPassword,
+  verifyPasswordWithLazyMigration,
+} = require("./services/passwords");
 
 const app = express();
-const PORT = process.env.PORT || 4002;
+const PORT = ports.admin;
 const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: "Too many login attempts. Please try again later.",
+});
 
 // HÃ m sinh mÃ£
 const generateCode = (len = 8) => {
@@ -121,20 +153,38 @@ const parseLogMeta = (row) => {
   return { ...row, meta };
 };
 
+app.set("trust proxy", trustProxy);
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(requestContext);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.use(
   session({
-    secret: "v2_secret_final_rbac",
+    name: sessionConfig.name,
+    secret: sessionConfig.secret,
     resave: false,
-    saveUninitialized: true,
-    cookie: { maxAge: 86400000 },
+    saveUninitialized: false,
+    rolling: true,
+    proxy: trustProxy,
+    cookie: {
+      maxAge: sessionConfig.maxAgeMs,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: sessionConfig.secure === "auto" ? "auto" : !!sessionConfig.secure,
+    },
   })
 );
+app.use(csrf());
+app.use((req, res, next) => {
+  res.locals.csrfToken = req.csrfToken();
+  res.locals.requestId = req.requestId;
+  res.locals.isProduction = isProduction;
+  next();
+});
 
 // --- MIDDLEWARE RBAC (QUáº¢N LÃ QUYá»€N) ---
 const checkAuth = (req, res, next) => {
@@ -159,7 +209,7 @@ const requireRole = (rolesArray) => {
 
 // AUTH
 app.get("/login", (req, res) => res.render("admin/login", { error: null }));
-app.post("/login", async (req, res) => {
+app.post("/login", loginRateLimit, async (req, res) => {
   const { username, password } = req.body;
   const r = await db.query(
     `
@@ -169,9 +219,13 @@ app.post("/login", async (req, res) => {
     [username]
   );
 
-  if (r.rowCount > 0 && password === r.rows[0].password_hash) {
-    req.session.user = r.rows[0];
-    return res.redirect("/");
+  if (r.rowCount > 0) {
+    const result = await verifyPasswordWithLazyMigration(r.rows[0], password);
+
+    if (result.isValid) {
+      req.session.user = result.user;
+      return res.redirect("/");
+    }
   }
   res.render("admin/login", { error: "Sai thÃ´ng tin" });
 });
@@ -213,11 +267,13 @@ app.get("/redirect", checkAuth, async (req, res) => {
 // --- DOMAIN (CRUD) ---
 app.post("/domains/create", checkAuth, async (req, res) => {
   try {
+    const domainUrl = normalizeDomainUrl(req.body.domain_url);
+    const safeTemplate = normalizeSafeTemplate(req.body.safe_template);
     await db.query(
       `INSERT INTO domains (domain_url, safe_template, user_id, updated_by) VALUES ($1, $2, $3, $4)`,
       [
-        req.body.domain_url,
-        req.body.safe_template,
+        domainUrl,
+        safeTemplate,
         req.session.user.id,
         req.session.user.id,
       ]
@@ -953,6 +1009,9 @@ app.get("/admin/system/data", requireRole(["super_admin"]), async (req, res) => 
   res.json(stats);
 });
 
-app.listen(PORT, () => console.log(`Admin V2 running on ${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Admin V2 running on ${PORT}`));
+}
 
+module.exports = app;
 

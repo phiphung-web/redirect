@@ -16,6 +16,7 @@
             <div class="alert alert-danger py-2"><%= error %></div>
         <% } %>
         <form action="/login" method="POST">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <div class="mb-3">
                 <label class="form-label">Tài khoản</label>
                 <input type="text" name="username" class="form-control" required autofocus>

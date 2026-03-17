@@ -161,6 +161,7 @@
         <div class="modal fade" id="addLinkModal" data-bs-backdrop="static">
             <div class="modal-dialog modal-lg">
                 <form class="modal-content" action="/campaigns/create" method="POST" id="createForm">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="modal-header">
                         <h5 class="modal-title">Tạo Link Ads Mới</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

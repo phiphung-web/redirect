@@ -1,15 +1,20 @@
 require("dotenv").config({ quiet: true });
 const express = require("express");
+const helmet = require("helmet");
 const path = require("path");
 const geoip = require("geoip-lite");
 const UAParser = require("ua-parser-js");
+const { ports, trustProxy } = require("./config/app");
 const db = require("./config/db");
+const { requestContext } = require("./middleware/request-context");
 const { logTraffic } = require("./services/logger");
 
 const app = express();
-const PORT = process.env.PORT || 4001;
+const PORT = ports.ads;
 
-app.set("trust proxy", true);
+app.set("trust proxy", trustProxy);
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(requestContext);
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views")); // Cùng cấp src
@@ -63,6 +68,7 @@ app.get(/.*/, async (req, res) => {
       logTraffic({
         domainId: domData.id,
         campaignId: campaign ? campaign.id : null,
+        requestId: req.requestId,
         ip,
         country,
         city: geo?.city,
@@ -151,6 +157,7 @@ app.get(/.*/, async (req, res) => {
     logTraffic({
       domainId: domain.id,
       campaignId: campaign.id,
+      requestId: req.requestId,
       ip,
       country,
       action: "redirect",
@@ -170,4 +177,8 @@ app.get(/.*/, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Engine V2 running on ${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Engine V2 running on ${PORT}`));
+}
+
+module.exports = app;

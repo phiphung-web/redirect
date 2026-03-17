@@ -52,6 +52,7 @@
             </div>
 
             <form action="/campaigns/update/<%= camp.id %>" method="POST" id="editForm">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <input type="hidden" name="domain_id" value="<%= camp.domain_id %>">
                 <input type="hidden" name="rules_json" id="rules_json">
 

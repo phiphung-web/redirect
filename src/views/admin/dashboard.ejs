@@ -114,6 +114,7 @@
     <div class="modal fade" id="addDomainModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <form class="modal-content" action="/domains/create" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <div class="modal-header bg-light">
                     <h5 class="modal-title fw-bold">Thêm Domain Mới</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

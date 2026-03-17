@@ -51,6 +51,15 @@ app.get(/.*/, async (req, res) => {
       const tpl = domData.safe_template || "news";
       const cfg = domData.safe_content || {};
 
+      // Ensure safe pages always render fresh template/content (avoid browser/CDN cache)
+      res.set({
+        "Cache-Control":
+          "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
+        "Surrogate-Control": "no-store",
+      });
+
       logTraffic({
         domainId: domData.id,
         campaignId: campaign ? campaign.id : null,

@@ -18,6 +18,7 @@ const { requestContext } = require("./middleware/request-context");
 const {
   buildFilters,
   normalizeDomainUrl,
+  normalizeSafeContent,
   normalizeSafeTemplate,
   normalizeTargetUrl,
   parseRules,
@@ -29,6 +30,7 @@ const {
   hashPassword,
   verifyPasswordWithLazyMigration,
 } = require("./services/passwords");
+const { auditAdminAction } = require("./services/audit");
 
 const app = express();
 const PORT = ports.admin;
@@ -224,15 +226,37 @@ app.post("/login", loginRateLimit, async (req, res) => {
 
     if (result.isValid) {
       req.session.user = result.user;
+      await auditAdminAction({
+        req,
+        action: "login",
+        targetType: "session",
+        targetId: result.user.id,
+        detail: { username: result.user.username },
+      });
       return res.redirect("/");
     }
   }
+  await auditAdminAction({
+    req,
+    action: "login_failed",
+    targetType: "session",
+    status: "failed",
+    detail: { username },
+  });
   res.render("admin/login", { error: "Sai thÃ´ng tin" });
 });
-app.get("/logout", (req, res) => {
+const logoutHandler = async (req, res) => {
+  await auditAdminAction({
+    req,
+    action: "logout",
+    targetType: "session",
+    targetId: req.session?.user?.id || null,
+  });
   req.session.destroy();
   res.redirect("/login");
-});
+};
+app.get("/logout", logoutHandler);
+app.post("/logout", logoutHandler);
 
 // --- LANDING ---
 app.get("/", checkAuth, async (req, res) => {
@@ -278,50 +302,90 @@ app.post("/domains/create", checkAuth, async (req, res) => {
         req.session.user.id,
       ]
     );
+    await auditAdminAction({
+      req,
+      action: "domain_create",
+      targetType: "domain",
+      targetId: domainUrl,
+      detail: { domain_url: domainUrl, safe_template: safeTemplate },
+    });
     res.redirect("/redirect");
   } catch (e) {
     res.send("Lá»—i: Domain Ä‘Ã£ tá»“n táº¡i");
   }
 });
 
-app.get("/domains/toggle/:id", checkAuth, async (req, res) => {
+const toggleDomainHandler = async (req, res) => {
   await db.query(
     `UPDATE domains SET status = CASE WHEN status='active' THEN 'inactive' ELSE 'active' END, updated_by=$2 WHERE id=$1`,
     [req.params.id, req.session.user.id]
   );
+  await auditAdminAction({
+    req,
+    action: "domain_toggle",
+    targetType: "domain",
+    targetId: req.params.id,
+  });
   res.redirect("/redirect");
-});
+};
+app.get("/domains/toggle/:id", checkAuth, toggleDomainHandler);
+app.post("/domains/toggle/:id", checkAuth, toggleDomainHandler);
 
 // CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A DOMAIN
-app.get(
+const deleteDomainHandler = async (req, res) => {
+  try {
+    await db.query(`DELETE FROM domains WHERE id=$1`, [req.params.id]);
+    await auditAdminAction({
+      req,
+      action: "domain_delete",
+      targetType: "domain",
+      targetId: req.params.id,
+    });
+    res.redirect("/redirect");
+  } catch (e) {
+    res.send("Lá»—i khi xÃ³a domain: " + e.message);
+  }
+};
+app.get("/domains/delete/:id", requireRole(["super_admin"]), deleteDomainHandler);
+app.post(
   "/domains/delete/:id",
   requireRole(["super_admin"]),
-  async (req, res) => {
-    try {
-      // XÃ³a cascade trong DB sáº½ tá»± xÃ³a link, nhÆ°ng cáº§n xÃ³a log thá»§ cÃ´ng náº¿u chÆ°a set cascade cho log
-      // á»ž Ä‘Ã¢y giáº£ sá»­ DB set cascade rá»“i.
-      await db.query(`DELETE FROM domains WHERE id=$1`, [req.params.id]);
-      res.redirect("/redirect");
-    } catch (e) {
-      res.send("Lá»—i khi xÃ³a domain: " + e.message);
-    }
-  }
+  deleteDomainHandler
 );
 
-app.get("/domains/:id/verify", checkAuth, async (req, res) => {
+const verifyDomainHandler = async (req, res) => {
   const r = await db.query(`SELECT domain_url FROM domains WHERE id=$1`, [
     req.params.id,
   ]);
   if (!r.rowCount) return res.json({ status: "error" });
-  dns.resolve4(r.rows[0].domain_url, (err, addrs) => {
-    if (err) return res.json({ status: "error", msg: "ChÆ°a trá» DNS" });
+  dns.resolve4(r.rows[0].domain_url, async (err, addrs) => {
+    if (err) {
+      await auditAdminAction({
+        req,
+        action: "domain_verify",
+        targetType: "domain",
+        targetId: req.params.id,
+        status: "failed",
+        detail: { error: err.message },
+      });
+      return res.json({ status: "error", msg: "ChÆ°a trá» DNS" });
+    }
     db.query(`UPDATE domains SET status='active', updated_by=$2 WHERE id=$1`, [
       req.params.id,
       req.session.user.id,
     ]);
+    await auditAdminAction({
+      req,
+      action: "domain_verify",
+      targetType: "domain",
+      targetId: req.params.id,
+      detail: { address: addrs[0] },
+    });
     res.json({ status: "success", msg: "OK: " + addrs[0] });
   });
-});
+};
+app.get("/domains/:id/verify", checkAuth, verifyDomainHandler);
+app.post("/domains/:id/verify", checkAuth, verifyDomainHandler);
 
 // --- LINK CAMPAIGNS ---
 app.get("/domains/:id", checkAuth, async (req, res) => {
@@ -400,6 +464,36 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
   });
 });
 
+app.post("/domains/:id/safe-content", checkAuth, async (req, res) => {
+  try {
+    const safeTemplate = normalizeSafeTemplate(req.body.safe_template);
+    const safeContent = normalizeSafeContent({
+      title: req.body.safe_title,
+      headline: req.body.safe_headline,
+      logo: req.body.safe_logo,
+    });
+    await db.query(
+      `UPDATE domains SET safe_template=$1, safe_content=$2, updated_by=$3 WHERE id=$4`,
+      [
+        safeTemplate,
+        JSON.stringify(safeContent),
+        req.session.user.id,
+        req.params.id,
+      ]
+    );
+    await auditAdminAction({
+      req,
+      action: "domain_safe_content_update",
+      targetType: "domain",
+      targetId: req.params.id,
+      detail: { safe_template: safeTemplate, safe_content: safeContent },
+    });
+    res.redirect("/domains/" + req.params.id);
+  } catch (e) {
+    res.send(e.message || "Safe content khong hop le");
+  }
+});
+
 app.post("/campaigns/create", checkAuth, async (req, res) => {
   const {
     domain_id,
@@ -410,40 +504,36 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
     copy_from_id,
   } = req.body;
   try {
-    let rulesPayload = [];
-    try {
-      rulesPayload = rules_json ? JSON.parse(rules_json) : [];
-    } catch (e) {
-      return res.send("Rules khong hop le");
-    }
+    const normalizedDomainId = Number.parseInt(domain_id, 10);
+    if (!Number.isInteger(normalizedDomainId))
+      throw new Error("Domain khong hop le");
+    const normalizedName = validateName(name, "Ten link");
+    const normalizedTargetUrl = normalizeTargetUrl(target_url);
+    let rulesPayload = parseRules(rules_json);
     let rulesPayloadJson = JSON.stringify(rulesPayload || []);
     const dup = await db.query(
       `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) LIMIT 1`,
-      [domain_id, name]
+      [normalizedDomainId, normalizedName]
     );
     if (dup.rowCount) return res.send("Ten link bi trung trong domain");
 
-    let filters = {};
-    if (allowed_countries)
-      filters.countries = Array.isArray(allowed_countries)
-        ? allowed_countries
-        : allowed_countries.split(",");
+    let filters = buildFilters(allowed_countries);
 
     if (copy_from_id && rulesPayload.length === 0 && !allowed_countries) {
       const rCfg = await db.query(
         `SELECT rules, filters FROM campaigns WHERE id=$1 AND domain_id=$2`,
-        [copy_from_id, domain_id]
+        [copy_from_id, normalizedDomainId]
       );
       if (rCfg.rowCount) {
-        rulesPayload = rCfg.rows[0].rules || [];
-        filters = rCfg.rows[0].filters || {};
+        rulesPayload = parseRules(rCfg.rows[0].rules || []);
+        filters = buildFilters(rCfg.rows[0].filters?.countries || []);
         rulesPayloadJson = JSON.stringify(rulesPayload || []);
       }
     }
     const filtersJson = JSON.stringify(filters || {});
 
-    const autoKey = "q";
-    const autoValue = generateCode(8);
+    const autoKey = validateParamKey("q");
+    const autoValue = validateParamValue(generateCode(8));
 
     await db.query(
       `
@@ -451,53 +541,81 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `,
       [
-        domain_id,
+        normalizedDomainId,
         req.session.user.id,
-        name,
+        normalizedName,
         autoKey,
         autoValue,
-        target_url,
+        normalizedTargetUrl,
         rulesPayloadJson,
         filtersJson,
         req.session.user.id,
       ]
     );
 
-    res.redirect("/domains/" + domain_id);
+    await auditAdminAction({
+      req,
+      action: "campaign_create",
+      targetType: "campaign",
+      targetId: `${normalizedDomainId}:${normalizedName}`,
+      detail: { domain_id: normalizedDomainId, name: normalizedName },
+    });
+    res.redirect("/domains/" + normalizedDomainId);
   } catch (e) {
     res.send(e.message);
   }
 });
 
-app.get("/campaigns/toggle/:id", checkAuth, async (req, res) => {
+const toggleCampaignHandler = async (req, res) => {
   await db.query(
     `UPDATE campaigns SET is_active = NOT is_active, updated_by=$2 WHERE id=$1`,
     [req.params.id, req.session.user.id]
   );
+  await auditAdminAction({
+    req,
+    action: "campaign_toggle",
+    targetType: "campaign",
+    targetId: req.params.id,
+  });
   const r = await db.query(`SELECT domain_id FROM campaigns WHERE id=$1`, [
     req.params.id,
   ]);
   res.redirect("/domains/" + r.rows[0].domain_id);
-});
+};
+app.get("/campaigns/toggle/:id", checkAuth, toggleCampaignHandler);
+app.post("/campaigns/toggle/:id", checkAuth, toggleCampaignHandler);
 
 // CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A LINK
+const deleteCampaignHandler = async (req, res) => {
+  const r = await db.query(`SELECT domain_id FROM campaigns WHERE id=$1`, [
+    req.params.id,
+  ]);
+  if (r.rowCount) {
+    await db.query(`DELETE FROM traffic_logs WHERE campaign_id=$1`, [
+      req.params.id,
+    ]);
+    await db.query(`DELETE FROM campaigns WHERE id=$1`, [req.params.id]);
+    await auditAdminAction({
+      req,
+      action: "campaign_delete",
+      targetType: "campaign",
+      targetId: req.params.id,
+      detail: { domain_id: r.rows[0].domain_id },
+    });
+    res.redirect("/domains/" + r.rows[0].domain_id);
+  } else {
+    res.redirect("/redirect");
+  }
+};
 app.get(
   "/campaigns/delete/:id",
   requireRole(["super_admin"]),
-  async (req, res) => {
-    const r = await db.query(`SELECT domain_id FROM campaigns WHERE id=$1`, [
-      req.params.id,
-    ]);
-    if (r.rowCount) {
-      await db.query(`DELETE FROM traffic_logs WHERE campaign_id=$1`, [
-        req.params.id,
-      ]);
-      await db.query(`DELETE FROM campaigns WHERE id=$1`, [req.params.id]);
-      res.redirect("/domains/" + r.rows[0].domain_id);
-    } else {
-      res.redirect("/redirect");
-    }
-  }
+  deleteCampaignHandler
+);
+app.post(
+  "/campaigns/delete/:id",
+  requireRole(["super_admin"]),
+  deleteCampaignHandler
 );
 
 app.get("/campaigns/edit/:id", checkAuth, async (req, res) => {
@@ -528,37 +646,44 @@ app.get("/campaigns/edit/:id", checkAuth, async (req, res) => {
 app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
   const { name, target_url, rules_json, allowed_countries, domain_id } =
     req.body;
-  let filters = {};
-  let rulesPayload = [];
   try {
-    rulesPayload = rules_json ? JSON.parse(rules_json) : [];
-  } catch (e) {
-    return res.send("Rules khong hop le");
-  }
-  const rulesPayloadJson = JSON.stringify(rulesPayload || []);
-  if (allowed_countries)
-    filters.countries = Array.isArray(allowed_countries)
-      ? allowed_countries
-      : allowed_countries.split(",");
-  const dup = await db.query(
-    `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3 LIMIT 1`,
-    [domain_id, name, req.params.id]
-  );
-  if (dup.rowCount) return res.send("Ten link bi trung trong domain");
+    const normalizedDomainId = Number.parseInt(domain_id, 10);
+    if (!Number.isInteger(normalizedDomainId))
+      throw new Error("Domain khong hop le");
+    const normalizedName = validateName(name, "Ten link");
+    const normalizedTargetUrl = normalizeTargetUrl(target_url);
+    const rulesPayload = parseRules(rules_json);
+    const filters = buildFilters(allowed_countries);
+    const rulesPayloadJson = JSON.stringify(rulesPayload || []);
+    const filtersJson = JSON.stringify(filters || {});
+    const dup = await db.query(
+      `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3 LIMIT 1`,
+      [normalizedDomainId, normalizedName, req.params.id]
+    );
+    if (dup.rowCount) return res.send("Ten link bi trung trong domain");
 
-  const filtersJson = JSON.stringify(filters || {});
-  await db.query(
-    `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, updated_by=$5 WHERE id=$6`,
-    [
-      name,
-      target_url,
-      rulesPayloadJson,
-      filtersJson,
-      req.session.user.id,
-      req.params.id,
-    ]
-  );
-  res.redirect("/domains/" + domain_id);
+    await db.query(
+      `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, updated_by=$5 WHERE id=$6`,
+      [
+        normalizedName,
+        normalizedTargetUrl,
+        rulesPayloadJson,
+        filtersJson,
+        req.session.user.id,
+        req.params.id,
+      ]
+    );
+    await auditAdminAction({
+      req,
+      action: "campaign_update",
+      targetType: "campaign",
+      targetId: req.params.id,
+      detail: { domain_id: normalizedDomainId, name: normalizedName },
+    });
+    res.redirect("/domains/" + normalizedDomainId);
+  } catch (e) {
+    return res.send(e.message || "Rules khong hop le");
+  }
 });
 
 app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
@@ -924,10 +1049,19 @@ app.post(
     }
 
     try {
+      const username = validateName(req.body.username, "Username");
+      const passwordHash = await hashPassword(req.body.password);
       await db.query(
         `INSERT INTO users (username, password_hash, role_id) VALUES ($1, $2, $3)`,
-        [req.body.username, req.body.password, req.body.role_id]
+        [username, passwordHash, req.body.role_id]
       );
+      await auditAdminAction({
+        req,
+        action: "user_create",
+        targetType: "user",
+        targetId: username,
+        detail: { role_id: req.body.role_id },
+      });
       res.redirect("/users");
     } catch (e) {
       res.send("Lá»—i: Username Ä‘Ã£ tá»“n táº¡i");
@@ -969,14 +1103,18 @@ app.post(
       req.body.role_id,
       req.params.id,
     ]);
+    await auditAdminAction({
+      req,
+      action: "user_role_update",
+      targetType: "user",
+      targetId: req.params.id,
+      detail: { role_id: req.body.role_id },
+    });
     res.redirect("/users/view/" + req.params.id);
   }
 );
 
-app.get(
-  "/users/delete/:id",
-  requireRole(["super_admin", "admin"]),
-  async (req, res) => {
+const deleteUserHandler = async (req, res) => {
     // Logic cháº·n xÃ³a
     const targetId = req.params.id;
     const curUser = req.session.user;
@@ -995,8 +1133,23 @@ app.get(
     }
 
     await db.query(`DELETE FROM users WHERE id=$1`, [targetId]);
+    await auditAdminAction({
+      req,
+      action: "user_delete",
+      targetType: "user",
+      targetId,
+    });
     res.redirect("/users");
-  }
+  };
+app.get(
+  "/users/delete/:id",
+  requireRole(["super_admin", "admin"]),
+  deleteUserHandler
+);
+app.post(
+  "/users/delete/:id",
+  requireRole(["super_admin", "admin"]),
+  deleteUserHandler
 );
 
 app.get("/admin/system", requireRole(["super_admin"]), async (req, res) => {
@@ -1007,6 +1160,20 @@ app.get("/admin/system", requireRole(["super_admin"]), async (req, res) => {
 app.get("/admin/system/data", requireRole(["super_admin"]), async (req, res) => {
   const stats = await buildSystemStatus();
   res.json(stats);
+});
+
+app.use(async (err, req, res, next) => {
+  if (err && err.code === "EBADCSRFTOKEN") {
+    await auditAdminAction({
+      req,
+      action: "csrf_rejected",
+      targetType: "request",
+      status: "failed",
+      detail: { path: req.originalUrl, method: req.method },
+    });
+    return res.status(403).send("CSRF token khong hop le");
+  }
+  return next(err);
 });
 
 if (require.main === module) {

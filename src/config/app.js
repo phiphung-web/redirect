@@ -10,6 +10,14 @@ const parseInteger = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const parseTrustProxy = (value) => {
+  if (value === undefined || value === null || value === "") return 1;
+  const raw = String(value).trim().toLowerCase();
+  if (/^\d+$/.test(raw)) return Number.parseInt(raw, 10);
+  if (["loopback", "linklocal", "uniquelocal"].includes(raw)) return raw;
+  return parseBoolean(value, true);
+};
+
 const isProduction = process.env.NODE_ENV === "production";
 
 module.exports = {
@@ -19,7 +27,7 @@ module.exports = {
     ads: parseInteger(process.env.ADS_PORT || process.env.PORT, 4001),
     admin: parseInteger(process.env.ADMIN_PORT || process.env.PORT, 4002),
   },
-  trustProxy: parseBoolean(process.env.TRUST_PROXY, true),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   db: {
     user: process.env.DB_USER || "postgres",
     host: process.env.DB_HOST || "localhost",

@@ -8,6 +8,7 @@ const { ports, trustProxy } = require("./config/app");
 const db = require("./config/db");
 const { requestContext } = require("./middleware/request-context");
 const { logTraffic } = require("./services/logger");
+const { normalizeSafeTemplate } = require("./utils/validation");
 
 const app = express();
 const PORT = ports.ads;
@@ -53,7 +54,7 @@ app.get(/.*/, async (req, res) => {
     const renderSafe = (domData, action = "safe_page", detail) => {
       if (!domData) return res.status(404).send("Domain not configured");
 
-      const tpl = domData.safe_template || "news";
+      const tpl = normalizeSafeTemplate(domData.safe_template || "news");
       const cfg = domData.safe_content || {};
 
       // Ensure safe pages always render fresh template/content (avoid browser/CDN cache)
@@ -92,7 +93,23 @@ app.get(/.*/, async (req, res) => {
           logo: cfg.logo,
         },
         (err, html) => {
-          if (err) return res.send(`<h1>${host}</h1>`);
+          if (err) {
+            if (tpl === "news") return res.send(`<h1>${host}</h1>`);
+            return res.render(
+              "safepages/news",
+              {
+                title: cfg.title || "Tin Tá»©c",
+                headline: cfg.headline || "News",
+                themeColor: "#333",
+                domain: host,
+                logo: cfg.logo,
+              },
+              (fallbackErr, fallbackHtml) => {
+                if (fallbackErr) return res.send(`<h1>${host}</h1>`);
+                res.send(fallbackHtml);
+              }
+            );
+          }
           res.send(html);
         }
       );

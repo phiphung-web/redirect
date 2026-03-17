@@ -104,11 +104,24 @@ const validateName = (value, field = "Ten") => {
   return normalized;
 };
 
+const normalizeSafeContent = (input = {}) => {
+  const title = String(input.title || "").trim().slice(0, 150);
+  const headline = String(input.headline || "").trim().slice(0, 200);
+  const logo = String(input.logo || "").trim();
+  if (logo) normalizeTargetUrl(logo);
+  return {
+    title: title || "Tin Tuc 24h",
+    headline: headline || "Cap nhat moi nhat",
+    logo: logo || null,
+  };
+};
+
 module.exports = {
   SAFE_TEMPLATES,
   buildFilters,
   normalizeCountries,
   normalizeDomainUrl,
+  normalizeSafeContent,
   normalizeSafeTemplate,
   normalizeTargetUrl,
   parseRules,

@@ -1,4 +1,4 @@
-const SAFE_TEMPLATES = new Set(["news", "shop"]);
+const SAFE_TEMPLATES = new Set(["news", "shop", "clean"]);
 const PARAM_TOKEN_RE = /^[A-Za-z0-9_.-]{1,100}$/;
 const COUNTRY_RE = /^[A-Z]{2}$/;
 
@@ -17,8 +17,8 @@ const normalizeDomainUrl = (value) => {
 };
 
 const normalizeSafeTemplate = (value) => {
-  const template = String(value || "news").trim().toLowerCase();
-  if (!SAFE_TEMPLATES.has(template)) return "news";
+  const template = String(value || "clean").trim().toLowerCase();
+  if (!SAFE_TEMPLATES.has(template)) return "clean";
   return template;
 };
 

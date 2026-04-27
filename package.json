@@ -1,8 +1,11 @@
 {
   "name": "redirect-v2",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/server-admin.js",
   "scripts": {
+    "start": "node scripts/start-all.js",
+    "start:admin": "node src/server-admin.js",
+    "start:ads": "node src/server-ads.js",
     "test": "node tests/smoke.test.js"
   },
   "keywords": [],

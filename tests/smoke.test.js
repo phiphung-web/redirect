@@ -100,6 +100,41 @@ test("ads renders safe page when no active campaign matches", async () => {
   assert.ok(res.headers["x-request-id"]);
 });
 
+test("ads renders clean safe page template", async () => {
+  db.query = async (sql) => {
+    if (sql.includes("FROM domains WHERE domain_url")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 2,
+            domain_url: "clean.example",
+            status: "active",
+            safe_template: "clean",
+            safe_content: { title: "Clean Site", headline: "Clean Headline" },
+          },
+        ],
+      };
+    }
+    if (sql.includes("INSERT INTO traffic_logs")) {
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes("FROM campaigns WHERE domain_id=$1")) {
+      return { rowCount: 0, rows: [] };
+    }
+    throw new Error(`Unhandled query in ads clean safe test: ${sql}`);
+  };
+
+  const res = await request(adsApp)
+    .get("/?q=missing")
+    .set("Host", "clean.example")
+    .set("User-Agent", "Mozilla/5.0");
+
+  assert.equal(res.status, 200);
+  assert.match(res.text, /Clean Headline/);
+  assert.match(res.text, /clean\.example/);
+});
+
 test("admin login lazy-migrates plain password and creates domain via csrf form", async () => {
   let migratedHash = null;
   let insertedDomain = null;

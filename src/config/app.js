@@ -18,6 +18,13 @@ const parseTrustProxy = (value) => {
   return parseBoolean(value, true);
 };
 
+const parseSessionSecure = (value) => {
+  if (value === undefined || value === null || value === "") return "auto";
+  const raw = String(value).trim().toLowerCase();
+  if (raw === "auto") return "auto";
+  return parseBoolean(raw, false);
+};
+
 const isProduction = process.env.NODE_ENV === "production";
 
 module.exports = {
@@ -41,6 +48,6 @@ module.exports = {
     secret:
       process.env.SESSION_SECRET || "dev-session-secret-change-me-before-prod",
     maxAgeMs: parseInteger(process.env.SESSION_MAX_AGE_MS, 86400000),
-    secure: process.env.SESSION_SECURE || "auto",
+    secure: parseSessionSecure(process.env.SESSION_SECURE),
   },
 };

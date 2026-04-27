@@ -54,7 +54,7 @@ app.get(/.*/, async (req, res) => {
     const renderSafe = (domData, action = "safe_page", detail) => {
       if (!domData) return res.status(404).send("Domain not configured");
 
-      const tpl = normalizeSafeTemplate(domData.safe_template || "news");
+      const tpl = normalizeSafeTemplate(domData.safe_template || "clean");
       const cfg = domData.safe_content || {};
 
       // Ensure safe pages always render fresh template/content (avoid browser/CDN cache)
@@ -98,7 +98,7 @@ app.get(/.*/, async (req, res) => {
             return res.render(
               "safepages/news",
               {
-                title: cfg.title || "Tin Tá»©c",
+                title: cfg.title || "Tin tức",
                 headline: cfg.headline || "News",
                 themeColor: "#333",
                 domain: host,

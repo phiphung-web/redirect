@@ -243,7 +243,7 @@ app.post("/login", loginRateLimit, async (req, res) => {
     status: "failed",
     detail: { username },
   });
-  res.render("admin/login", { error: "Sai thÃ´ng tin" });
+  res.render("admin/login", { error: "Sai thông tin" });
 });
 const logoutHandler = async (req, res) => {
   await auditAdminAction({
@@ -255,7 +255,7 @@ const logoutHandler = async (req, res) => {
   req.session.destroy();
   res.redirect("/login");
 };
-app.get("/logout", logoutHandler);
+app.get("/logout", (req, res) => res.status(405).send("Use POST /logout"));
 app.post("/logout", logoutHandler);
 
 // --- LANDING ---
@@ -311,7 +311,7 @@ app.post("/domains/create", checkAuth, async (req, res) => {
     });
     res.redirect("/redirect");
   } catch (e) {
-    res.send("Lá»—i: Domain Ä‘Ã£ tá»“n táº¡i");
+    res.send("Lỗi: Domain đã tồn tại");
   }
 });
 
@@ -328,7 +328,9 @@ const toggleDomainHandler = async (req, res) => {
   });
   res.redirect("/redirect");
 };
-app.get("/domains/toggle/:id", checkAuth, toggleDomainHandler);
+app.get("/domains/toggle/:id", checkAuth, (req, res) =>
+  res.status(405).send("Use POST /domains/toggle/:id")
+);
 app.post("/domains/toggle/:id", checkAuth, toggleDomainHandler);
 
 // CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A DOMAIN
@@ -343,10 +345,12 @@ const deleteDomainHandler = async (req, res) => {
     });
     res.redirect("/redirect");
   } catch (e) {
-    res.send("Lá»—i khi xÃ³a domain: " + e.message);
+    res.send("Lỗi khi xóa domain: " + e.message);
   }
 };
-app.get("/domains/delete/:id", requireRole(["super_admin"]), deleteDomainHandler);
+app.get("/domains/delete/:id", requireRole(["super_admin"]), (req, res) =>
+  res.status(405).send("Use POST /domains/delete/:id")
+);
 app.post(
   "/domains/delete/:id",
   requireRole(["super_admin"]),
@@ -582,7 +586,9 @@ const toggleCampaignHandler = async (req, res) => {
   ]);
   res.redirect("/domains/" + r.rows[0].domain_id);
 };
-app.get("/campaigns/toggle/:id", checkAuth, toggleCampaignHandler);
+app.get("/campaigns/toggle/:id", checkAuth, (req, res) =>
+  res.status(405).send("Use POST /campaigns/toggle/:id")
+);
 app.post("/campaigns/toggle/:id", checkAuth, toggleCampaignHandler);
 
 // CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A LINK
@@ -610,7 +616,7 @@ const deleteCampaignHandler = async (req, res) => {
 app.get(
   "/campaigns/delete/:id",
   requireRole(["super_admin"]),
-  deleteCampaignHandler
+  (req, res) => res.status(405).send("Use POST /campaigns/delete/:id")
 );
 app.post(
   "/campaigns/delete/:id",
@@ -1144,7 +1150,7 @@ const deleteUserHandler = async (req, res) => {
 app.get(
   "/users/delete/:id",
   requireRole(["super_admin", "admin"]),
-  deleteUserHandler
+  (req, res) => res.status(405).send("Use POST /users/delete/:id")
 );
 app.post(
   "/users/delete/:id",

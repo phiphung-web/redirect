@@ -41,7 +41,7 @@
                         <h3 class="mb-1 text-primary">
                             <%= domain.domain_url %>
                         </h3>
-                        <span class="badge bg-secondary">Giao diện sách: <%= domain.safe_template %></span>
+                        <span class="badge bg-secondary">Giao diện sạch: <%= domain.safe_template %></span>
                         <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>">
                             <%= domain.status.toUpperCase() %>
                         </span>
@@ -76,6 +76,7 @@
                         <div class="col-md-3">
                             <label class="form-label fw-bold">Template</label>
                             <select name="safe_template" class="form-select">
+                                <option value="clean" <%= domain.safe_template === 'clean' ? 'selected' : '' %>>Clean</option>
                                 <option value="news" <%= domain.safe_template === 'news' ? 'selected' : '' %>>News</option>
                                 <option value="shop" <%= domain.safe_template === 'shop' ? 'selected' : '' %>>Shop</option>
                             </select>

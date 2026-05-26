@@ -6,6 +6,11 @@ const logTraffic = (data) => {
         (campaign_id, domain_id, ip, country, city, device_type, os_name, browser_name, action, referer, user_agent, request_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     `;
+  const legacySql = `
+        INSERT INTO traffic_logs 
+        (campaign_id, domain_id, ip, country, city, device_type, os_name, browser_name, action, referer, user_agent)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `;
   const refParts = [];
   if (data.referer) refParts.push(`ref=${data.referer}`);
   if (data.requestUrl) refParts.push(`url=${data.requestUrl}`);
@@ -26,7 +31,14 @@ const logTraffic = (data) => {
     data.ua,
     data.requestId || null,
   ];
-  db.query(sql, values).catch((e) => console.error("Log Error:", e.message));
+  db.query(sql, values).catch((e) => {
+    if (e.code === "42703") {
+      return db
+        .query(legacySql, values.slice(0, 11))
+        .catch((legacyError) => console.error("Log Error:", legacyError.message));
+    }
+    console.error("Log Error:", e.message);
+  });
 };
 
 module.exports = { logTraffic };

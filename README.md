@@ -53,6 +53,39 @@ Load `.env` from the project directory before starting PM2, or export variables 
 
 Restore `database/schema_backup.sql`, then apply migrations in `database/migrations` in filename order.
 
+## Upgrade from redirect-check
+
+Before reloading PM2, keep the running process on the old code while preparing files on disk:
+
+```bash
+cd ~/redirect
+git fetch origin
+git diff --name-status HEAD..origin/main
+git pull origin main
+npm install
+```
+
+Apply the new idempotent migrations before the first reload:
+
+```bash
+set -a
+. ./.env
+set +a
+export PGPASSWORD="$DB_PASS"
+psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f database/migrations/2026-03-17-admin-audit-log.sql
+psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f database/migrations/2026-03-17-request-id.sql
+psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f database/migrations/2026-04-27-clean-safe-template.sql
+```
+
+Then verify and reload:
+
+```bash
+npm test
+pm2 reload ecosystem.config.cjs
+```
+
+The code keeps compatible defaults for the old server when `.env` is missing, but production should still set `DB_*`, `SESSION_SECRET`, `SESSION_NAME`, `ADS_PORT`, and `ADMIN_PORT` explicitly.
+
 ## Notes
 
 - Safe page templates live in `src/views/safepages`.

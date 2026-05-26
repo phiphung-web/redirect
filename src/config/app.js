@@ -39,14 +39,13 @@ module.exports = {
     user: process.env.DB_USER || "postgres",
     host: process.env.DB_HOST || "localhost",
     database: process.env.DB_NAME || "redirect_v2_db",
-    password: process.env.DB_PASS || "dev_only_change_me",
+    password: process.env.DB_PASS || "123456",
     port: parseInteger(process.env.DB_PORT, 5432),
-    max: parseInteger(process.env.DB_POOL_MAX, 20),
+    max: parseInteger(process.env.DB_POOL_MAX, 50),
   },
   session: {
-    name: process.env.SESSION_NAME || "redirect.sid",
-    secret:
-      process.env.SESSION_SECRET || "dev-session-secret-change-me-before-prod",
+    name: process.env.SESSION_NAME || "connect.sid",
+    secret: process.env.SESSION_SECRET || "v2_secret_final_rbac",
     maxAgeMs: parseInteger(process.env.SESSION_MAX_AGE_MS, 86400000),
     secure: parseSessionSecure(process.env.SESSION_SECURE),
   },

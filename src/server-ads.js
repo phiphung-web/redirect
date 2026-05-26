@@ -1,15 +1,21 @@
 require("dotenv").config({ quiet: true });
 const express = require("express");
+const helmet = require("helmet");
 const path = require("path");
 const geoip = require("geoip-lite");
 const UAParser = require("ua-parser-js");
+const { ports, trustProxy } = require("./config/app");
 const db = require("./config/db");
+const { requestContext } = require("./middleware/request-context");
 const { logTraffic } = require("./services/logger");
+const { normalizeSafeTemplate } = require("./utils/validation");
 
 const app = express();
-const PORT = process.env.PORT || 4001;
+const PORT = ports.ads;
 
-app.set("trust proxy", true);
+app.set("trust proxy", trustProxy);
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(requestContext);
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views")); // Cùng cấp src
@@ -48,12 +54,22 @@ app.get(/.*/, async (req, res) => {
     const renderSafe = (domData, action = "safe_page", detail) => {
       if (!domData) return res.status(404).send("Domain not configured");
 
-      const tpl = domData.safe_template || "news";
+      const tpl = normalizeSafeTemplate(domData.safe_template || "clean");
       const cfg = domData.safe_content || {};
+
+      // Ensure safe pages always render fresh template/content (avoid browser/CDN cache)
+      res.set({
+        "Cache-Control":
+          "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
+        "Surrogate-Control": "no-store",
+      });
 
       logTraffic({
         domainId: domData.id,
         campaignId: campaign ? campaign.id : null,
+        requestId: req.requestId,
         ip,
         country,
         city: geo?.city,
@@ -77,7 +93,23 @@ app.get(/.*/, async (req, res) => {
           logo: cfg.logo,
         },
         (err, html) => {
-          if (err) return res.send(`<h1>${host}</h1>`);
+          if (err) {
+            if (tpl === "news") return res.send(`<h1>${host}</h1>`);
+            return res.render(
+              "safepages/news",
+              {
+                title: cfg.title || "Tin tức",
+                headline: cfg.headline || "News",
+                themeColor: "#333",
+                domain: host,
+                logo: cfg.logo,
+              },
+              (fallbackErr, fallbackHtml) => {
+                if (fallbackErr) return res.send(`<h1>${host}</h1>`);
+                res.send(fallbackHtml);
+              }
+            );
+          }
           res.send(html);
         }
       );
@@ -142,6 +174,7 @@ app.get(/.*/, async (req, res) => {
     logTraffic({
       domainId: domain.id,
       campaignId: campaign.id,
+      requestId: req.requestId,
       ip,
       country,
       action: "redirect",
@@ -161,4 +194,8 @@ app.get(/.*/, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Engine V2 running on ${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Engine V2 running on ${PORT}`));
+}
+
+module.exports = app;

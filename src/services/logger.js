@@ -3,8 +3,8 @@ const db = require("../config/db");
 const logTraffic = (data) => {
   const sql = `
         INSERT INTO traffic_logs 
-        (campaign_id, domain_id, ip, country, city, device_type, os_name, browser_name, action, referer, user_agent)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        (campaign_id, domain_id, ip, country, city, device_type, os_name, browser_name, action, referer, user_agent, request_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     `;
   const refParts = [];
   if (data.referer) refParts.push(`ref=${data.referer}`);
@@ -24,6 +24,7 @@ const logTraffic = (data) => {
     data.action,
     refererVal,
     data.ua,
+    data.requestId || null,
   ];
   db.query(sql, values).catch((e) => console.error("Log Error:", e.message));
 };

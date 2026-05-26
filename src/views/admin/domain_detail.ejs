@@ -32,6 +32,7 @@
 <body>
     <%- include('../partials/header', { user, active: 'redirect' , backUrl: '/redirect' , breadcrumb: [ {
         label: 'Redirect' , url: '/redirect' }, { label: domain.domain_url } ] }) %>
+        <input type="hidden" id="csrfToken" value="<%= csrfToken %>">
 
         <div class="container pb-5 mt-3">
             <div class="card mb-4 shadow-sm">
@@ -40,7 +41,7 @@
                         <h3 class="mb-1 text-primary">
                             <%= domain.domain_url %>
                         </h3>
-                        <span class="badge bg-secondary">Giao diện sách: <%= domain.safe_template %></span>
+                        <span class="badge bg-secondary">Giao diện sạch: <%= domain.safe_template %></span>
                         <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>">
                             <%= domain.status.toUpperCase() %>
                         </span>
@@ -65,6 +66,38 @@
                             Tạo Link Mới</button>
                     </div>
                 </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white fw-bold">Safe Page</div>
+                <form class="card-body" action="/domains/<%= domain.id %>/safe-content" method="POST">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Template</label>
+                            <select name="safe_template" class="form-select">
+                                <option value="clean" <%= domain.safe_template === 'clean' ? 'selected' : '' %>>Clean</option>
+                                <option value="news" <%= domain.safe_template === 'news' ? 'selected' : '' %>>News</option>
+                                <option value="shop" <%= domain.safe_template === 'shop' ? 'selected' : '' %>>Shop</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Title</label>
+                            <input type="text" name="safe_title" class="form-control" value="<%= domain.safe_content?.title || '' %>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Headline</label>
+                            <input type="text" name="safe_headline" class="form-control" value="<%= domain.safe_content?.headline || '' %>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Logo URL</label>
+                            <input type="url" name="safe_logo" class="form-control" value="<%= domain.safe_content?.logo || '' %>">
+                        </div>
+                    </div>
+                    <div class="mt-3 text-end">
+                        <button type="submit" class="btn btn-outline-primary">Lưu Safe Page</button>
+                    </div>
+                </form>
             </div>
 
             <div class="card shadow-sm">
@@ -122,11 +155,14 @@
                                             </small>
                                         </td>
                                         <td>
-                                            <a href="/campaigns/toggle/<%= l.id %>"
-                                                class="btn btn-sm <%= l.is_active ? 'btn-success' : 'btn-danger' %>"
-                                                onclick="return confirm('Đổi trạng thái ON/OFF cho link này?')">
-                                                <%= l.is_active ? 'ON' : 'OFF' %>
-                                            </a>
+                                            <form action="/campaigns/toggle/<%= l.id %>" method="POST" class="d-inline"
+                                                onsubmit="return confirm('Đổi trạng thái ON/OFF cho link này?')">
+                                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                                <button type="submit"
+                                                    class="btn btn-sm <%= l.is_active ? 'btn-success' : 'btn-danger' %>">
+                                                    <%= l.is_active ? 'ON' : 'OFF' %>
+                                                </button>
+                                            </form>
                                             <% if(l.suggestion) { %>
                                                 <div class="suggestion-box text-warning">Nhiều traffic an toàn 24h: <%=
                                                         l.safe_24h || 0 %>. Nên bật link.</div>
@@ -146,9 +182,12 @@
                                                 class="btn btn-sm btn-info text-white"><i
                                                     class="fas fa-chart-bar"></i></a>
                                             <% if (user.role_name==='super_admin' ) { %>
-                                                <a href="/campaigns/delete/<%= l.id %>" class="btn btn-sm btn-danger"
-                                                    onclick="return confirm('Cảnh báo: Xóa link sẽ xóa thống kê/log liên quan. Tiếp tục?')"><i
-                                                        class="fas fa-trash"></i></a>
+                                                <form action="/campaigns/delete/<%= l.id %>" method="POST" class="d-inline"
+                                                    onsubmit="return confirm('Cảnh báo: Xóa link sẽ xóa thống kê/log liên quan. Tiếp tục?')">
+                                                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                                    <button type="submit" class="btn btn-sm btn-danger"><i
+                                                            class="fas fa-trash"></i></button>
+                                                </form>
                                                 <% } %>
                                         </td>
                                     </tr>
@@ -161,6 +200,7 @@
         <div class="modal fade" id="addLinkModal" data-bs-backdrop="static">
             <div class="modal-dialog modal-lg">
                 <form class="modal-content" action="/campaigns/create" method="POST" id="createForm">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="modal-header">
                         <h5 class="modal-title">Tạo Link Ads Mới</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -541,7 +581,12 @@
             }
 
             function checkDNS(id) {
-                fetch(`/domains/${id}/verify`).then(r => r.json()).then(d => { alert(d.msg); location.reload(); });
+                const token = document.getElementById('csrfToken').value;
+                fetch(`/domains/${id}/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `_csrf=${encodeURIComponent(token)}`
+                }).then(r => r.json()).then(d => { alert(d.msg); location.reload(); });
             }
 
             function copyLink(id) {

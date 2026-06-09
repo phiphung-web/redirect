@@ -8,7 +8,7 @@ const { ports, trustProxy } = require("./config/app");
 const db = require("./config/db");
 const { requestContext } = require("./middleware/request-context");
 const { logTraffic } = require("./services/logger");
-const { normalizeSafeTemplate } = require("./utils/validation");
+const { normalizeSafeTemplate, normalizeShortCode } = require("./utils/validation");
 
 const app = express();
 const PORT = ports.ads;
@@ -117,6 +117,51 @@ app.get(/.*/, async (req, res) => {
 
     if (!rDom.rowCount) return res.status(404).send("Domain Error");
     domain = rDom.rows[0];
+
+    const shortMatch = req.path.match(/^\/s\/([^/?#]+)\/?$/);
+    if (shortMatch) {
+      let shortCode;
+      try {
+        shortCode = normalizeShortCode(decodeURIComponent(shortMatch[1]));
+      } catch (e) {
+        return renderSafe(domain, "safe_page_short_invalid", "short_invalid");
+      }
+
+      const rShort = await db.query(
+        `
+          SELECT * FROM short_links
+          WHERE domain_id=$1 AND lower(code)=lower($2)
+          LIMIT 1
+        `,
+        [domain.id, shortCode]
+      );
+      const shortLink = rShort.rows[0];
+      if (!shortLink || !shortLink.is_active) {
+        return renderSafe(domain, "safe_page_short_inactive", "short_link_inactive");
+      }
+
+      db.query(`UPDATE short_links SET clicks = clicks + 1 WHERE id=$1`, [
+        shortLink.id,
+      ]);
+      logTraffic({
+        domainId: domain.id,
+        campaignId: null,
+        requestId: req.requestId,
+        ip,
+        country,
+        city: geo?.city,
+        action: "short_redirect",
+        referer: req.headers["referer"],
+        requestUrl,
+        detail: `short=${shortLink.id}`,
+        device: deviceType,
+        os: osName,
+        browser: browserName,
+        ua: uaString,
+      });
+
+      return res.redirect(302, shortLink.target_url);
+    }
 
     // 2. Tìm Campaign (Theo params)
     for (const [key, val] of Object.entries(queryParams)) {

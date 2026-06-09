@@ -1,5 +1,6 @@
 const SAFE_TEMPLATES = new Set(["news", "shop", "clean"]);
 const PARAM_TOKEN_RE = /^[A-Za-z0-9_.-]{1,100}$/;
+const SHORT_CODE_RE = /^[a-z0-9_-]{3,80}$/;
 const COUNTRY_RE = /^[A-Z]{2}$/;
 
 const normalizeDomainUrl = (value) => {
@@ -47,6 +48,14 @@ const validateParamValue = (value) => {
   if (!PARAM_TOKEN_RE.test(paramValue))
     throw new Error("Param value khong hop le");
   return paramValue;
+};
+
+const normalizeShortCode = (value) => {
+  const code = String(value || "").trim().toLowerCase();
+  if (!SHORT_CODE_RE.test(code)) {
+    throw new Error("Ma rut gon chi gom a-z, 0-9, dau gach ngang/gach duoi va dai 3-80 ky tu");
+  }
+  return code;
 };
 
 const parseRules = (rulesInput) => {
@@ -123,6 +132,7 @@ module.exports = {
   normalizeDomainUrl,
   normalizeSafeContent,
   normalizeSafeTemplate,
+  normalizeShortCode,
   normalizeTargetUrl,
   parseRules,
   validateName,

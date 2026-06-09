@@ -65,6 +65,65 @@ test("ads redirects matched campaign and appends missing params", async () => {
   assert.ok(res.headers["x-request-id"]);
 });
 
+test("ads redirects active short link", async () => {
+  let clickUpdated = false;
+  let trafficLogged = false;
+
+  db.query = async (sql, params) => {
+    if (sql.includes("FROM domains WHERE domain_url")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 3,
+            domain_url: "example.com",
+            status: "active",
+            safe_template: "news",
+            safe_content: { title: "News", headline: "Latest" },
+          },
+        ],
+      };
+    }
+    if (sql.includes("FROM short_links")) {
+      assert.deepEqual(params, [3, "spring2026"]);
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 12,
+            domain_id: 3,
+            code: "spring2026",
+            is_active: true,
+            target_url: "https://target.test/promo",
+          },
+        ],
+      };
+    }
+    if (sql.includes("UPDATE short_links SET clicks")) {
+      clickUpdated = true;
+      assert.deepEqual(params, [12]);
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes("INSERT INTO traffic_logs")) {
+      trafficLogged = true;
+      assert.equal(params[8], "short_redirect");
+      return { rowCount: 1, rows: [] };
+    }
+    throw new Error(`Unhandled query in short link test: ${sql}`);
+  };
+
+  const res = await request(adsApp)
+    .get("/s/Spring2026")
+    .set("Host", "example.com")
+    .set("User-Agent", "Mozilla/5.0");
+
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.location, "https://target.test/promo");
+  assert.equal(clickUpdated, true);
+  assert.equal(trafficLogged, true);
+  assert.ok(res.headers["x-request-id"]);
+});
+
 test("ads renders safe page when no active campaign matches", async () => {
   db.query = async (sql) => {
     if (sql.includes("FROM domains WHERE domain_url")) {

@@ -20,6 +20,7 @@ const {
   normalizeDomainUrl,
   normalizeSafeContent,
   normalizeSafeTemplate,
+  normalizeShortCode,
   normalizeTargetUrl,
   parseRules,
   validateName,
@@ -53,6 +54,8 @@ const generateCode = (len = 8) => {
     res += chars.charAt(Math.floor(Math.random() * chars.length));
   return res;
 };
+
+const generateShortCode = (len = 7) => generateCode(len).toLowerCase();
 
 const parseMonthRange = (monthStr) => {
   const now = new Date();
@@ -287,6 +290,113 @@ app.get("/redirect", checkAuth, async (req, res) => {
     stats: stats.rows[0],
   });
 });
+
+// --- SHORT LINKS ---
+app.get("/short-links", checkAuth, async (req, res) => {
+  const domains = await db.query(
+    `SELECT id, domain_url, status FROM domains ORDER BY domain_url ASC`
+  );
+  const links = await db.query(
+    `
+      SELECT s.*, d.domain_url, cu.username AS created_by_name, uu.username AS updated_by_name
+      FROM short_links s
+      JOIN domains d ON d.id = s.domain_id
+      LEFT JOIN users cu ON s.user_id = cu.id
+      LEFT JOIN users uu ON s.updated_by = uu.id
+      ORDER BY s.id DESC
+      LIMIT 300
+    `
+  );
+  res.render("admin/short_links", {
+    user: req.session.user,
+    domains: domains.rows,
+    links: links.rows.map((row) => ({
+      ...row,
+      full_url: `https://${row.domain_url}/s/${row.code}`,
+    })),
+  });
+});
+
+app.post("/short-links/create", checkAuth, async (req, res) => {
+  const domainId = Number.parseInt(req.body.domain_id, 10);
+  if (!Number.isInteger(domainId)) return res.send("Domain khong hop le");
+
+  try {
+    const title = validateName(req.body.title || "Short link", "Ten link");
+    const targetUrl = normalizeTargetUrl(req.body.target_url);
+    let code = req.body.code ? normalizeShortCode(req.body.code) : null;
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const currentCode = code || generateShortCode(attempt < 3 ? 7 : 9);
+      try {
+        await db.query(
+          `
+            INSERT INTO short_links (domain_id, user_id, code, title, target_url, updated_by)
+            VALUES ($1, $2, $3, $4, $5, $6)
+          `,
+          [
+            domainId,
+            req.session.user.id,
+            currentCode,
+            title,
+            targetUrl,
+            req.session.user.id,
+          ]
+        );
+        await auditAdminAction({
+          req,
+          action: "short_link_create",
+          targetType: "short_link",
+          targetId: `${domainId}:${currentCode}`,
+          detail: { domain_id: domainId, code: currentCode, title },
+        });
+        return res.redirect("/short-links");
+      } catch (e) {
+        if (e.code !== "23505" || code) throw e;
+      }
+    }
+    return res.send("Khong tao duoc ma rut gon, vui long thu lai");
+  } catch (e) {
+    return res.send(e.message || "Link rut gon khong hop le");
+  }
+});
+
+const toggleShortLinkHandler = async (req, res) => {
+  await db.query(
+    `UPDATE short_links SET is_active = NOT is_active, updated_by=$2 WHERE id=$1`,
+    [req.params.id, req.session.user.id]
+  );
+  await auditAdminAction({
+    req,
+    action: "short_link_toggle",
+    targetType: "short_link",
+    targetId: req.params.id,
+  });
+  res.redirect("/short-links");
+};
+app.get("/short-links/toggle/:id", checkAuth, (req, res) =>
+  res.status(405).send("Use POST /short-links/toggle/:id")
+);
+app.post("/short-links/toggle/:id", checkAuth, toggleShortLinkHandler);
+
+const deleteShortLinkHandler = async (req, res) => {
+  await db.query(`DELETE FROM short_links WHERE id=$1`, [req.params.id]);
+  await auditAdminAction({
+    req,
+    action: "short_link_delete",
+    targetType: "short_link",
+    targetId: req.params.id,
+  });
+  res.redirect("/short-links");
+};
+app.get("/short-links/delete/:id", requireRole(["super_admin"]), (req, res) =>
+  res.status(405).send("Use POST /short-links/delete/:id")
+);
+app.post(
+  "/short-links/delete/:id",
+  requireRole(["super_admin"]),
+  deleteShortLinkHandler
+);
 
 // --- DOMAIN (CRUD) ---
 app.post("/domains/create", checkAuth, async (req, res) => {

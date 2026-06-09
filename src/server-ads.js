@@ -8,7 +8,12 @@ const { ports, trustProxy } = require("./config/app");
 const db = require("./config/db");
 const { requestContext } = require("./middleware/request-context");
 const { logTraffic } = require("./services/logger");
-const { normalizeSafeTemplate, normalizeShortCode } = require("./utils/validation");
+const {
+  normalizeSafeTemplate,
+  normalizeShortCode,
+  sanitizeCustomCss,
+  sanitizeCustomHtml,
+} = require("./utils/validation");
 
 const app = express();
 const PORT = ports.ads;
@@ -23,6 +28,7 @@ app.set("views", path.join(__dirname, "views")); // Cùng cấp src
 app.get(/.*/, async (req, res) => {
   let campaign = null,
     domain = null;
+  let renderSafe = null;
   const host = req.get("host");
   const rawIp =
     req.headers["cf-connecting-ip"] ||
@@ -51,11 +57,15 @@ app.get(/.*/, async (req, res) => {
     );
 
     // Render Safe Page Function
-    const renderSafe = (domData, action = "safe_page", detail) => {
+    renderSafe = (domData, action = "safe_page", detail) => {
       if (!domData) return res.status(404).send("Domain not configured");
 
-      const tpl = normalizeSafeTemplate(domData.safe_template || "news");
-      const cfg = domData.safe_content || {};
+      const tpl = normalizeSafeTemplate(
+        campaign?.safe_page_template || domData.safe_template || "news"
+      );
+      const cfg = campaign?.safe_page_content || domData.safe_content || {};
+      const customHtml = sanitizeCustomHtml(cfg.custom_html);
+      const customCss = sanitizeCustomCss(cfg.custom_css);
 
       // Ensure safe pages always render fresh template/content (avoid browser/CDN cache)
       res.set({
@@ -91,6 +101,8 @@ app.get(/.*/, async (req, res) => {
           themeColor: "#333",
           domain: host,
           logo: cfg.logo,
+          customHtml,
+          customCss,
         },
         (err, html) => {
           if (err) {
@@ -103,6 +115,8 @@ app.get(/.*/, async (req, res) => {
                 themeColor: "#333",
                 domain: host,
                 logo: cfg.logo,
+                customHtml,
+                customCss,
               },
               (fallbackErr, fallbackHtml) => {
                 if (fallbackErr) return res.send(`<h1>${host}</h1>`);
@@ -171,7 +185,13 @@ app.get(/.*/, async (req, res) => {
     // 2. Tìm Campaign (Theo params)
     for (const [key, val] of Object.entries(queryParams)) {
       const rCamp = await db.query(
-        `SELECT * FROM campaigns WHERE domain_id=$1 AND param_key=$2 AND param_value=$3 LIMIT 1`,
+        `
+          SELECT c.*, sp.template AS safe_page_template, sp.content AS safe_page_content
+          FROM campaigns c
+          LEFT JOIN safe_pages sp ON sp.id = c.safe_page_id AND sp.is_active
+          WHERE c.domain_id=$1 AND c.param_key=$2 AND c.param_value=$3
+          LIMIT 1
+        `,
         [domain.id, key, val]
       );
       if (rCamp.rowCount) {
@@ -239,7 +259,7 @@ app.get(/.*/, async (req, res) => {
     res.redirect(302, targetObj.toString());
   } catch (e) {
     console.error(e);
-    if (domain) return renderSafe(domain, "error");
+    if (domain && renderSafe) return renderSafe(domain, "error");
     res.status(500).send("Server Error");
   }
 });

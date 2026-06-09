@@ -28,7 +28,7 @@ test("ads redirects matched campaign and appends missing params", async () => {
         ],
       };
     }
-    if (sql.includes("FROM campaigns WHERE domain_id=$1")) {
+    if (sql.includes("FROM campaigns c")) {
       return {
         rowCount: 1,
         rows: [
@@ -143,7 +143,7 @@ test("ads renders safe page when no active campaign matches", async () => {
     if (sql.includes("INSERT INTO traffic_logs")) {
       return { rowCount: 1, rows: [] };
     }
-    if (sql.includes("FROM campaigns WHERE domain_id=$1")) {
+    if (sql.includes("FROM campaigns c")) {
       return { rowCount: 0, rows: [] };
     }
     throw new Error(`Unhandled query in ads safe test: ${sql}`);
@@ -178,7 +178,7 @@ test("ads renders clean safe page template", async () => {
     if (sql.includes("INSERT INTO traffic_logs")) {
       return { rowCount: 1, rows: [] };
     }
-    if (sql.includes("FROM campaigns WHERE domain_id=$1")) {
+    if (sql.includes("FROM campaigns c")) {
       return { rowCount: 0, rows: [] };
     }
     throw new Error(`Unhandled query in ads clean safe test: ${sql}`);
@@ -192,6 +192,104 @@ test("ads renders clean safe page template", async () => {
   assert.equal(res.status, 200);
   assert.match(res.text, /Clean Headline/);
   assert.match(res.text, /clean\.example/);
+});
+
+test("ads renders sanitized custom safe page template", async () => {
+  db.query = async (sql) => {
+    if (sql.includes("FROM domains WHERE domain_url")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 4,
+            domain_url: "custom.example",
+            status: "active",
+            safe_template: "custom",
+            safe_content: {
+              title: "Custom Site",
+              headline: "Custom Headline",
+              custom_html:
+                '<section class="hero" onclick="alert(1)"><h1>Custom Safe</h1><script>alert(1)</script><a href="javascript:alert(1)">Bad</a></section>',
+              custom_css: ".hero { color: red; }</style><script>alert(1)</script>",
+            },
+          },
+        ],
+      };
+    }
+    if (sql.includes("INSERT INTO traffic_logs")) {
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes("FROM campaigns c")) {
+      return { rowCount: 0, rows: [] };
+    }
+    throw new Error(`Unhandled query in ads custom safe test: ${sql}`);
+  };
+
+  const res = await request(adsApp)
+    .get("/?q=missing")
+    .set("Host", "custom.example")
+    .set("User-Agent", "Mozilla/5.0");
+
+  assert.equal(res.status, 200);
+  assert.match(res.text, /Custom Safe/);
+  assert.match(res.text, /\.hero \{ color: red; \}/);
+  assert.doesNotMatch(res.text, /<script/i);
+  assert.doesNotMatch(res.text, /onclick=/i);
+  assert.doesNotMatch(res.text, /javascript:/i);
+});
+
+test("ads uses campaign safe page override when rendering safe page", async () => {
+  db.query = async (sql) => {
+    if (sql.includes("FROM domains WHERE domain_url")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 5,
+            domain_url: "override.example",
+            status: "active",
+            safe_template: "clean",
+            safe_content: { title: "Domain Default", headline: "Domain Safe" },
+          },
+        ],
+      };
+    }
+    if (sql.includes("FROM campaigns c")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 21,
+            domain_id: 5,
+            is_active: false,
+            filters: {},
+            rules: [],
+            target_url: "https://target.test/landing",
+            safe_page_template: "custom",
+            safe_page_content: {
+              title: "Campaign Safe",
+              headline: "Campaign Headline",
+              custom_html: "<main><h1>Campaign Override</h1></main>",
+              custom_css: "main{color:blue;}",
+            },
+          },
+        ],
+      };
+    }
+    if (sql.includes("INSERT INTO traffic_logs")) {
+      return { rowCount: 1, rows: [] };
+    }
+    throw new Error(`Unhandled query in campaign safe override test: ${sql}`);
+  };
+
+  const res = await request(adsApp)
+    .get("/?q=abc123")
+    .set("Host", "override.example")
+    .set("User-Agent", "Mozilla/5.0");
+
+  assert.equal(res.status, 200);
+  assert.match(res.text, /Campaign Override/);
+  assert.doesNotMatch(res.text, /Domain Safe/);
 });
 
 test("admin login lazy-migrates plain password and creates domain via csrf form", async () => {

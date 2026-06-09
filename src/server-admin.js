@@ -57,6 +57,13 @@ const generateCode = (len = 8) => {
 
 const generateShortCode = (len = 7) => generateCode(len).toLowerCase();
 
+const normalizeOptionalId = (value, field = "ID") => {
+  if (value === undefined || value === null || value === "") return null;
+  const id = Number.parseInt(value, 10);
+  if (!Number.isInteger(id)) throw new Error(`${field} khong hop le`);
+  return id;
+};
+
 const parseMonthRange = (monthStr) => {
   const now = new Date();
   const normalized =
@@ -525,12 +532,25 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
 
   const rLinks = await db.query(
     `
-      SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      SELECT c.*, sp.name AS safe_page_name, cu.username AS created_by_name, uu.username AS updated_by_name
       FROM campaigns c
+      LEFT JOIN safe_pages sp ON sp.id = c.safe_page_id
       LEFT JOIN users cu ON c.user_id = cu.id
       LEFT JOIN users uu ON c.updated_by = uu.id
       WHERE c.domain_id=$1
       ORDER BY c.id DESC
+    `,
+    [domainId]
+  );
+
+  const safePages = await db.query(
+    `
+      SELECT sp.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      FROM safe_pages sp
+      LEFT JOIN users cu ON sp.user_id = cu.id
+      LEFT JOIN users uu ON sp.updated_by = uu.id
+      WHERE sp.domain_id=$1
+      ORDER BY sp.id DESC
     `,
     [domainId]
   );
@@ -582,6 +602,7 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     domain: rDom.rows[0],
     links,
     linkStats: linkStats.rows[0],
+    safePages: safePages.rows,
   });
 });
 
@@ -592,6 +613,8 @@ app.post("/domains/:id/safe-content", checkAuth, async (req, res) => {
       title: req.body.safe_title,
       headline: req.body.safe_headline,
       logo: req.body.safe_logo,
+      custom_html: req.body.safe_custom_html,
+      custom_css: req.body.safe_custom_css,
     });
     await db.query(
       `UPDATE domains SET safe_template=$1, safe_content=$2, updated_by=$3 WHERE id=$4`,
@@ -615,6 +638,118 @@ app.post("/domains/:id/safe-content", checkAuth, async (req, res) => {
   }
 });
 
+app.post("/domains/:id/safe-pages/create", checkAuth, async (req, res) => {
+  try {
+    const domainId = normalizeOptionalId(req.params.id, "Domain");
+    const name = validateName(req.body.safe_page_name, "Ten mau");
+    const template = normalizeSafeTemplate(req.body.safe_page_template);
+    const content = normalizeSafeContent({
+      title: req.body.safe_page_title,
+      headline: req.body.safe_page_headline,
+      logo: req.body.safe_page_logo,
+      custom_html: req.body.safe_page_custom_html,
+      custom_css: req.body.safe_page_custom_css,
+    });
+    await db.query(
+      `
+        INSERT INTO safe_pages (domain_id, user_id, name, template, content, updated_by)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        domainId,
+        req.session.user.id,
+        name,
+        template,
+        JSON.stringify(content),
+        req.session.user.id,
+      ]
+    );
+    await auditAdminAction({
+      req,
+      action: "safe_page_create",
+      targetType: "safe_page",
+      targetId: `${domainId}:${name}`,
+      detail: { domain_id: domainId, name, template },
+    });
+    res.redirect("/domains/" + domainId);
+  } catch (e) {
+    res.send(e.message || "Mau safe page khong hop le");
+  }
+});
+
+app.post("/safe-pages/update/:id", checkAuth, async (req, res) => {
+  try {
+    const name = validateName(req.body.safe_page_name, "Ten mau");
+    const template = normalizeSafeTemplate(req.body.safe_page_template);
+    const content = normalizeSafeContent({
+      title: req.body.safe_page_title,
+      headline: req.body.safe_page_headline,
+      logo: req.body.safe_page_logo,
+      custom_html: req.body.safe_page_custom_html,
+      custom_css: req.body.safe_page_custom_css,
+    });
+    const r = await db.query(
+      `
+        UPDATE safe_pages
+        SET name=$1, template=$2, content=$3, updated_by=$4
+        WHERE id=$5
+        RETURNING domain_id
+      `,
+      [name, template, JSON.stringify(content), req.session.user.id, req.params.id]
+    );
+    await auditAdminAction({
+      req,
+      action: "safe_page_update",
+      targetType: "safe_page",
+      targetId: req.params.id,
+      detail: { name, template },
+    });
+    res.redirect(r.rowCount ? "/domains/" + r.rows[0].domain_id : "/redirect");
+  } catch (e) {
+    res.send(e.message || "Mau safe page khong hop le");
+  }
+});
+
+const toggleSafePageHandler = async (req, res) => {
+  const r = await db.query(
+    `UPDATE safe_pages SET is_active = NOT is_active, updated_by=$2 WHERE id=$1 RETURNING domain_id`,
+    [req.params.id, req.session.user.id]
+  );
+  await auditAdminAction({
+    req,
+    action: "safe_page_toggle",
+    targetType: "safe_page",
+    targetId: req.params.id,
+  });
+  res.redirect(r.rowCount ? "/domains/" + r.rows[0].domain_id : "/redirect");
+};
+app.get("/safe-pages/toggle/:id", checkAuth, (req, res) =>
+  res.status(405).send("Use POST /safe-pages/toggle/:id")
+);
+app.post("/safe-pages/toggle/:id", checkAuth, toggleSafePageHandler);
+
+const deleteSafePageHandler = async (req, res) => {
+  const r = await db.query(
+    `DELETE FROM safe_pages WHERE id=$1 RETURNING domain_id`,
+    [req.params.id]
+  );
+  await auditAdminAction({
+    req,
+    action: "safe_page_delete",
+    targetType: "safe_page",
+    targetId: req.params.id,
+  });
+  res.redirect(r.rowCount ? "/domains/" + r.rows[0].domain_id : "/redirect");
+};
+app.get("/safe-pages/delete/:id", requireRole(["super_admin"]), (req, res) =>
+  res.status(405).send("Use POST /safe-pages/delete/:id")
+);
+app.post(
+  "/safe-pages/delete/:id",
+  requireRole(["super_admin"]),
+  deleteSafePageHandler
+);
+
 app.post("/campaigns/create", checkAuth, async (req, res) => {
   const {
     domain_id,
@@ -623,6 +758,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
     rules_json,
     allowed_countries,
     copy_from_id,
+    safe_page_id,
   } = req.body;
   try {
     const normalizedDomainId = Number.parseInt(domain_id, 10);
@@ -630,6 +766,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
       throw new Error("Domain khong hop le");
     const normalizedName = validateName(name, "Ten link");
     const normalizedTargetUrl = normalizeTargetUrl(target_url);
+    let normalizedSafePageId = normalizeOptionalId(safe_page_id, "Safe page");
     let rulesPayload = parseRules(rules_json);
     let rulesPayloadJson = JSON.stringify(rulesPayload || []);
     const dup = await db.query(
@@ -640,15 +777,24 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
 
     let filters = buildFilters(allowed_countries);
 
+    if (normalizedSafePageId) {
+      const rSafePage = await db.query(
+        `SELECT id FROM safe_pages WHERE id=$1 AND domain_id=$2 AND is_active LIMIT 1`,
+        [normalizedSafePageId, normalizedDomainId]
+      );
+      if (!rSafePage.rowCount) throw new Error("Mau safe page khong hop le");
+    }
+
     if (copy_from_id && rulesPayload.length === 0 && !allowed_countries) {
       const rCfg = await db.query(
-        `SELECT rules, filters FROM campaigns WHERE id=$1 AND domain_id=$2`,
+        `SELECT rules, filters, safe_page_id FROM campaigns WHERE id=$1 AND domain_id=$2`,
         [copy_from_id, normalizedDomainId]
       );
       if (rCfg.rowCount) {
         rulesPayload = parseRules(rCfg.rows[0].rules || []);
         filters = buildFilters(rCfg.rows[0].filters?.countries || []);
         rulesPayloadJson = JSON.stringify(rulesPayload || []);
+        if (!normalizedSafePageId) normalizedSafePageId = rCfg.rows[0].safe_page_id || null;
       }
     }
     const filtersJson = JSON.stringify(filters || {});
@@ -658,8 +804,8 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
 
     await db.query(
       `
-            INSERT INTO campaigns (domain_id, user_id, name, param_key, param_value, target_url, rules, filters, updated_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO campaigns (domain_id, user_id, name, param_key, param_value, target_url, rules, filters, safe_page_id, updated_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
       [
         normalizedDomainId,
@@ -670,6 +816,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
         normalizedTargetUrl,
         rulesPayloadJson,
         filtersJson,
+        normalizedSafePageId,
         req.session.user.id,
       ]
     );
@@ -679,7 +826,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
       action: "campaign_create",
       targetType: "campaign",
       targetId: `${normalizedDomainId}:${normalizedName}`,
-      detail: { domain_id: normalizedDomainId, name: normalizedName },
+      detail: { domain_id: normalizedDomainId, name: normalizedName, safe_page_id: normalizedSafePageId },
     });
     res.redirect("/domains/" + normalizedDomainId);
   } catch (e) {
@@ -812,7 +959,7 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
 app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
   const campId = req.params.id;
   const r = await db.query(
-    `SELECT id, name, rules, filters, param_key, param_value FROM campaigns WHERE id=$1`,
+    `SELECT id, name, rules, filters, param_key, param_value, safe_page_id FROM campaigns WHERE id=$1`,
     [campId]
   );
   if (!r.rowCount) return res.status(404).json({ error: "not_found" });
@@ -824,6 +971,7 @@ app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
     filters: row.filters || {},
     param_key: row.param_key,
     param_value: row.param_value,
+    safe_page_id: row.safe_page_id,
   });
 });
 

@@ -113,12 +113,12 @@ test("ads redirects active short link", async () => {
   };
 
   const res = await request(adsApp)
-    .get("/s/Spring2026")
+    .get("/s/Spring2026?utm_source=email")
     .set("Host", "example.com")
     .set("User-Agent", "Mozilla/5.0");
 
   assert.equal(res.status, 302);
-  assert.equal(res.headers.location, "https://target.test/promo");
+  assert.equal(res.headers.location, "https://target.test/promo?utm_source=email");
   assert.equal(clickUpdated, true);
   assert.equal(trafficLogged, true);
   assert.ok(res.headers["x-request-id"]);

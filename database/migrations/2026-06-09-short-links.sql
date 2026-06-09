@@ -21,6 +21,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_short_links_domain_code
 CREATE INDEX IF NOT EXISTS idx_short_links_domain_active
     ON public.short_links (domain_id, is_active);
 
+CREATE OR REPLACE FUNCTION public.fn_touch_updated_at()
+RETURNS trigger AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 DROP TRIGGER IF EXISTS trg_touch_short_links ON public.short_links;
 CREATE TRIGGER trg_touch_short_links
 BEFORE UPDATE ON public.short_links

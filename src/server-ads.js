@@ -142,7 +142,7 @@ app.get(/.*/, async (req, res) => {
 
       db.query(`UPDATE short_links SET clicks = clicks + 1 WHERE id=$1`, [
         shortLink.id,
-      ]);
+      ]).catch((e) => console.error("Short Link Click Error:", e.message));
       logTraffic({
         domainId: domain.id,
         campaignId: null,
@@ -160,7 +160,12 @@ app.get(/.*/, async (req, res) => {
         ua: uaString,
       });
 
-      return res.redirect(302, shortLink.target_url);
+      const targetObj = new URL(shortLink.target_url);
+      for (const [k, v] of Object.entries(queryParams)) {
+        if (!targetObj.searchParams.has(k)) targetObj.searchParams.append(k, v);
+      }
+
+      return res.redirect(302, targetObj.toString());
     }
 
     // 2. Tìm Campaign (Theo params)

@@ -325,6 +325,10 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
     const title = validateName(req.body.title || "Short link", "Ten link");
     const targetUrl = normalizeTargetUrl(req.body.target_url);
     let code = req.body.code ? normalizeShortCode(req.body.code) : null;
+    const domain = await db.query(`SELECT id FROM domains WHERE id=$1 LIMIT 1`, [
+      domainId,
+    ]);
+    if (!domain.rowCount) throw new Error("Domain khong ton tai");
 
     for (let attempt = 0; attempt < 6; attempt += 1) {
       const currentCode = code || generateShortCode(attempt < 3 ? 7 : 9);
@@ -352,7 +356,10 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
         });
         return res.redirect("/short-links");
       } catch (e) {
-        if (e.code !== "23505" || code) throw e;
+        if (e.code === "23505" && code) {
+          throw new Error("Ma rut gon da ton tai tren domain nay");
+        }
+        if (e.code !== "23505") throw e;
       }
     }
     return res.send("Khong tao duoc ma rut gon, vui long thu lai");

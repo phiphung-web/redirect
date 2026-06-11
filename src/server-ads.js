@@ -160,6 +160,7 @@ app.get(/.*/, async (req, res) => {
       logTraffic({
         domainId: domain.id,
         campaignId: null,
+        shortLinkId: shortLink.id,
         requestId: req.requestId,
         ip,
         country,

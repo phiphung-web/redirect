@@ -2,12 +2,17 @@ const db = require("../config/db");
 
 const logTraffic = (data) => {
   const sql = `
+        INSERT INTO traffic_logs
+        (campaign_id, domain_id, ip, country, city, device_type, os_name, browser_name, action, referer, user_agent, request_id, short_link_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    `;
+  const requestIdSql = `
         INSERT INTO traffic_logs 
         (campaign_id, domain_id, ip, country, city, device_type, os_name, browser_name, action, referer, user_agent, request_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     `;
   const legacySql = `
-        INSERT INTO traffic_logs 
+        INSERT INTO traffic_logs
         (campaign_id, domain_id, ip, country, city, device_type, os_name, browser_name, action, referer, user_agent)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     `;
@@ -30,12 +35,22 @@ const logTraffic = (data) => {
     refererVal,
     data.ua,
     data.requestId || null,
+    data.shortLinkId || null,
   ];
   db.query(sql, values).catch((e) => {
     if (e.code === "42703") {
       return db
-        .query(legacySql, values.slice(0, 11))
-        .catch((legacyError) => console.error("Log Error:", legacyError.message));
+        .query(requestIdSql, values.slice(0, 12))
+        .catch((requestIdError) => {
+          if (requestIdError.code === "42703") {
+            return db
+              .query(legacySql, values.slice(0, 11))
+              .catch((legacyError) =>
+                console.error("Log Error:", legacyError.message)
+              );
+          }
+          console.error("Log Error:", requestIdError.message);
+        });
     }
     console.error("Log Error:", e.message);
   });

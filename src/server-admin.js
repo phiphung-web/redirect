@@ -412,6 +412,282 @@ app.post(
   deleteShortLinkHandler
 );
 
+app.get("/short-links/:id/report", checkAuth, async (req, res) => {
+  const shortLinkId = req.params.id;
+  const preset = req.query.preset || "today";
+  const now = new Date();
+  const parseDate = (s) => {
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  };
+  const startOfDay = (d) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const rangeLabelText = (s, e) => {
+    const endDisplay = new Date(e);
+    endDisplay.setDate(endDisplay.getDate() - 1);
+    return `${s.toLocaleDateString("vi-VN")} - ${endDisplay.toLocaleDateString("vi-VN")}`;
+  };
+  const presetLabels = {
+    today: "Hôm nay",
+    this_week: "Tuần này",
+    this_month: "Tháng này",
+    this_year: "Năm nay",
+    all: "Tất cả",
+    custom: "Tùy chọn",
+  };
+  const bucketByPreset = {
+    today: "hour",
+    this_week: "day",
+    this_month: "week",
+    this_year: "month",
+    all: "month",
+    custom: "day",
+  };
+
+  const rLink = await db.query(
+    `
+      SELECT s.*, d.domain_url
+      FROM short_links s
+      JOIN domains d ON d.id = s.domain_id
+      WHERE s.id=$1
+    `,
+    [shortLinkId]
+  );
+  if (!rLink.rowCount) return res.redirect("/short-links");
+  const link = rLink.rows[0];
+
+  let start;
+  let end;
+  let bucketType = bucketByPreset[preset] || "hour";
+  if (preset === "this_week") {
+    const today = startOfDay(now);
+    const dow = today.getDay();
+    const diff = dow === 0 ? -6 : 1 - dow;
+    start = new Date(today);
+    start.setDate(start.getDate() + diff);
+    end = new Date(start);
+    end.setDate(start.getDate() + 7);
+  } else if (preset === "this_month") {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  } else if (preset === "this_year") {
+    start = new Date(now.getFullYear(), 0, 1);
+    end = new Date(now.getFullYear() + 1, 0, 1);
+  } else if (preset === "all") {
+    const earliest = await db.query(
+      `SELECT MIN(created_at) AS min_date FROM traffic_logs WHERE short_link_id=$1`,
+      [shortLinkId]
+    );
+    const minRaw = earliest.rows[0]?.min_date || link.created_at || startOfDay(now);
+    start = startOfDay(new Date(minRaw));
+    end = startOfDay(now);
+    end.setDate(end.getDate() + 1);
+  } else if (preset === "custom") {
+    const s = parseDate(req.query.start_date) || now;
+    const e = parseDate(req.query.end_date) || s;
+    start = startOfDay(s);
+    end = startOfDay(e);
+    end.setDate(end.getDate() + 1);
+  } else {
+    start = startOfDay(now);
+    end = new Date(start);
+    end.setDate(start.getDate() + 1);
+    bucketType = "hour";
+  }
+  if (!end || end <= start) {
+    end = new Date(start);
+    end.setDate(start.getDate() + 1);
+  }
+  const rangeLabel = rangeLabelText(start, end);
+  const diffMs = end.getTime() - start.getTime();
+  const prevStart = new Date(start.getTime() - diffMs);
+  const prevEnd = new Date(end.getTime() - diffMs);
+
+  const stats = await db.query(
+    `
+      SELECT date_trunc($4::text, created_at) AS bucket,
+             COUNT(*) FILTER (WHERE action='short_redirect') AS clicks
+      FROM traffic_logs
+      WHERE short_link_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+      GROUP BY bucket
+      ORDER BY bucket ASC
+    `,
+    [shortLinkId, start, end, bucketType]
+  );
+  const totals = await db.query(
+    `
+      SELECT COUNT(*) FILTER (WHERE action='short_redirect') AS clicks,
+             COUNT(DISTINCT ip) AS unique_ips
+      FROM traffic_logs
+      WHERE short_link_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+    `,
+    [shortLinkId, start, end]
+  );
+  const prevTotals = await db.query(
+    `
+      SELECT COUNT(*) FILTER (WHERE action='short_redirect') AS clicks,
+             COUNT(DISTINCT ip) AS unique_ips
+      FROM traffic_logs
+      WHERE short_link_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+    `,
+    [shortLinkId, prevStart, prevEnd]
+  );
+  const countryStats = await db.query(
+    `
+      SELECT country, COUNT(*) AS hits
+      FROM traffic_logs
+      WHERE short_link_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+      GROUP BY country
+      ORDER BY hits DESC
+      LIMIT 10
+    `,
+    [shortLinkId, start, end]
+  );
+  const deviceStats = await db.query(
+    `
+      SELECT COALESCE(device_type, 'pc') AS device_type, COUNT(*) AS hits
+      FROM traffic_logs
+      WHERE short_link_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+      GROUP BY COALESCE(device_type, 'pc')
+      ORDER BY hits DESC
+      LIMIT 10
+    `,
+    [shortLinkId, start, end]
+  );
+  const logs = await db.query(
+    `
+      SELECT *
+      FROM traffic_logs
+      WHERE short_link_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+      ORDER BY id DESC
+      LIMIT 50
+    `,
+    [shortLinkId, start, end]
+  );
+
+  const summary = totals.rows[0] || { clicks: 0, unique_ips: 0 };
+  summary.clicks = Number(summary.clicks || 0);
+  summary.unique_ips = Number(summary.unique_ips || 0);
+  const previous = prevTotals.rows[0] || { clicks: 0, unique_ips: 0 };
+  previous.clicks = Number(previous.clicks || 0);
+  previous.unique_ips = Number(previous.unique_ips || 0);
+  const delta = {
+    clicks: summary.clicks - previous.clicks,
+    unique_ips: summary.unique_ips - previous.unique_ips,
+  };
+
+  res.render("admin/short_link_report", {
+    user: req.session.user,
+    link,
+    stats: stats.rows,
+    logs: logs.rows.map(parseLogMeta),
+    summary,
+    previous,
+    delta,
+    countryStats: countryStats.rows,
+    deviceStats: deviceStats.rows,
+    preset,
+    presetLabel: presetLabels[preset] || "Tùy chọn",
+    bucketType,
+    rangeLabel,
+    start,
+    end,
+  });
+});
+
+app.get("/short-links/:id/logs", checkAuth, async (req, res) => {
+  const shortLinkId = req.params.id;
+  const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
+  const now = new Date();
+  const start =
+    req.query.start_date && !isNaN(new Date(req.query.start_date))
+      ? new Date(req.query.start_date)
+      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const end =
+    req.query.end_date && !isNaN(new Date(req.query.end_date))
+      ? new Date(req.query.end_date)
+      : now;
+  const rLink = await db.query(
+    `
+      SELECT s.*, d.domain_url
+      FROM short_links s
+      JOIN domains d ON d.id = s.domain_id
+      WHERE s.id=$1
+    `,
+    [shortLinkId]
+  );
+  if (!rLink.rowCount) return res.redirect("/short-links");
+  const logs = await db.query(
+    `
+      SELECT *
+      FROM traffic_logs
+      WHERE short_link_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+      ORDER BY id DESC
+      LIMIT ${limit}
+    `,
+    [shortLinkId, start, end]
+  );
+  res.render("admin/short_link_logs", {
+    user: req.session.user,
+    link: rLink.rows[0],
+    logs: logs.rows.map(parseLogMeta),
+    limit,
+    start,
+    end,
+  });
+});
+
+app.get("/short-links/:id/report/export", checkAuth, async (req, res) => {
+  const shortLinkId = req.params.id;
+  const { normalized, start, end } = parseMonthRange(req.query.month);
+  const rLink = await db.query(`SELECT title FROM short_links WHERE id=$1`, [
+    shortLinkId,
+  ]);
+  if (!rLink.rowCount) return res.redirect("/short-links");
+
+  const data = await db.query(
+    `
+      SELECT date(created_at) AS day,
+             COUNT(*) FILTER (WHERE action='short_redirect') AS clicks,
+             COUNT(DISTINCT ip) AS unique_ips
+      FROM traffic_logs
+      WHERE short_link_id=$1
+        AND created_at >= $2
+        AND created_at < $3
+      GROUP BY day
+      ORDER BY day ASC
+    `,
+    [shortLinkId, start, end]
+  );
+
+  const rows = ["day,clicks,unique_ips"];
+  data.rows.forEach((row) => {
+    const day = new Date(row.day).toISOString().slice(0, 10);
+    rows.push(`${day},${Number(row.clicks || 0)},${Number(row.unique_ips || 0)}`);
+  });
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=\"short-link-${shortLinkId}-${normalized}.csv\"`
+  );
+  res.send(rows.join("\n"));
+});
+
 // --- DOMAIN (CRUD) ---
 app.post("/domains/create", checkAuth, async (req, res) => {
   try {

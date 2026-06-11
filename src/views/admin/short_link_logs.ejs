@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Log link rút gọn - <%= link.title || link.code %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <%- include('../partials/header', {
+    user,
+    active: 'short-links',
+    backUrl: '/short-links/' + link.id + '/report',
+    breadcrumb: [
+      { label: 'Rút gọn link', url: '/short-links' },
+      { label: link.title || link.code, url: '/short-links/' + link.id + '/report' },
+      { label: 'Log' }
+    ]
+  }) %>
+
+  <div class="container bg-white p-4 rounded shadow-sm mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h4 class="mb-0">Log: <span class="text-primary"><%= link.title || link.code %></span></h4>
+        <small class="text-muted">https://<%= link.domain_url %>/s/<%= link.code %></small>
+      </div>
+    </div>
+
+    <form class="row g-2 mb-3" method="GET">
+      <div class="col-auto">
+        <label class="form-label">Từ ngày</label>
+        <input type="date" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Đến ngày</label>
+        <input type="date" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Số dòng</label>
+        <input type="number" name="limit" value="<%= limit %>" min="50" max="2000" class="form-control form-control-sm">
+      </div>
+      <div class="col-auto align-self-end">
+        <button class="btn btn-primary btn-sm" type="submit">Lọc</button>
+      </div>
+    </form>
+
+    <div class="table-responsive">
+      <table class="table table-sm table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>Thời gian (VN)</th>
+            <th>IP</th>
+            <th>Quốc gia</th>
+            <th>Thiết bị / OS</th>
+            <th>Browser</th>
+            <th>Referer</th>
+            <th>Request URL</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (!logs.length) { %><tr><td colspan="7" class="text-center text-muted">Không có log</td></tr><% } %>
+          <% logs.forEach(log => { const meta = log.meta || {}; %>
+            <tr>
+              <td><%= new Date(log.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
+              <td class="font-monospace"><%= log.ip || '-' %></td>
+              <td><span class="badge bg-info text-dark"><%= log.country || '-' %></span></td>
+              <td><%= log.device_type || 'pc' %> / <%= log.os_name || 'Unknown' %></td>
+              <td><%= log.browser_name || 'Unknown' %></td>
+              <td class="text-break small" style="max-width:240px;"><%= meta.ref || log.referer || '-' %></td>
+              <td class="text-break small" style="max-width:320px;"><%= meta.url || '-' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <%- include('../partials/footer') %>
+</body>
+</html>

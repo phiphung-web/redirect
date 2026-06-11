@@ -107,6 +107,7 @@ test("ads redirects active short link", async () => {
     if (sql.includes("INSERT INTO traffic_logs")) {
       trafficLogged = true;
       assert.equal(params[8], "short_redirect");
+      assert.equal(params[12], 12);
       return { rowCount: 1, rows: [] };
     }
     throw new Error(`Unhandled query in short link test: ${sql}`);

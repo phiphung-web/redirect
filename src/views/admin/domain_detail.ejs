@@ -69,13 +69,16 @@
             </div>
 
             <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white fw-bold">Safe Page</div>
+                <div class="card-header bg-white">
+                    <div class="fw-bold">Safe Page mặc định của domain</div>
+                    <div class="text-muted small">Dùng khi link/campaign chưa chọn mẫu riêng, không match campaign, short link lỗi/OFF hoặc hệ thống cần fallback an toàn.</div>
+                </div>
                 <form class="card-body" action="/domains/<%= domain.id %>/safe-content" method="POST">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="row g-3">
                         <div class="col-md-3">
-                            <label class="form-label fw-bold">Template</label>
-                            <select name="safe_template" class="form-select" id="safeTemplateSelect" onchange="toggleCustomSafeFields()">
+                            <label class="form-label fw-bold">Template mặc định</label>
+                            <select name="safe_template" class="form-select" id="safeTemplateSelect" onchange="toggleCustomSafeFields(); renderDomainSafeDefaultPreview();">
                                 <option value="clean" <%= domain.safe_template === 'clean' ? 'selected' : '' %>>Clean</option>
                                 <option value="news" <%= domain.safe_template === 'news' ? 'selected' : '' %>>News</option>
                                 <option value="shop" <%= domain.safe_template === 'shop' ? 'selected' : '' %>>Shop</option>
@@ -84,31 +87,35 @@
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fw-bold">Title</label>
-                            <input type="text" name="safe_title" class="form-control" value="<%= domain.safe_content?.title || '' %>">
+                            <input type="text" name="safe_title" id="domainSafeTitle" class="form-control" value="<%= domain.safe_content?.title || '' %>" oninput="renderDomainSafeDefaultPreview()">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fw-bold">Headline</label>
-                            <input type="text" name="safe_headline" class="form-control" value="<%= domain.safe_content?.headline || '' %>">
+                            <input type="text" name="safe_headline" id="domainSafeHeadline" class="form-control" value="<%= domain.safe_content?.headline || '' %>" oninput="renderDomainSafeDefaultPreview()">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fw-bold">Logo URL</label>
-                            <input type="url" name="safe_logo" class="form-control" value="<%= domain.safe_content?.logo || '' %>">
+                            <input type="url" name="safe_logo" id="domainSafeLogo" class="form-control" value="<%= domain.safe_content?.logo || '' %>" oninput="renderDomainSafeDefaultPreview()">
                         </div>
                     </div>
                     <div class="row g-3 mt-1" id="customSafeFields">
                         <div class="col-md-7">
                             <label class="form-label fw-bold">Custom HTML</label>
-                            <textarea name="safe_custom_html" class="form-control font-monospace" rows="9" placeholder="<section class='hero'>..."><%= domain.safe_content?.custom_html || '' %></textarea>
+                            <textarea name="safe_custom_html" id="domainSafeCustomHtml" class="form-control font-monospace" rows="9" placeholder="<section class='hero'>..." oninput="renderDomainSafeDefaultPreview()"><%= domain.safe_content?.custom_html || '' %></textarea>
                             <div class="form-text">HTML tĩnh cho phần body. Hệ thống sẽ loại bỏ script, form, iframe và event handler.</div>
                         </div>
                         <div class="col-md-5">
                             <label class="form-label fw-bold">Custom CSS</label>
-                            <textarea name="safe_custom_css" class="form-control font-monospace" rows="9" placeholder=".hero { ... }"><%= domain.safe_content?.custom_css || '' %></textarea>
+                            <textarea name="safe_custom_css" id="domainSafeCustomCss" class="form-control font-monospace" rows="9" placeholder=".hero { ... }" oninput="renderDomainSafeDefaultPreview()"><%= domain.safe_content?.custom_css || '' %></textarea>
                             <div class="form-text">CSS tĩnh, không dùng @import hoặc javascript URL.</div>
                         </div>
                     </div>
+                    <div class="mt-3">
+                        <label class="form-label fw-bold">Preview mặc định</label>
+                        <iframe id="domainSafeDefaultPreview" class="w-100 border rounded bg-white" style="height:220px;" sandbox=""></iframe>
+                    </div>
                     <div class="mt-3 text-end">
-                        <button type="submit" class="btn btn-outline-primary">Lưu Safe Page</button>
+                        <button type="submit" class="btn btn-outline-primary">Lưu mặc định</button>
                     </div>
                 </form>
             </div>
@@ -539,6 +546,20 @@
                 setFramePreview('safePageBuilderPreview', page);
             }
 
+            function renderDomainSafeDefaultPreview() {
+                const page = {
+                    template: document.getElementById('safeTemplateSelect')?.value || 'clean',
+                    content: {
+                        title: document.getElementById('domainSafeTitle')?.value || '',
+                        headline: document.getElementById('domainSafeHeadline')?.value || '',
+                        logo: document.getElementById('domainSafeLogo')?.value || '',
+                        custom_html: document.getElementById('domainSafeCustomHtml')?.value || '',
+                        custom_css: document.getElementById('domainSafeCustomCss')?.value || ''
+                    }
+                };
+                setFramePreview('domainSafeDefaultPreview', page);
+            }
+
             function renderCampaignSafePagePreview() {
                 const select = document.getElementById('campaignSafePageSelect');
                 const id = select ? select.value : '';
@@ -570,6 +591,7 @@
             document.addEventListener('DOMContentLoaded', function () {
                 toggleCustomSafeFields();
                 toggleSafePageCustomFields();
+                renderDomainSafeDefaultPreview();
                 renderSafePageBuilderPreview();
                 renderCampaignSafePagePreview();
                 renderRowPreviews();

@@ -51,7 +51,15 @@ Load `.env` from the project directory before starting PM2, or export variables 
 
 ## Database
 
-Restore `database/schema_backup.sql`, then apply migrations in `database/migrations` in filename order.
+Restore `database/schema_backup.sql`, then run all idempotent migrations in filename order:
+
+```bash
+npm run migrate
+```
+
+The migration runner uses the same `DB_*` settings as the app. Prefer it over
+manual `psql -f` commands on production because it avoids `/root/redirect`
+permission issues when switching to the `postgres` Linux user.
 
 ## Upgrade from redirect-check
 
@@ -65,16 +73,13 @@ git pull origin main
 npm install
 ```
 
-Apply the new idempotent migrations before the first reload:
+Apply migrations before the first reload:
 
 ```bash
 set -a
 . ./.env
 set +a
-export PGPASSWORD="$DB_PASS"
-psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f database/migrations/2026-03-17-admin-audit-log.sql
-psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f database/migrations/2026-03-17-request-id.sql
-psql -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" -d "$DB_NAME" -f database/migrations/2026-04-27-clean-safe-template.sql
+npm run migrate
 ```
 
 Then verify and reload:
@@ -89,5 +94,6 @@ The code keeps compatible defaults for the old server when `.env` is missing, bu
 ## Notes
 
 - Safe page templates live in `src/views/safepages`.
-- The new clean template is `clean`.
+- Domain-level safe page settings are the default fallback. Campaigns can use a template from the domain safe-page library instead.
+- Short-link detailed reporting requires `traffic_logs.short_link_id`, created by `npm run migrate`.
 - Admin views use shared styling from `public/css/app.css`.

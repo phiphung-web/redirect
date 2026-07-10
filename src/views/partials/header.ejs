@@ -24,12 +24,13 @@
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle <%= currentMenu === 'redirect' ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <a class="nav-link dropdown-toggle <%= ['redirect','short-links','safe-pages'].includes(currentMenu) ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             Chức năng
           </a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item <%= currentMenu === 'redirect' ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-shuffle me-2 text-primary"></i>Redirect</a></li>
             <li><a class="dropdown-item <%= currentMenu === 'short-links' ? 'active' : '' %>" href="/short-links"><i class="fa-solid fa-link me-2 text-primary"></i>Rút gọn link</a></li>
+            <li><a class="dropdown-item <%= currentMenu === 'safe-pages' ? 'active' : '' %>" href="/safe-pages"><i class="fa-solid fa-palette me-2 text-primary"></i>Giao diện mẫu</a></li>
           </ul>
         </li>
         <% if (isAdmin) { %>

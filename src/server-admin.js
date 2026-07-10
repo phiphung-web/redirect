@@ -688,6 +688,90 @@ app.get("/short-links/:id/report/export", checkAuth, async (req, res) => {
   res.send(rows.join("\n"));
 });
 
+// --- SAFE PAGE TEMPLATES ---
+app.get("/safe-pages", checkAuth, async (req, res) => {
+  let selectedDomainId = null;
+  try {
+    selectedDomainId = normalizeOptionalId(req.query.domain_id, "Domain");
+  } catch {
+    return res.redirect("/safe-pages");
+  }
+  const domains = await db.query(
+    `SELECT id, domain_url, status FROM domains ORDER BY domain_url ASC`
+  );
+  const params = [];
+  let where = "";
+  if (selectedDomainId) {
+    params.push(selectedDomainId);
+    where = "WHERE sp.domain_id=$1";
+  }
+  const safePages = await db.query(
+    `
+      SELECT sp.*, d.domain_url, cu.username AS created_by_name, uu.username AS updated_by_name,
+             (SELECT COUNT(*) FROM campaigns c WHERE c.safe_page_id = sp.id) AS used_by_links
+      FROM safe_pages sp
+      JOIN domains d ON d.id = sp.domain_id
+      LEFT JOIN users cu ON sp.user_id = cu.id
+      LEFT JOIN users uu ON sp.updated_by = uu.id
+      ${where}
+      ORDER BY sp.id DESC
+    `,
+    params
+  );
+
+  res.render("admin/safe_pages", {
+    user: req.session.user,
+    domains: domains.rows,
+    safePages: safePages.rows,
+    selectedDomainId,
+  });
+});
+
+app.post("/safe-pages/create", checkAuth, async (req, res) => {
+  try {
+    const domainId = normalizeOptionalId(req.body.domain_id, "Domain");
+    if (!domainId) throw new Error("Domain khong hop le");
+    const name = validateName(req.body.safe_page_name, "Ten mau");
+    const template = normalizeSafeTemplate(req.body.safe_page_template);
+    const content = normalizeSafeContent({
+      title: req.body.safe_page_title,
+      headline: req.body.safe_page_headline,
+      logo: req.body.safe_page_logo,
+      custom_html: req.body.safe_page_custom_html,
+      custom_css: req.body.safe_page_custom_css,
+    });
+    const domain = await db.query(`SELECT id FROM domains WHERE id=$1 LIMIT 1`, [
+      domainId,
+    ]);
+    if (!domain.rowCount) throw new Error("Domain khong ton tai");
+
+    await db.query(
+      `
+        INSERT INTO safe_pages (domain_id, user_id, name, template, content, updated_by)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        domainId,
+        req.session.user.id,
+        name,
+        template,
+        JSON.stringify(content),
+        req.session.user.id,
+      ]
+    );
+    await auditAdminAction({
+      req,
+      action: "safe_page_create",
+      targetType: "safe_page",
+      targetId: `${domainId}:${name}`,
+      detail: { domain_id: domainId, name, template },
+    });
+    res.redirect(`/safe-pages?domain_id=${domainId}`);
+  } catch (e) {
+    res.send(e.message || "Mau safe page khong hop le");
+  }
+});
+
 // --- DOMAIN (CRUD) ---
 app.post("/domains/create", checkAuth, async (req, res) => {
   try {
@@ -980,7 +1064,13 @@ app.post("/safe-pages/update/:id", checkAuth, async (req, res) => {
       targetId: req.params.id,
       detail: { name, template },
     });
-    res.redirect(r.rowCount ? "/domains/" + r.rows[0].domain_id : "/redirect");
+    const redirectUrl =
+      req.body.return_to === "safe-pages" && r.rowCount
+        ? `/safe-pages?domain_id=${r.rows[0].domain_id}`
+        : r.rowCount
+        ? "/domains/" + r.rows[0].domain_id
+        : "/redirect";
+    res.redirect(redirectUrl);
   } catch (e) {
     res.send(e.message || "Mau safe page khong hop le");
   }
@@ -997,7 +1087,13 @@ const toggleSafePageHandler = async (req, res) => {
     targetType: "safe_page",
     targetId: req.params.id,
   });
-  res.redirect(r.rowCount ? "/domains/" + r.rows[0].domain_id : "/redirect");
+  const redirectUrl =
+    req.body.return_to === "safe-pages" && r.rowCount
+      ? `/safe-pages?domain_id=${r.rows[0].domain_id}`
+      : r.rowCount
+      ? "/domains/" + r.rows[0].domain_id
+      : "/redirect";
+  res.redirect(redirectUrl);
 };
 app.get("/safe-pages/toggle/:id", checkAuth, (req, res) =>
   res.status(405).send("Use POST /safe-pages/toggle/:id")
@@ -1015,7 +1111,13 @@ const deleteSafePageHandler = async (req, res) => {
     targetType: "safe_page",
     targetId: req.params.id,
   });
-  res.redirect(r.rowCount ? "/domains/" + r.rows[0].domain_id : "/redirect");
+  const redirectUrl =
+    req.body.return_to === "safe-pages" && r.rowCount
+      ? `/safe-pages?domain_id=${r.rows[0].domain_id}`
+      : r.rowCount
+      ? "/domains/" + r.rows[0].domain_id
+      : "/redirect";
+  res.redirect(redirectUrl);
 };
 app.get("/safe-pages/delete/:id", requireRole(["super_admin"]), (req, res) =>
   res.status(405).send("Use POST /safe-pages/delete/:id")

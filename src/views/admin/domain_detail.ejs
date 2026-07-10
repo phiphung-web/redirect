@@ -75,157 +75,66 @@
                 </div>
                 <form class="card-body" action="/domains/<%= domain.id %>/safe-content" method="POST">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <div class="row g-3">
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Template mặc định</label>
-                            <select name="safe_template" class="form-select" id="safeTemplateSelect" onchange="toggleCustomSafeFields(); renderDomainSafeDefaultPreview();">
-                                <option value="clean" <%= domain.safe_template === 'clean' ? 'selected' : '' %>>Clean</option>
-                                <option value="news" <%= domain.safe_template === 'news' ? 'selected' : '' %>>News</option>
-                                <option value="shop" <%= domain.safe_template === 'shop' ? 'selected' : '' %>>Shop</option>
-                                <option value="custom" <%= domain.safe_template === 'custom' ? 'selected' : '' %>>Custom</option>
-                            </select>
+                    <div class="row g-4 align-items-start">
+                        <div class="col-lg-5">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold mb-0">Giao diện mặc định hiện tại</label>
+                                <span class="badge bg-light text-dark border"><%= domain.safe_template %></span>
+                            </div>
+                            <iframe id="domainSafeDefaultPreview" class="w-100 border rounded bg-white" style="height:300px;" sandbox=""></iframe>
+                            <div class="form-text">Mẫu fallback cấp domain. Link không chọn mẫu riêng sẽ dùng giao diện này.</div>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Title</label>
-                            <input type="text" name="safe_title" id="domainSafeTitle" class="form-control" value="<%= domain.safe_content?.title || '' %>" oninput="renderDomainSafeDefaultPreview()">
+                        <div class="col-lg-7">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Template mặc định</label>
+                                    <select name="safe_template" class="form-select" id="safeTemplateSelect" onchange="toggleCustomSafeFields(); renderDomainSafeDefaultPreview();">
+                                        <option value="clean" <%= domain.safe_template === 'clean' ? 'selected' : '' %>>Clean</option>
+                                        <option value="news" <%= domain.safe_template === 'news' ? 'selected' : '' %>>News</option>
+                                        <option value="shop" <%= domain.safe_template === 'shop' ? 'selected' : '' %>>Shop</option>
+                                        <option value="custom" <%= domain.safe_template === 'custom' ? 'selected' : '' %>>Custom</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Logo URL</label>
+                                    <input type="url" name="safe_logo" id="domainSafeLogo" class="form-control" value="<%= domain.safe_content?.logo || '' %>" oninput="renderDomainSafeDefaultPreview()">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Title</label>
+                                    <input type="text" name="safe_title" id="domainSafeTitle" class="form-control" value="<%= domain.safe_content?.title || '' %>" oninput="renderDomainSafeDefaultPreview()">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Headline</label>
+                                    <input type="text" name="safe_headline" id="domainSafeHeadline" class="form-control" value="<%= domain.safe_content?.headline || '' %>" oninput="renderDomainSafeDefaultPreview()">
+                                </div>
+                            </div>
+                            <div class="row g-3 mt-1" id="customSafeFields">
+                                <div class="col-md-7">
+                                    <label class="form-label fw-bold">Custom HTML</label>
+                                    <textarea name="safe_custom_html" id="domainSafeCustomHtml" class="form-control font-monospace" rows="9" placeholder="<section class='hero'>..." oninput="renderDomainSafeDefaultPreview()"><%= domain.safe_content?.custom_html || '' %></textarea>
+                                    <div class="form-text">HTML tĩnh cho phần body. Hệ thống sẽ loại bỏ script, form, iframe và event handler.</div>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label fw-bold">Custom CSS</label>
+                                    <textarea name="safe_custom_css" id="domainSafeCustomCss" class="form-control font-monospace" rows="9" placeholder=".hero { ... }" oninput="renderDomainSafeDefaultPreview()"><%= domain.safe_content?.custom_css || '' %></textarea>
+                                    <div class="form-text">CSS tĩnh, không dùng @import hoặc javascript URL.</div>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-end">
+                                <button type="submit" class="btn btn-outline-primary">Lưu mặc định</button>
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Headline</label>
-                            <input type="text" name="safe_headline" id="domainSafeHeadline" class="form-control" value="<%= domain.safe_content?.headline || '' %>" oninput="renderDomainSafeDefaultPreview()">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Logo URL</label>
-                            <input type="url" name="safe_logo" id="domainSafeLogo" class="form-control" value="<%= domain.safe_content?.logo || '' %>" oninput="renderDomainSafeDefaultPreview()">
-                        </div>
-                    </div>
-                    <div class="row g-3 mt-1" id="customSafeFields">
-                        <div class="col-md-7">
-                            <label class="form-label fw-bold">Custom HTML</label>
-                            <textarea name="safe_custom_html" id="domainSafeCustomHtml" class="form-control font-monospace" rows="9" placeholder="<section class='hero'>..." oninput="renderDomainSafeDefaultPreview()"><%= domain.safe_content?.custom_html || '' %></textarea>
-                            <div class="form-text">HTML tĩnh cho phần body. Hệ thống sẽ loại bỏ script, form, iframe và event handler.</div>
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label fw-bold">Custom CSS</label>
-                            <textarea name="safe_custom_css" id="domainSafeCustomCss" class="form-control font-monospace" rows="9" placeholder=".hero { ... }" oninput="renderDomainSafeDefaultPreview()"><%= domain.safe_content?.custom_css || '' %></textarea>
-                            <div class="form-text">CSS tĩnh, không dùng @import hoặc javascript URL.</div>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <label class="form-label fw-bold">Preview mặc định</label>
-                        <iframe id="domainSafeDefaultPreview" class="w-100 border rounded bg-white" style="height:220px;" sandbox=""></iframe>
-                    </div>
-                    <div class="mt-3 text-end">
-                        <button type="submit" class="btn btn-outline-primary">Lưu mặc định</button>
                     </div>
                 </form>
             </div>
 
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <span class="fw-bold">Thư viện mẫu Safe Page</span>
-                    <span class="badge bg-primary"><%= safePages.length %> mẫu</span>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+                <div class="text-muted small">
+                    Mẫu giao diện tự tạo được quản lý ở tab riêng. Khi tạo link, chỉ cần chọn mẫu đã có.
                 </div>
-                <div class="card-body">
-                    <form action="/domains/<%= domain.id %>/safe-pages/create" method="POST" class="border rounded p-3 bg-light mb-4">
-                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Tên mẫu</label>
-                                <input type="text" name="safe_page_name" class="form-control" maxlength="150" placeholder="VD: News Organic" required>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label fw-bold">Template</label>
-                                <select name="safe_page_template" class="form-select" id="safePageTemplateSelect" onchange="toggleSafePageCustomFields(); renderSafePageBuilderPreview();">
-                                    <option value="clean">Clean</option>
-                                    <option value="news">News</option>
-                                    <option value="shop">Shop</option>
-                                    <option value="custom">Custom</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label fw-bold">Title</label>
-                                <input type="text" name="safe_page_title" id="safePageTitle" class="form-control" oninput="renderSafePageBuilderPreview()" placeholder="Tin tức 24h">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label fw-bold">Headline</label>
-                                <input type="text" name="safe_page_headline" id="safePageHeadline" class="form-control" oninput="renderSafePageBuilderPreview()" placeholder="Cập nhật mới nhất">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Logo URL</label>
-                                <input type="url" name="safe_page_logo" id="safePageLogo" class="form-control" oninput="renderSafePageBuilderPreview()">
-                            </div>
-                            <div class="col-md-8">
-                                <label class="form-label fw-bold">Preview</label>
-                                <iframe id="safePageBuilderPreview" class="w-100 border rounded bg-white" style="height:180px;" sandbox=""></iframe>
-                            </div>
-                        </div>
-                        <div class="row g-3 mt-1" id="safePageCustomFields">
-                            <div class="col-md-7">
-                                <label class="form-label fw-bold">HTML</label>
-                                <textarea name="safe_page_custom_html" id="safePageCustomHtml" class="form-control font-monospace" rows="7" oninput="renderSafePageBuilderPreview()" placeholder="<section class='hero'>..."></textarea>
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label fw-bold">CSS</label>
-                                <textarea name="safe_page_custom_css" id="safePageCustomCss" class="form-control font-monospace" rows="7" oninput="renderSafePageBuilderPreview()" placeholder=".hero { ... }"></textarea>
-                            </div>
-                        </div>
-                        <div class="mt-3 text-end">
-                            <button type="submit" class="btn btn-primary">Thêm mẫu</button>
-                        </div>
-                    </form>
-
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Tên mẫu</th>
-                                    <th>Template</th>
-                                    <th>Preview</th>
-                                    <th>Trạng thái</th>
-                                    <th class="text-end">Hành động</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <% if (!safePages.length) { %>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">Chưa có mẫu riêng. Link sẽ dùng safe page mặc định của domain.</td>
-                                    </tr>
-                                <% } %>
-                                <% safePages.forEach((sp) => { %>
-                                    <tr>
-                                        <td>
-                                            <b><%= sp.name %></b><br>
-                                            <small class="text-muted">By <%= sp.created_by_name || 'N/A' %></small>
-                                        </td>
-                                        <td><span class="badge bg-light text-dark border"><%= sp.template %></span></td>
-                                        <td style="width:260px;">
-                                            <iframe class="w-100 border rounded bg-white safe-page-row-preview" style="height:120px;" sandbox="" data-safe-page-id="<%= sp.id %>"></iframe>
-                                        </td>
-                                        <td>
-                                            <form action="/safe-pages/toggle/<%= sp.id %>" method="POST" class="d-inline">
-                                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                                                <button type="submit" class="btn btn-sm <%= sp.is_active ? 'btn-success' : 'btn-danger' %>">
-                                                    <%= sp.is_active ? 'ON' : 'OFF' %>
-                                                </button>
-                                            </form>
-                                        </td>
-                                        <td class="text-end">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editSafePageModal-<%= sp.id %>">
-                                                Sửa
-                                            </button>
-                                            <% if (user.role_name === 'super_admin') { %>
-                                                <form action="/safe-pages/delete/<%= sp.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa mẫu safe page này? Campaign đang dùng mẫu này sẽ quay về mặc định domain.')">
-                                                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                                </form>
-                                            <% } %>
-                                        </td>
-                                    </tr>
-                                <% }) %>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                <a href="/safe-pages?domain_id=<%= domain.id %>" class="btn btn-outline-primary">
+                    <i class="fas fa-palette me-1"></i> Quản lý giao diện mẫu
+                </a>
             </div>
 
             <div class="card shadow-sm">
@@ -325,61 +234,6 @@
                 </table>
             </div>
         </div>
-
-        <% safePages.forEach((sp) => { %>
-            <div class="modal fade" id="editSafePageModal-<%= sp.id %>" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <form class="modal-content" action="/safe-pages/update/<%= sp.id %>" method="POST">
-                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Sửa mẫu Safe Page</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Tên mẫu</label>
-                                    <input type="text" name="safe_page_name" class="form-control" maxlength="150" value="<%= sp.name %>" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Template</label>
-                                    <select name="safe_page_template" class="form-select">
-                                        <option value="clean" <%= sp.template === 'clean' ? 'selected' : '' %>>Clean</option>
-                                        <option value="news" <%= sp.template === 'news' ? 'selected' : '' %>>News</option>
-                                        <option value="shop" <%= sp.template === 'shop' ? 'selected' : '' %>>Shop</option>
-                                        <option value="custom" <%= sp.template === 'custom' ? 'selected' : '' %>>Custom</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label fw-bold">Title</label>
-                                    <input type="text" name="safe_page_title" class="form-control" value="<%= sp.content?.title || '' %>">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label fw-bold">Headline</label>
-                                    <input type="text" name="safe_page_headline" class="form-control" value="<%= sp.content?.headline || '' %>">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label fw-bold">Logo URL</label>
-                                    <input type="url" name="safe_page_logo" class="form-control" value="<%= sp.content?.logo || '' %>">
-                                </div>
-                                <div class="col-md-7">
-                                    <label class="form-label fw-bold">HTML</label>
-                                    <textarea name="safe_page_custom_html" class="form-control font-monospace" rows="8"><%= sp.content?.custom_html || '' %></textarea>
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="form-label fw-bold">CSS</label>
-                                    <textarea name="safe_page_custom_css" class="form-control font-monospace" rows="8"><%= sp.content?.custom_css || '' %></textarea>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                            <button type="submit" class="btn btn-primary">Lưu mẫu</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        <% }) %>
 
         <div class="modal fade" id="addLinkModal" data-bs-backdrop="static">
             <div class="modal-dialog modal-lg">
@@ -532,20 +386,6 @@
                 frame.srcdoc = buildSafePagePreviewHtml(page);
             }
 
-            function renderSafePageBuilderPreview() {
-                const page = {
-                    template: document.getElementById('safePageTemplateSelect')?.value || 'clean',
-                    content: {
-                        title: document.getElementById('safePageTitle')?.value || '',
-                        headline: document.getElementById('safePageHeadline')?.value || '',
-                        logo: document.getElementById('safePageLogo')?.value || '',
-                        custom_html: document.getElementById('safePageCustomHtml')?.value || '',
-                        custom_css: document.getElementById('safePageCustomCss')?.value || ''
-                    }
-                };
-                setFramePreview('safePageBuilderPreview', page);
-            }
-
             function renderDomainSafeDefaultPreview() {
                 const page = {
                     template: document.getElementById('safeTemplateSelect')?.value || 'clean',
@@ -567,20 +407,6 @@
                 setFramePreview('campaignSafePagePreview', page || DOMAIN_SAFE_PAGE);
             }
 
-            function renderRowPreviews() {
-                document.querySelectorAll('.safe-page-row-preview').forEach(frame => {
-                    const page = SAFE_PAGES.find(sp => String(sp.id) === String(frame.dataset.safePageId));
-                    if (page) frame.srcdoc = buildSafePagePreviewHtml(page);
-                });
-            }
-
-            function toggleSafePageCustomFields() {
-                const select = document.getElementById('safePageTemplateSelect');
-                const fields = document.getElementById('safePageCustomFields');
-                if (!select || !fields) return;
-                fields.style.display = select.value === 'custom' ? '' : 'none';
-            }
-
             function toggleCustomSafeFields() {
                 const select = document.getElementById('safeTemplateSelect');
                 const fields = document.getElementById('customSafeFields');
@@ -590,11 +416,8 @@
 
             document.addEventListener('DOMContentLoaded', function () {
                 toggleCustomSafeFields();
-                toggleSafePageCustomFields();
                 renderDomainSafeDefaultPreview();
-                renderSafePageBuilderPreview();
                 renderCampaignSafePagePreview();
-                renderRowPreviews();
                 updateRulesQueryString();
             });
 

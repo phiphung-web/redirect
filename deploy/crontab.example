@@ -1,0 +1,5 @@
+# Daily database backup at 02:10
+10 2 * * * cd /opt/linkpilot && /usr/bin/npm run backup >> /var/log/linkpilot-maintenance.log 2>&1
+
+# Daily traffic aggregation and raw-log retention at 03:10
+10 3 * * * cd /opt/linkpilot && /usr/bin/npm run cleanup:logs >> /var/log/linkpilot-maintenance.log 2>&1

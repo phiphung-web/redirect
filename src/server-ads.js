@@ -1,0 +1,343 @@
+require("dotenv").config({ quiet: true });
+
+const express = require("express");
+const helmet = require("helmet");
+const path = require("path");
+const geoip = require("geoip-lite");
+const UAParser = require("ua-parser-js");
+const { ports, trustProxy, product } = require("./config/app");
+const db = require("./config/db");
+const { requestContext } = require("./middleware/request-context");
+const { logTraffic, flushTrafficLogs } = require("./services/logger");
+const {
+  domainCache,
+  campaignCache,
+  shortLinkCache,
+} = require("./services/runtime-cache");
+const {
+  incrementCampaign,
+  incrementShortLink,
+  flushCounters,
+} = require("./services/counter-buffer");
+const {
+  normalizeSafeTemplate,
+  normalizeShortCode,
+  sanitizeCustomCss,
+  sanitizeCustomHtml,
+} = require("./utils/validation");
+
+const app = express();
+const PORT = ports.ads;
+
+app.disable("x-powered-by");
+app.set("trust proxy", trustProxy);
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(requestContext);
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
+
+const normalizeQueryEntries = (query) =>
+  Object.entries(query)
+    .slice(0, 30)
+    .map(([key, value]) => [
+      String(key),
+      Array.isArray(value) ? String(value[0] || "") : String(value || ""),
+    ]);
+
+const getDomain = async (host) => {
+  const cacheKey = host.toLowerCase();
+  const cached = domainCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  try {
+    const result = await db.query(
+      `SELECT * FROM domains WHERE domain_url = $1 AND status = 'active' LIMIT 1`,
+      [cacheKey]
+    );
+    return domainCache.set(cacheKey, result.rows[0] || null);
+  } catch (error) {
+    const stale = domainCache.getStale(cacheKey);
+    if (stale !== undefined) return stale;
+    throw error;
+  }
+};
+
+const getShortLink = async (domainId, code) => {
+  const cacheKey = `${domainId}:${code.toLowerCase()}`;
+  const cached = shortLinkCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  try {
+    const result = await db.query(
+      `SELECT * FROM short_links
+       WHERE domain_id=$1 AND lower(code)=lower($2)
+       LIMIT 1`,
+      [domainId, code]
+    );
+    return shortLinkCache.set(cacheKey, result.rows[0] || null);
+  } catch (error) {
+    const stale = shortLinkCache.getStale(cacheKey);
+    if (stale !== undefined) return stale;
+    throw error;
+  }
+};
+
+const getCampaign = async (domainId, entries) => {
+  const missing = [];
+  for (const [key, value] of entries) {
+    const cacheKey = `${domainId}:${key}:${value}`;
+    const cached = campaignCache.get(cacheKey);
+    if (cached !== undefined) {
+      if (cached) return cached;
+    } else {
+      missing.push([key, value]);
+    }
+  }
+  if (!missing.length) return null;
+
+  let result;
+  try {
+    result = await db.query(
+      `SELECT c.*, sp.template AS safe_page_template, sp.content AS safe_page_content
+       FROM campaigns c
+       LEFT JOIN safe_pages sp ON sp.id = c.safe_page_id AND sp.is_active
+       JOIN unnest($2::text[], $3::text[]) AS incoming(param_key, param_value)
+         ON c.param_key = incoming.param_key AND c.param_value = incoming.param_value
+       WHERE c.domain_id=$1
+       ORDER BY c.id DESC
+       LIMIT 1`,
+      [
+        domainId,
+        missing.map(([key]) => key),
+        missing.map(([, value]) => value),
+      ]
+    );
+  } catch (error) {
+    for (const [key, value] of entries) {
+      const stale = campaignCache.getStale(`${domainId}:${key}:${value}`);
+      if (stale) return stale;
+    }
+    throw error;
+  }
+
+  missing.forEach(([key, value]) =>
+    campaignCache.set(`${domainId}:${key}:${value}`, null)
+  );
+  const campaign = result.rows[0] || null;
+  if (campaign) {
+    campaignCache.set(
+      `${domainId}:${campaign.param_key}:${campaign.param_value}`,
+      campaign
+    );
+  }
+  return campaign;
+};
+
+app.get("/healthz", async (req, res) => {
+  try {
+    await db.query("SELECT 1");
+    return res.json({
+      status: "ok",
+      service: "redirect-engine",
+      product: product.name,
+      uptime: Math.round(process.uptime()),
+    });
+  } catch (error) {
+    return res.status(503).json({ status: "error", service: "redirect-engine" });
+  }
+});
+
+app.get(/.*/, async (req, res) => {
+  let campaign = null;
+  let domain = null;
+  let renderSafe = null;
+  const host = String(req.hostname || req.get("host") || "").toLowerCase();
+  const rawIp =
+    req.headers["cf-connecting-ip"] ||
+    req.headers["x-forwarded-for"] ||
+    req.socket.remoteAddress;
+  const ip = rawIp ? String(rawIp).split(",")[0].trim() : "Unknown";
+  const uaString = req.headers["user-agent"] || "Unknown";
+  const queryParams = req.query;
+  const queryEntries = normalizeQueryEntries(queryParams);
+
+  try {
+    const ua = new UAParser(uaString).getResult();
+    const deviceType = ua.device?.type || "desktop";
+    const osName = ua.os?.name || "Unknown";
+    const browserName = ua.browser?.name || "Unknown";
+    const geo = geoip.lookup(ip);
+    const country = geo?.country || "XX";
+    const proto = req.get("x-forwarded-proto") || req.protocol || "http";
+    const requestUrl = `${proto}://${host}${req.originalUrl}`;
+
+    domain = await getDomain(host);
+
+    renderSafe = (domData, action = "safe_page", detail) => {
+      if (!domData) return res.status(404).send("Domain not configured");
+      const tpl = normalizeSafeTemplate(
+        campaign?.safe_page_template || domData.safe_template || "clean"
+      );
+      const cfg = campaign?.safe_page_content || domData.safe_content || {};
+
+      res.set({
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+
+      logTraffic({
+        domainId: domData.id,
+        campaignId: campaign?.id || null,
+        requestId: req.requestId,
+        ip,
+        country,
+        city: geo?.city,
+        device: deviceType,
+        os: osName,
+        browser: browserName,
+        action,
+        referer: req.headers.referer,
+        requestUrl,
+        detail,
+        ua: uaString,
+      });
+
+      const viewData = {
+        title: cfg.title || "Welcome",
+        headline: cfg.headline || "Latest updates",
+        themeColor: cfg.themeColor || "#2563eb",
+        domain: host,
+        logo: cfg.logo,
+        customHtml: sanitizeCustomHtml(cfg.custom_html),
+        customCss: sanitizeCustomCss(cfg.custom_css),
+      };
+
+      return res.render(`safepages/${tpl}`, viewData, (error, html) => {
+        if (!error) return res.send(html);
+        if (tpl === "clean") return res.status(200).send(`<h1>${host}</h1>`);
+        return res.render("safepages/clean", viewData, (fallbackError, fallbackHtml) => {
+          if (fallbackError) return res.status(200).send(`<h1>${host}</h1>`);
+          return res.send(fallbackHtml);
+        });
+      });
+    };
+
+    if (!domain) return res.status(404).send("Domain not configured");
+
+    const shortMatch = req.path.match(/^\/s\/([^/?#]+)\/?$/);
+    if (shortMatch) {
+      let shortCode;
+      try {
+        shortCode = normalizeShortCode(decodeURIComponent(shortMatch[1]));
+      } catch (error) {
+        return renderSafe(domain, "safe_page_short_invalid", "short_invalid");
+      }
+
+      const shortLink = await getShortLink(domain.id, shortCode);
+      if (!shortLink?.is_active) {
+        return renderSafe(
+          domain,
+          "safe_page_short_inactive",
+          "short_link_inactive"
+        );
+      }
+
+      incrementShortLink(shortLink.id);
+      logTraffic({
+        domainId: domain.id,
+        shortLinkId: shortLink.id,
+        requestId: req.requestId,
+        ip,
+        country,
+        city: geo?.city,
+        action: "short_redirect",
+        referer: req.headers.referer,
+        requestUrl,
+        detail: `short=${shortLink.id}`,
+        device: deviceType,
+        os: osName,
+        browser: browserName,
+        ua: uaString,
+      });
+
+      const target = new URL(shortLink.target_url);
+      queryEntries.forEach(([key, value]) => {
+        if (!target.searchParams.has(key)) target.searchParams.append(key, value);
+      });
+      return res.redirect(302, target.toString());
+    }
+
+    campaign = await getCampaign(domain.id, queryEntries);
+    if (!campaign?.is_active) {
+      return renderSafe(domain, "safe_page_inactive", "campaign_inactive");
+    }
+
+    const filters = campaign.filters || {};
+    if (filters.countries?.length && !filters.countries.includes(country)) {
+      return renderSafe(domain, "safe_page_wrong_country", `country=${country}`);
+    }
+    if (filters.devices?.length && !filters.devices.includes(deviceType)) {
+      return renderSafe(domain, "safe_page_wrong_device", `device=${deviceType}`);
+    }
+
+    for (const rule of campaign.rules || []) {
+      const value = queryParams[rule.key];
+      if (rule.operator === "exists" && (value === undefined || value === "")) {
+        return renderSafe(domain, "safe_page_missing_param", `missing:${rule.key}`);
+      }
+      if (
+        rule.operator === "equals" &&
+        (!value || String(value).toLowerCase() !== String(rule.value).toLowerCase())
+      ) {
+        return renderSafe(
+          domain,
+          "safe_page_wrong_param_val",
+          `expect ${rule.key}=${rule.value}; got=${value || "null"}`
+        );
+      }
+    }
+
+    const target = new URL(campaign.target_url);
+    queryEntries.forEach(([key, value]) => {
+      if (!target.searchParams.has(key)) target.searchParams.append(key, value);
+    });
+
+    incrementCampaign(campaign.id);
+    logTraffic({
+      domainId: domain.id,
+      campaignId: campaign.id,
+      requestId: req.requestId,
+      ip,
+      country,
+      action: "redirect",
+      referer: req.headers.referer,
+      requestUrl,
+      device: deviceType,
+      os: osName,
+      browser: browserName,
+      ua: uaString,
+    });
+    return res.redirect(302, target.toString());
+  } catch (error) {
+    console.error(`[${req.requestId}] redirect error:`, error.message);
+    if (domain && renderSafe) return renderSafe(domain, "error", error.code);
+    return res.status(500).send("Server Error");
+  }
+});
+
+if (require.main === module) {
+  const server = app.listen(PORT, () =>
+    console.log(`${product.name} redirect engine listening on ${PORT}`)
+  );
+
+  const shutdown = async (signal) => {
+    console.log(`${signal} received, flushing redirect buffers...`);
+    server.close();
+    await Promise.allSettled([flushTrafficLogs(), flushCounters()]);
+    await db.end().catch(() => undefined);
+    process.exit(0);
+  };
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+}
+
+module.exports = app;

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tổng quan · <%= product.name %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <%- include('../partials/header', { user, active: 'home', breadcrumb: [{ label: 'Tổng quan' }] }) %>
+  <div class="container-xxl">
+    <section class="hero-panel mb-4">
+      <div>
+        <div class="product-chip mb-3"><span class="status-dot"></span>Hệ thống sẵn sàng</div>
+        <p class="eyebrow mb-2">Xin chào, <%= user.username %></p>
+        <h1>Kiểm soát toàn bộ luồng redirect từ một nơi.</h1>
+        <p class="hero-copy">Thiết lập domain, tạo chiến dịch và theo dõi hiệu quả theo quy trình rõ ràng. Cấu hình mới được đồng bộ sang engine trong tối đa 30 giây.</p>
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-primary" href="/redirect"><i class="fa-solid fa-plus me-2"></i>Tạo chiến dịch</a>
+          <a class="btn btn-soft" href="/short-links"><i class="fa-solid fa-link me-2"></i>Tạo link nhanh</a>
+        </div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="route-node route-node-source"><i class="fa-solid fa-globe"></i></div>
+        <div class="route-line"></div>
+        <div class="route-node route-node-core"><%= product.shortName %></div>
+        <div class="route-line"></div>
+        <div class="route-node route-node-target"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
+      </div>
+    </section>
+
+    <section class="quick-grid mb-4">
+      <a class="quick-card" href="/redirect">
+        <div class="quick-icon primary"><i class="fa-solid fa-route"></i></div>
+        <div><span class="quick-label">Bước 1</span><h3>Domain & chiến dịch</h3><p>Thêm domain, tạo rule và chọn URL đích.</p></div>
+        <i class="fa-solid fa-arrow-right quick-arrow"></i>
+      </a>
+      <a class="quick-card" href="/safe-pages">
+        <div class="quick-icon violet"><i class="fa-solid fa-layer-group"></i></div>
+        <div><span class="quick-label">Bước 2</span><h3>Giao diện dự phòng</h3><p>Chuẩn bị mẫu hiển thị khi rule không khớp.</p></div>
+        <i class="fa-solid fa-arrow-right quick-arrow"></i>
+      </a>
+      <a class="quick-card" href="/short-links">
+        <div class="quick-icon green"><i class="fa-solid fa-link"></i></div>
+        <div><span class="quick-label">Tiện ích</span><h3>Link nhanh</h3><p>Tạo link gọn và vẫn giữ nguyên tham số tracking.</p></div>
+        <i class="fa-solid fa-arrow-right quick-arrow"></i>
+      </a>
+    </section>
+
+    <section class="card-surface operating-note">
+      <div class="d-flex align-items-start gap-3">
+        <div class="quick-icon amber"><i class="fa-solid fa-lightbulb"></i></div>
+        <div><h3 class="h6 fw-bold mb-2">Quy trình vận hành đề xuất</h3><p class="text-muted mb-0">Tạo domain → kiểm tra DNS → tạo chiến dịch → mở link thử → theo dõi báo cáo. Hãy thử trên một domain phụ trước khi đưa traffic thật vào hệ thống.</p></div>
+      </div>
+    </section>
+  </div>
+  <%- include('../partials/footer') %>
+</body>
+</html>

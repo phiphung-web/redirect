@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chiến dịch · <%= product.name %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <%- include('../partials/header', { user, active: 'redirect', breadcrumb: [{ label: 'Chiến dịch' }] }) %>
+  <div class="container-xxl">
+    <section class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+      <div>
+        <p class="eyebrow mb-1">Trung tâm điều phối</p>
+        <h1 class="h2 fw-bold mb-2">Domain và chiến dịch</h1>
+        <p class="text-muted mb-0">Quản lý điểm vào, trạng thái redirect và cấu hình dự phòng của từng domain.</p>
+      </div>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDomainModal">
+        <i class="fa-solid fa-plus me-2"></i>Thêm domain
+      </button>
+    </section>
+
+    <section class="metric-grid mb-4">
+      <div class="metric-card">
+        <div class="metric-icon blue"><i class="fa-solid fa-globe"></i></div>
+        <div><span>Domain</span><strong><%= Number(stats.total_domains || 0).toLocaleString('vi-VN') %></strong><small>Đang quản lý</small></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon violet"><i class="fa-solid fa-route"></i></div>
+        <div><span>Chiến dịch</span><strong><%= Number(stats.total_links || 0).toLocaleString('vi-VN') %></strong><small>Tổng cấu hình</small></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-icon green"><i class="fa-solid fa-arrow-trend-up"></i></div>
+        <div><span>Traffic</span><strong><%= Number(stats.total_traffic || 0).toLocaleString('vi-VN') %></strong><small>Lượt đã ghi nhận</small></div>
+      </div>
+    </section>
+
+    <section class="card domain-table-card">
+      <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between flex-wrap gap-2 px-4 py-3">
+        <div><h2 class="h6 fw-bold mb-1">Danh sách domain</h2><p class="text-muted small mb-0">Cấu hình mới có thể mất tối đa 30 giây để đồng bộ cache.</p></div>
+        <span class="badge text-bg-light"><%= domains.length %> domain</span>
+      </div>
+      <% if (!domains.length) { %>
+        <div class="empty-state">
+          <div class="empty-icon"><i class="fa-solid fa-globe"></i></div>
+          <h3>Chưa có domain nào</h3>
+          <p>Thêm domain đầu tiên để bắt đầu tạo chiến dịch redirect.</p>
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDomainModal"><i class="fa-solid fa-plus me-2"></i>Thêm domain đầu tiên</button>
+        </div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead><tr><th class="ps-4">Domain</th><th>Giao diện</th><th>Trạng thái</th><th>Chiến dịch</th><th class="text-end pe-4">Thao tác</th></tr></thead>
+            <tbody>
+              <% domains.forEach(d => { %>
+                <tr>
+                  <td class="ps-4">
+                    <div class="domain-cell"><div class="domain-avatar"><%= d.domain_url.substring(0, 1).toUpperCase() %></div><div><a href="https://<%= d.domain_url %>" target="_blank" rel="noopener" class="fw-bold text-dark text-decoration-none"><%= d.domain_url %></a><div class="text-muted small">ID #<%= d.id %></div></div></div>
+                  </td>
+                  <td><span class="badge bg-light text-dark border"><%= d.safe_template %></span></td>
+                  <td><span class="status-badge <%= d.status === 'active' ? 'active' : 'inactive' %>"><span class="status-dot"></span><%= d.status === 'active' ? 'Hoạt động' : 'Đã tắt' %></span></td>
+                  <td><div class="campaign-count"><strong><%= d.link_active || 0 %></strong> hoạt động <span>/ <%= d.link_count || 0 %> tổng</span></div></td>
+                  <td class="text-end pe-4 text-nowrap">
+                    <form action="/domains/toggle/<%= d.id %>" method="POST" class="d-inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-secondary" title="Bật/tắt"><i class="fa-solid fa-power-off"></i></button></form>
+                    <a href="/domains/<%= d.id %>" class="btn btn-sm btn-primary ms-1">Quản lý</a>
+                    <% if (user.role_name === 'super_admin') { %><form action="/domains/delete/<%= d.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa domain sẽ xóa toàn bộ chiến dịch và log liên quan. Tiếp tục?')"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Xóa"><i class="fa-solid fa-trash"></i></button></form><% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </section>
+  </div>
+
+  <div class="modal fade" id="addDomainModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <form class="modal-content" action="/domains/create" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="modal-header"><div><h5 class="modal-title fw-bold">Thêm domain</h5><p class="text-muted small mb-0">Domain cần được trỏ DNS về IP của redirect engine.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3"><label class="form-label fw-bold">Tên domain</label><input type="text" name="domain_url" class="form-control" required placeholder="go.example.com"><div class="form-text">Chỉ nhập tên miền, không nhập http:// hoặc đường dẫn.</div></div>
+          <div class="mb-2"><label class="form-label fw-bold">Giao diện dự phòng</label><select name="safe_template" class="form-select"><option value="clean">Clean — tối giản</option><option value="news">News — tin tức</option><option value="shop">Shop — cửa hàng</option><option value="custom">Custom — tùy chỉnh</option></select></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Lưu domain</button></div>
+      </form>
+    </div>
+  </div>
+  <%- include('../partials/footer') %>
+</body>
+</html>

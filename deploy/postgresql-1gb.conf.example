@@ -1,0 +1,11 @@
+# Conservative starting values for PostgreSQL on a 1 GB VPS.
+# Apply only after checking the active PostgreSQL version and config path.
+shared_buffers = 128MB
+effective_cache_size = 384MB
+maintenance_work_mem = 64MB
+work_mem = 2MB
+max_connections = 40
+checkpoint_completion_target = 0.9
+wal_buffers = 4MB
+random_page_cost = 1.1
+effective_io_concurrency = 100

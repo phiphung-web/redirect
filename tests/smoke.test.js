@@ -6,6 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
 const ejs = require("ejs");
+const fs = require("fs");
 const path = require("path");
 
 const db = require("../src/config/db");
@@ -45,9 +46,37 @@ test("product login, welcome and dashboard views render", async () => {
     stats: { total_domains: 0, total_links: 0, total_traffic: 0 },
     domains: [],
   });
+  const shortLinks = await ejs.renderFile(path.join(views, "short_links.ejs"), {
+    product,
+    csrfToken: "test-token",
+    user,
+    domains: [{ id: 1, domain_url: "example.com", status: "active" }],
+    links: [],
+  });
+  const waitPage = await ejs.renderFile(
+    path.join(__dirname, "../src/views/safepages/redirect_wait.ejs"),
+    {
+      product,
+      targetUrl: "https://target.test/landing?utm_source=email",
+      delaySeconds: 3,
+    }
+  );
   assert.match(login, /Chào mừng trở lại/);
   assert.match(welcome, /Kiểm soát toàn bộ luồng redirect/);
   assert.match(dashboard, /Chưa có domain nào/);
+  assert.match(shortLinks, /value="delayed" checked/);
+  assert.match(shortLinks, /Không kiểm tra campaign/);
+  assert.match(waitPage, /data-delay="3"/);
+  assert.match(waitPage, /https:\/\/target\.test\/landing\?utm_source=email/);
+});
+
+test("Facebook setup template no longer copies fbclid or fbcid", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "../src/views/admin/domain_detail.ejs"),
+    "utf8"
+  );
+  assert.doesNotMatch(source, /fbclid|fbcid/i);
+  assert.match(source, /addNewRule\('campaign_id', 'exists'\)/);
 });
 
 test("health endpoints report database readiness", async () => {
@@ -176,6 +205,59 @@ test("ads redirects active short link", async () => {
   assert.equal(clickUpdated, true);
   assert.equal(trafficLogged, true);
   assert.ok(res.headers["x-request-id"]);
+});
+
+test("ads renders a 3-second wait page without checking campaign rules", async () => {
+  let campaignWasChecked = false;
+
+  db.query = async (sql, params) => {
+    if (sql.includes("FROM domains WHERE domain_url")) {
+      return {
+        rowCount: 1,
+        rows: [{ id: 4, domain_url: "wait.example", status: "active" }],
+      };
+    }
+    if (sql.includes("FROM short_links")) {
+      assert.deepEqual(params, [4, "wait3"]);
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 19,
+            domain_id: 4,
+            code: "wait3",
+            is_active: true,
+            redirect_delay_seconds: 3,
+            target_url: "https://target.test/delayed?fixed=1",
+          },
+        ],
+      };
+    }
+    if (sql.includes("FROM campaigns c")) {
+      campaignWasChecked = true;
+      throw new Error("Delayed short links must bypass campaigns");
+    }
+    if (
+      sql.includes("UPDATE short_links SET clicks") ||
+      sql.includes("INSERT INTO traffic_logs")
+    ) {
+      return { rowCount: 1, rows: [] };
+    }
+    throw new Error(`Unhandled query in delayed short link test: ${sql}`);
+  };
+
+  const res = await request(adsApp)
+    .get("/s/wait3?utm_source=email&campaign_id=sale")
+    .set("Host", "wait.example")
+    .set("User-Agent", "Mozilla/5.0");
+
+  assert.equal(res.status, 200);
+  assert.equal(campaignWasChecked, false);
+  assert.match(res.headers["cache-control"], /no-store/);
+  assert.match(res.text, /data-delay="3"/);
+  assert.match(res.text, /utm_source=email/);
+  assert.match(res.text, /campaign_id=sale/);
+  assert.match(res.text, /Tiếp tục ngay/);
 });
 
 test("ads renders safe page when no active campaign matches", async () => {
@@ -421,4 +503,87 @@ test("admin login lazy-migrates plain password and creates domain via csrf form"
   assert.equal(createRes.status, 302);
   assert.equal(createRes.headers.location, "/redirect");
   assert.deepEqual(insertedDomain, ["news24h.com", "shop", 10, 10]);
+});
+
+test("admin creates a delayed short link with a fixed 3-second delay", async () => {
+  let insertedSql = "";
+  let insertedParams = null;
+
+  db.query = async (sql, params) => {
+    if (sql.includes("SELECT u.*, r.name as role_name FROM users")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 11,
+            username: "operator",
+            password_hash: "secret123",
+            role_id: 1,
+            role_name: "super_admin",
+          },
+        ],
+      };
+    }
+    if (sql.includes("UPDATE users SET password_hash=$1")) {
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes("SELECT id, domain_url, status FROM domains")) {
+      return {
+        rowCount: 1,
+        rows: [{ id: 5, domain_url: "wait.example", status: "active" }],
+      };
+    }
+    if (sql.includes("FROM short_links s")) {
+      return { rowCount: 0, rows: [] };
+    }
+    if (sql.includes("SELECT id FROM domains WHERE id=$1")) {
+      return { rowCount: 1, rows: [{ id: 5 }] };
+    }
+    if (sql.includes("INSERT INTO short_links")) {
+      insertedSql = sql;
+      insertedParams = params;
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes("INSERT INTO admin_audit_logs")) {
+      return { rowCount: 1, rows: [] };
+    }
+    throw new Error(`Unhandled query in delayed link admin test: ${sql}`);
+  };
+
+  const agent = request.agent(adminApp);
+  const loginPage = await agent.get("/login");
+  const loginCsrf = extractCsrf(loginPage.text);
+  const loginRes = await agent
+    .post("/login")
+    .type("form")
+    .send({ username: "operator", password: "secret123", _csrf: loginCsrf });
+  assert.equal(loginRes.status, 302);
+
+  const linksPage = await agent.get("/short-links");
+  assert.equal(linksPage.status, 200);
+  const formCsrf = extractCsrf(linksPage.text);
+  const createRes = await agent
+    .post("/short-links/create")
+    .type("form")
+    .send({
+      domain_id: "5",
+      title: "Chờ 3 giây",
+      target_url: "https://target.test/landing",
+      code: "wait3",
+      redirect_mode: "delayed",
+      _csrf: formCsrf,
+    });
+
+  assert.equal(createRes.status, 302);
+  assert.equal(createRes.headers.location, "/short-links");
+  assert.match(insertedSql, /redirect_delay_seconds/);
+  assert.deepEqual(insertedParams, [
+    5,
+    11,
+    "wait3",
+    "Chờ 3 giây",
+    "https://target.test/landing",
+    11,
+    3,
+  ]);
 });

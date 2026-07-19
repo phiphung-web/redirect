@@ -359,6 +359,7 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
   try {
     const title = validateName(req.body.title || "Short link", "Ten link");
     const targetUrl = normalizeTargetUrl(req.body.target_url);
+    const redirectDelaySeconds = req.body.redirect_mode === "delayed" ? 3 : 0;
     let code = req.body.code ? normalizeShortCode(req.body.code) : null;
     const domain = await db.query(`SELECT id FROM domains WHERE id=$1 LIMIT 1`, [
       domainId,
@@ -370,8 +371,9 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
       try {
         await db.query(
           `
-            INSERT INTO short_links (domain_id, user_id, code, title, target_url, updated_by)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO short_links
+              (domain_id, user_id, code, title, target_url, updated_by, redirect_delay_seconds)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
           `,
           [
             domainId,
@@ -380,6 +382,7 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
             title,
             targetUrl,
             req.session.user.id,
+            redirectDelaySeconds,
           ]
         );
         await auditAdminAction({
@@ -387,7 +390,12 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
           action: "short_link_create",
           targetType: "short_link",
           targetId: `${domainId}:${currentCode}`,
-          detail: { domain_id: domainId, code: currentCode, title },
+          detail: {
+            domain_id: domainId,
+            code: currentCode,
+            title,
+            redirect_delay_seconds: redirectDelaySeconds,
+          },
         });
         return res.redirect("/short-links");
       } catch (e) {

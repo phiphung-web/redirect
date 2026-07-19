@@ -263,6 +263,24 @@ app.get(/.*/, async (req, res) => {
       queryEntries.forEach(([key, value]) => {
         if (!target.searchParams.has(key)) target.searchParams.append(key, value);
       });
+
+      const configuredDelay = Number.parseInt(
+        shortLink.redirect_delay_seconds,
+        10
+      );
+      const redirectDelaySeconds = Number.isInteger(configuredDelay)
+        ? Math.min(Math.max(configuredDelay, 0), 10)
+        : 0;
+
+      if (redirectDelaySeconds > 0) {
+        res.set("Cache-Control", "no-store, max-age=0");
+        return res.status(200).render("safepages/redirect_wait", {
+          product,
+          targetUrl: target.toString(),
+          delaySeconds: redirectDelaySeconds,
+        });
+      }
+
       return res.redirect(302, target.toString());
     }
 

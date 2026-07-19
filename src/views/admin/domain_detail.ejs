@@ -685,7 +685,7 @@
             function addNewRule(key = '', op = 'exists', val = '') {
                 let html = `
                 <div class="row g-2 mb-2 rule-row align-items-center">
-                    <div class="col-4"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key (vd: fbclid)" value="${escapeAttr(key)}" oninput="updateRulesQueryString()"></div>
+                    <div class="col-4"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key (vd: utm_source)" value="${escapeAttr(key)}" oninput="updateRulesQueryString()"></div>
                     <div class="col-3">
                         <select class="form-select form-select-sm rule-op" onchange="toggleVal(this); updateRulesQueryString();">
                             <option value="exists" ${op === 'exists' ? 'selected' : ''}>Tồn tại</option>
@@ -710,7 +710,6 @@
                 $('#rules-wrapper').empty();
                 if (t === 'fb') {
                     addNewRule('utm_source', 'equals', 'facebook');
-                    addNewRule('fbclid', 'exists');
                     addNewRule('campaign_id', 'exists');
                     addNewRule('adset_id', 'exists');
                     addNewRule('ad_id', 'exists');

@@ -7,7 +7,7 @@ Production-oriented redirect and campaign management for a single organization. 
 - domain and campaign management;
 - parameter, country and device routing;
 - reusable fallback page templates;
-- short links that preserve tracking parameters;
+- immediate or 3-second delayed links that preserve tracking parameters;
 - campaign and short-link reports;
 - users, roles and admin audit logs;
 - health endpoints, database backups and raw-log retention.

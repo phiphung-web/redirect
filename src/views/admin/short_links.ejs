@@ -1,77 +1,110 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
-
 <head>
-  <meta charset="UTF-8">
-  <title>Rút gọn link</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Link chuyển hướng</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-
 <body>
-  <%- include('../partials/header', { user, active: 'short-links', breadcrumb: [{ label: 'Rút gọn link' }] }) %>
+  <%- include('../partials/header', {
+    user,
+    active: 'short-links',
+    breadcrumb: [{ label: 'Link chuyển hướng' }]
+  }) %>
 
-  <div class="container pb-5 mt-3">
+  <div class="container-xxl pb-5 mt-3">
     <div class="row g-4">
-      <div class="col-lg-4">
-        <div class="card shadow-sm">
-          <div class="card-header bg-white fw-bold">
-            <i class="fa-solid fa-link me-2 text-primary"></i>Tạo link rút gọn
+      <div class="col-xl-4">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-header bg-white border-0 pt-4 px-4">
+            <div class="d-flex align-items-center gap-3">
+              <div class="brand-mark"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
+              <div>
+                <h1 class="h5 mb-1">Tạo link chuyển hướng</h1>
+                <p class="text-muted small mb-0">Không kiểm tra campaign, quốc gia hay thiết bị.</p>
+              </div>
+            </div>
           </div>
-          <form class="card-body" action="/short-links/create" method="POST">
+
+          <form class="card-body p-4" action="/short-links/create" method="POST">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 
             <div class="mb-3">
               <label class="form-label fw-bold">Domain</label>
               <select name="domain_id" class="form-select" required <%= domains.length ? '' : 'disabled' %>>
                 <% domains.forEach((domain) => { %>
-                  <option value="<%= domain.id %>">
-                    <%= domain.domain_url %><%= domain.status === 'active' ? '' : ' (inactive)' %>
-                  </option>
+                  <option value="<%= domain.id %>"><%= domain.domain_url %><%= domain.status === 'active' ? '' : ' (inactive)' %></option>
                 <% }) %>
               </select>
               <% if (!domains.length) { %>
-                <div class="form-text text-danger">Cần tạo domain trước khi rút gọn link.</div>
+                <div class="form-text text-danger">Cần tạo domain trước khi tạo link.</div>
               <% } %>
             </div>
 
             <div class="mb-3">
               <label class="form-label fw-bold">Tên link</label>
-              <input type="text" name="title" class="form-control" maxlength="150" placeholder="VD: Landing Tết" required>
+              <input type="text" name="title" class="form-control" maxlength="150" placeholder="VD: Landing khuyến mãi" required>
             </div>
 
             <div class="mb-3">
               <label class="form-label fw-bold">Link đích</label>
               <input type="url" name="target_url" class="form-control" placeholder="https://example.com/landing" required>
+              <div class="form-text">Các tham số trên link truy cập sẽ được chuyển tiếp sang link đích.</div>
             </div>
 
-            <div class="mb-3">
+            <fieldset class="mb-3">
+              <legend class="form-label fw-bold mb-2">Cách chuyển hướng</legend>
+              <div class="vstack gap-2">
+                <label class="border rounded-3 p-3 d-flex gap-3 align-items-start bg-light" role="button">
+                  <input class="form-check-input mt-1" type="radio" name="redirect_mode" value="delayed" checked>
+                  <span>
+                    <strong class="d-block">Chờ 3 giây</strong>
+                    <small class="text-muted">Hiện trang đếm ngược rồi tự động chuyển.</small>
+                  </span>
+                </label>
+                <label class="border rounded-3 p-3 d-flex gap-3 align-items-start" role="button">
+                  <input class="form-check-input mt-1" type="radio" name="redirect_mode" value="immediate">
+                  <span>
+                    <strong class="d-block">Chuyển ngay</strong>
+                    <small class="text-muted">Phản hồi 302 ngay khi người dùng mở link.</small>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="mb-4">
               <label class="form-label fw-bold">Mã ngắn</label>
               <div class="input-group">
                 <span class="input-group-text">/s/</span>
                 <input type="text" name="code" class="form-control" pattern="[a-z0-9_-]{3,80}" placeholder="để trống để tự sinh">
               </div>
-              <div class="form-text">Chỉ dùng a-z, 0-9, dấu gạch ngang hoặc gạch dưới.</div>
+              <div class="form-text">Chỉ dùng a-z, 0-9, gạch ngang hoặc gạch dưới.</div>
             </div>
 
             <button class="btn btn-primary w-100" type="submit" <%= domains.length ? '' : 'disabled' %>>
-              Tạo link
+              <i class="fa-solid fa-plus me-2"></i>Tạo link
             </button>
           </form>
         </div>
       </div>
 
-      <div class="col-lg-8">
-        <div class="card shadow-sm">
-          <div class="card-header bg-white d-flex align-items-center justify-content-between">
-            <span class="fw-bold">Danh sách link rút gọn</span>
-            <span class="badge bg-primary"><%= links.length %> link</span>
+      <div class="col-xl-8">
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-white border-0 pt-4 px-4 d-flex align-items-center justify-content-between">
+            <div>
+              <h2 class="h5 mb-1">Danh sách link</h2>
+              <p class="text-muted small mb-0">Link chờ chạy riêng, không đi qua bộ lọc campaign.</p>
+            </div>
+            <span class="badge rounded-pill text-bg-primary"><%= links.length %> link</span>
           </div>
           <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
               <thead class="table-light">
                 <tr>
                   <th>Tên</th>
-                  <th>Link rút gọn</th>
+                  <th>Link sử dụng</th>
+                  <th>Chế độ</th>
                   <th>Click</th>
                   <th>Trạng thái</th>
                   <th class="text-end">Hành động</th>
@@ -79,51 +112,46 @@
               </thead>
               <tbody>
                 <% if (!links.length) { %>
-                  <tr>
-                    <td colspan="5" class="text-center py-4 text-muted">Chưa có link rút gọn nào.</td>
-                  </tr>
+                  <tr><td colspan="6" class="text-center py-5 text-muted">Chưa có link chuyển hướng nào.</td></tr>
                 <% } %>
                 <% links.forEach((link) => { %>
+                  <% const isDelayed = Number(link.redirect_delay_seconds || 0) > 0; %>
                   <tr>
-                    <td style="min-width: 220px;">
+                    <td style="min-width:210px">
                       <div class="fw-bold"><%= link.title || link.code %></div>
-                      <small class="text-muted d-block text-truncate" style="max-width: 260px;"><%= link.target_url %></small>
-                      <small class="text-muted">By <%= link.created_by_name || 'N/A' %> | <%= new Date(link.created_at).toLocaleString('vi-VN') %></small>
+                      <small class="text-muted d-block text-truncate" style="max-width:260px"><%= link.target_url %></small>
+                      <small class="text-muted">Tạo bởi <%= link.created_by_name || 'N/A' %></small>
                     </td>
-                    <td style="min-width: 260px;">
+                    <td style="min-width:260px">
                       <div class="input-group input-group-sm">
                         <input type="text" class="form-control bg-white text-primary fw-bold" value="<%= link.full_url %>" readonly id="short-link-<%= link.id %>">
-                        <button type="button" class="btn btn-primary" onclick="copyShortLink('short-link-<%= link.id %>')" title="Copy Link">
+                        <button type="button" class="btn btn-primary" onclick="copyShortLink('short-link-<%= link.id %>', this)" title="Copy link">
                           <i class="fa-solid fa-copy"></i>
                         </button>
                       </div>
-                      <div class="mt-1">
-                        <span class="badge bg-light text-secondary border"><%= link.domain_url %></span>
-                        <span class="badge bg-light text-secondary border">/s/<%= link.code %></span>
-                      </div>
+                      <div class="mt-1"><span class="badge bg-light text-secondary border">/s/<%= link.code %></span></div>
                     </td>
-                    <td><b><%= link.clicks || 0 %></b></td>
+                    <td>
+                      <% if (isDelayed) { %>
+                        <span class="badge text-bg-warning"><i class="fa-regular fa-clock me-1"></i>Chờ <%= link.redirect_delay_seconds %> giây</span>
+                      <% } else { %>
+                        <span class="badge text-bg-light border text-secondary">Chuyển ngay</span>
+                      <% } %>
+                    </td>
+                    <td><strong><%= link.clicks || 0 %></strong></td>
                     <td>
                       <form action="/short-links/toggle/<%= link.id %>" method="POST" class="d-inline" onsubmit="return confirm('Đổi trạng thái link này?')">
                         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                        <button type="submit" class="btn btn-sm <%= link.is_active ? 'btn-success' : 'btn-danger' %>">
-                          <%= link.is_active ? 'ON' : 'OFF' %>
-                        </button>
+                        <button type="submit" class="btn btn-sm <%= link.is_active ? 'btn-success' : 'btn-danger' %>"><%= link.is_active ? 'ON' : 'OFF' %></button>
                       </form>
                     </td>
-                    <td class="text-end">
-                      <a href="/short-links/<%= link.id %>/report" class="btn btn-sm btn-info text-white" title="Báo cáo">
-                        <i class="fa-solid fa-chart-line"></i>
-                      </a>
-                      <a href="/short-links/<%= link.id %>/logs" class="btn btn-sm btn-outline-secondary">
-                        Log
-                      </a>
+                    <td class="text-end text-nowrap">
+                      <a href="/short-links/<%= link.id %>/report" class="btn btn-sm btn-info text-white" title="Báo cáo"><i class="fa-solid fa-chart-line"></i></a>
+                      <a href="/short-links/<%= link.id %>/logs" class="btn btn-sm btn-outline-secondary">Log</a>
                       <% if (user.role_name === 'super_admin') { %>
-                        <form action="/short-links/delete/<%= link.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa link rút gọn này?')">
+                        <form action="/short-links/delete/<%= link.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa link này?')">
                           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                          <button type="submit" class="btn btn-sm btn-danger">
-                            <i class="fa-solid fa-trash"></i>
-                          </button>
+                          <button type="submit" class="btn btn-sm btn-danger"><i class="fa-solid fa-trash"></i></button>
                         </form>
                       <% } %>
                     </td>
@@ -138,14 +166,19 @@
   </div>
 
   <script>
-    function copyShortLink(id) {
-      const el = document.getElementById(id);
-      el.select();
-      document.execCommand("copy");
-      alert("Đã copy");
+    async function copyShortLink(id, button) {
+      const input = document.getElementById(id);
+      try {
+        await navigator.clipboard.writeText(input.value);
+      } catch (_) {
+        input.select();
+        document.execCommand("copy");
+      }
+      const original = button.innerHTML;
+      button.innerHTML = '<i class="fa-solid fa-check"></i>';
+      window.setTimeout(() => { button.innerHTML = original; }, 1200);
     }
   </script>
   <%- include('../partials/footer') %>
 </body>
-
 </html>

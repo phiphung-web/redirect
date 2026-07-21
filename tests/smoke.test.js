@@ -1,6 +1,9 @@
 process.env.CACHE_ENABLED = "false";
 process.env.TRAFFIC_BUFFER_ENABLED = "false";
 process.env.COUNTER_BUFFER_ENABLED = "false";
+process.env.SESSION_STORE = "memory";
+process.env.PRODUCT_NAME = "LinkPilot";
+process.env.PRODUCT_SHORT_NAME = "LP";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");

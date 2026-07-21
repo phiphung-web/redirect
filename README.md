@@ -6,10 +6,47 @@ Production-oriented redirect and campaign management for a single organization. 
 
 - conditional links with parameter, country and device routing;
 - automatic redirect links with a configurable 1-30 second wait;
-- exactly two built-in fallback layouts: neutral default and mobile 18+ age gate;
+- exactly two built-in fallback layouts: an English repair-services page and an English mobile 18+ age gate;
+- one Safe Page is selected when a domain is added and applies to every campaign on that domain;
+- opening a configured domain without a valid link identifier displays that domain's Safe Page;
+- both link types are created and managed from the domain detail screen;
 - campaign and short-link reports;
 - users, roles and admin audit logs;
 - health endpoints, database backups and raw-log retention.
+
+## Automatic domain SSL
+
+When automatic SSL is enabled, adding a domain creates a background certificate
+job. The domain detail screen shows `pending`, `active`, or `error`, records the
+certificate expiry date, and provides a manual retry action. Nginx keeps a
+fallback TLS listener available while issuance is pending so proxied domains do
+not time out on port 443.
+
+Before adding a domain, point its DNS `A` record to the server and make sure
+inbound ports 80 and 443 are open. For the most reliable first issuance on
+Cloudflare, use DNS-only mode, then enable the proxy and `Full (strict)` after
+the domain certificate becomes active. A proxied record can also work when
+Cloudflare does not force the HTTP challenge through strict origin TLS.
+
+On Ubuntu, after reviewing and accepting the Let's Encrypt Subscriber
+Agreement, set the operational email and enable the feature in `.env`:
+
+```bash
+AUTO_SSL_ENABLED=true
+CERTBOT_EMAIL=admin@example.com
+LETSENCRYPT_AGREE_TOS=true
+```
+
+Install the fixed, root-owned provisioning helper once:
+
+```bash
+sudo bash deploy/install-auto-ssl.sh
+```
+
+The application invokes only `/usr/local/sbin/redirect-pro-provision-domain`
+with a validated domain argument. Certbot uses HTTP-01 webroot validation;
+certificate renewal is handled by `certbot.timer`, followed by a safe Nginx
+configuration test and reload.
 
 ## Performance model
 

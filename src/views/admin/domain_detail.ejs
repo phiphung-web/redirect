@@ -26,22 +26,67 @@
             font-size: 0.85rem;
             margin-top: 6px;
         }
+
+        .link-type-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .link-type-card {
+            width: 100%;
+            padding: 18px;
+            border: 2px solid #dfe5ee;
+            border-radius: 12px;
+            background: #fff;
+            color: #263244;
+            text-align: left;
+            transition: border-color .18s ease, background .18s ease, transform .18s ease;
+        }
+
+        .link-type-card:hover,
+        .link-type-card.is-active {
+            border-color: #0d6efd;
+            background: #f3f7ff;
+            transform: translateY(-1px);
+        }
+
+        .link-type-card .type-icon {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 12px;
+            border-radius: 10px;
+            color: #0d6efd;
+            background: #e7f0ff;
+        }
+
+        .link-configuration[hidden] { display: none !important; }
+
+        @media (max-width: 767px) {
+            .link-type-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 
 <body>
     <%- include('../partials/header', { user, active: 'redirect' , backUrl: '/redirect' , breadcrumb: [ {
-        label: 'Redirect' , url: '/redirect' }, { label: domain.domain_url } ] }) %>
+        label: 'Tên miền & Link' , url: '/redirect' }, { label: domain.domain_url } ] }) %>
         <input type="hidden" id="csrfToken" value="<%= csrfToken %>">
 
         <div class="container pb-5 mt-3">
             <div class="card mb-4 shadow-sm">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div>
-                        <h3 class="mb-1 text-primary" data-help="Trang quản lý tập trung của domain: kiểm tra DNS, cấu hình giao diện dự phòng và quản lý các chiến dịch có điều kiện.">
+                        <h3 class="mb-1 text-primary" data-help="Trang quản lý tập trung của domain: Safe Page, SSL và cả hai loại link đều ở đây.">
                             <%= domain.domain_url %>
                         </h3>
-                        <span class="badge bg-secondary">Safe Page: <%= domain.safe_template === 'age_gate' ? '18+ Mobile' : 'Mặc định' %></span>
+                        <span class="badge bg-secondary">Safe Page: <%= domain.safe_template === 'age_gate' ? 'Safe Page 2 · 18+' : 'Safe Page 1 · Repair' %></span>
+                        <% if (domain.ssl_status === 'active') { %><span class="badge bg-success">SSL ACTIVE</span>
+                        <% } else if (domain.ssl_status === 'pending' || domain.ssl_status === 'provisioning') { %><span class="badge bg-warning text-dark">SSL PENDING</span>
+                        <% } else if (domain.ssl_status === 'error') { %><span class="badge bg-danger">SSL ERROR</span>
+                        <% } else { %><span class="badge bg-info text-dark">TLS CLOUDFLARE</span><% } %>
                         <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>">
                             <%= domain.status.toUpperCase() %>
                         </span>
@@ -59,49 +104,69 @@
                             </div>
                             <% } %>
                     </div>
-                    <div>
-                        <button class="btn btn-outline-primary me-2" onclick="checkDNS('<%= domain.id %>')">Check
-                            DNS</button>
-                        <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#addLinkModal">+
-                            Tạo Link Mới</button>
+                    <div class="d-flex flex-wrap gap-2 justify-content-end">
+                        <a class="btn btn-outline-secondary" href="https://<%= domain.domain_url %>/" target="_blank" rel="noopener" data-help="Mở domain thật. Khi không có tham số nhận diện link, domain luôn hiển thị Safe Page đã chọn.">
+                            <i class="fas fa-arrow-up-right-from-square me-1"></i>Mở Safe Page
+                        </a>
+                        <button type="button" class="btn btn-outline-primary" onclick="checkDNS('<%= domain.id %>')">Check DNS</button>
+                        <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#addLinkModal" data-create-link-type="conditional"><i class="fas fa-filter me-1"></i>Tạo link kiểm tra</button>
+                        <button type="button" class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#addLinkModal" data-create-link-type="delayed"><i class="fas fa-clock me-1"></i>Tạo link tự chuyển</button>
                     </div>
                 </div>
             </div>
 
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-white">
-                    <div class="fw-bold" data-help="Hệ thống chỉ giữ hai mẫu cố định để thao tác nhanh và tránh giao diện tùy chỉnh không đồng nhất.">Safe Page của domain</div>
-                    <div class="text-muted small">Chọn mẫu mặc định trung tính hoặc mẫu 18+ tối ưu mobile. Không còn chức năng tạo thêm giao diện.</div>
+                    <div class="fw-bold" data-help="Mẫu được cố định theo lựa chọn lúc thêm domain. Campaign không thể đổi sang mẫu khác.">Safe Page của domain</div>
+                    <div class="text-muted small">Mẫu này được chọn khi thêm domain và áp dụng cho toàn bộ campaign thuộc domain.</div>
                 </div>
-                <form class="card-body" action="/domains/<%= domain.id %>/safe-content" method="POST">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="card-body">
                     <div class="row g-4 align-items-start">
-                        <div class="col-lg-5">
-                            <label class="form-label fw-bold" data-help="Mẫu này xuất hiện khi link kiểm tra không đạt điều kiện, bị tắt hoặc không tồn tại.">Mẫu đang dùng</label>
-                            <select name="safe_template" class="form-select" id="safeTemplateSelect" onchange="renderDomainSafeDefaultPreview()">
-                                <option value="clean" <%= domain.safe_template === 'clean' ? 'selected' : '' %>>Mặc định — trung tính</option>
-                                <option value="age_gate" <%= domain.safe_template === 'age_gate' ? 'selected' : '' %>>18+ Mobile — banner xác nhận tuổi</option>
-                            </select>
-                            <div class="alert alert-light border small mt-3 mb-0">
-                                Campaign có thể dùng mẫu của domain hoặc chọn một trong đúng hai mẫu này làm ngoại lệ.
+                        <div class="col-lg-4">
+                            <label class="form-label fw-bold">Mẫu đang dùng</label>
+                            <div class="border rounded-3 p-3 bg-light">
+                                <div class="fw-bold"><%= domain.safe_template === 'age_gate' ? 'Safe Page 2 · Age Confirmation' : 'Safe Page 1 · Repair Services' %></div>
+                                <div class="small text-muted mt-1">Nội dung Safe Page luôn hiển thị bằng tiếng Anh.</div>
                             </div>
-                            <button type="submit" class="btn btn-primary mt-3">Lưu Safe Page</button>
+                            <div class="alert alert-light border small mt-3 mb-0">
+                                Muốn dùng mẫu khác, hãy thêm một domain mới và chọn mẫu ngay trong bước tạo domain.
+                            </div>
+                            <div class="border rounded-3 p-3 mt-3">
+                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                    <strong data-help="Auto SSL chạy nền sau khi thêm domain. Chứng chỉ riêng chỉ được cấp khi DNS đã hoạt động và máy chủ xác minh được domain.">Chứng chỉ SSL</strong>
+                                    <% if (domain.ssl_status === 'active') { %><span class="badge bg-success">Hoạt động</span>
+                                    <% } else if (domain.ssl_status === 'pending' || domain.ssl_status === 'provisioning') { %><span class="badge bg-warning text-dark">Đang xử lý</span>
+                                    <% } else if (domain.ssl_status === 'error') { %><span class="badge bg-danger">Cần kiểm tra</span>
+                                    <% } else { %><span class="badge bg-info text-dark">Dự phòng</span><% } %>
+                                </div>
+                                <% if (domain.ssl_expires_at) { %><div class="small text-muted mt-2">Hết hạn: <%= new Date(domain.ssl_expires_at).toLocaleString('vi-VN') %></div><% } %>
+                                <% if (domain.ssl_error) { %><div class="small text-danger mt-2 text-break"><%= domain.ssl_error %></div><% } %>
+                                <% if (sslAutomationEnabled && domain.ssl_status !== 'active') { %>
+                                    <form action="/domains/<%= domain.id %>/ssl/retry" method="POST" class="mt-3">
+                                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                        <button type="submit" class="btn btn-sm btn-outline-primary w-100">Thử cấp SSL lại</button>
+                                    </form>
+                                <% } %>
+                            </div>
                         </div>
-                        <div class="col-lg-7">
+                        <div class="col-lg-8">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <label class="form-label fw-bold mb-0">Xem trước mobile</label>
-                                <span class="badge bg-light text-dark border">2 mẫu cố định</span>
+                                <span class="badge bg-light text-dark border">Preview đúng mẫu đang dùng</span>
                             </div>
-                            <iframe id="domainSafeDefaultPreview" class="w-100 border rounded bg-white" style="height:360px;" sandbox=""></iframe>
+                            <iframe title="Safe Page preview" src="/domains/<%= domain.id %>/safe-preview" class="w-100 border rounded bg-white" style="height:420px;" sandbox=""></iframe>
                         </div>
                     </div>
-                </form>
+                </div>
             </div>
 
             <div class="card shadow-sm">
                 <div class="card-header bg-white d-flex align-items-center justify-content-between">
-                    <div class="fw-bold" data-help="Campaign chỉ chuyển hướng khi tham số đầu vào và các bộ lọc cấu hình đều khớp. Link chuyển hướng độc lập được quản lý ở tab Link chuyển hướng.">Danh sách chiến dịch</div>
-                    <span class="badge bg-light text-dark border"><%= links.length %> chiến dịch</span>
+                    <div>
+                        <div class="fw-bold" data-help="Link chỉ chuyển hướng khi mã nhận diện, rules và bộ lọc đều đạt. Nếu không đạt, người truy cập thấy Safe Page của domain.">Loại 1 · Link kiểm tra tham số</div>
+                        <div class="small text-muted">Có kiểm tra mã nhận diện, rule và quốc gia trước khi chuyển.</div>
+                    </div>
+                    <span class="badge bg-primary"><%= links.length %> link</span>
                 </div>
                 <table class="table table-hover mb-0 align-middle">
                     <thead class="table-light">
@@ -129,7 +194,6 @@
                                             <small class="text-muted d-block text-truncate" style="max-width: 200px;">
                                                 <%= l.target_url %>
                                             </small>
-                                            <small class="text-muted d-block">Safe Page: <%= l.safe_template_override === 'age_gate' ? '18+ Mobile' : l.safe_template_override === 'clean' ? 'Mặc định' : 'Theo domain' %></small>
                                             <small class="text-muted">By <%= l.created_by_name || 'N/A' %> | Update: <%=
                                                         l.updated_by_name || l.created_by_name || '-' %></small>
                                         </td>
@@ -198,102 +262,151 @@
                     </tbody>
                 </table>
             </div>
+
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-white d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="fw-bold" data-help="Link dạng /s/mã không kiểm tra rules. Người truy cập vẫn thấy Safe Page của domain; hệ thống tự chuyển âm thầm khi hết thời gian.">Loại 2 · Link tự chuyển sau thời gian chờ</div>
+                        <div class="small text-muted">Không kiểm tra tham số; không hiển đếm ngược; giữ nguyên Safe Page trong lúc chờ.</div>
+                    </div>
+                    <span class="badge bg-warning text-dark"><%= shortLinks.length %> link</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr><th>Tên link</th><th>Link sử dụng</th><th>Thời gian chờ</th><th>Click</th><th>Trạng thái</th><th class="text-end">Hành động</th></tr>
+                        </thead>
+                        <tbody>
+                            <% if (!shortLinks.length) { %>
+                                <tr><td colspan="6" class="text-center py-4 text-muted">Chưa có link chuyển hướng có thời gian chờ.</td></tr>
+                            <% } %>
+                            <% shortLinks.forEach((link) => { %>
+                                <tr>
+                                    <td><strong><%= link.title || link.code %></strong><small class="text-muted d-block text-truncate" style="max-width:230px"><%= link.target_url %></small></td>
+                                    <td style="min-width:270px"><div class="input-group input-group-sm"><input type="text" class="form-control bg-white text-primary fw-bold" value="<%= link.full_url %>" readonly id="short-link-<%= link.id %>"><button type="button" class="btn btn-primary" onclick="copyLink('short-link-<%= link.id %>')"><i class="fas fa-copy"></i></button></div><small class="text-muted">/s/<%= link.code %></small></td>
+                                    <td><span class="badge bg-warning text-dark"><%= link.redirect_delay_seconds || 3 %> giây</span></td>
+                                    <td><strong><%= link.clicks || 0 %></strong></td>
+                                    <td>
+                                        <form action="/short-links/toggle/<%= link.id %>" method="POST" class="d-inline">
+                                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                            <input type="hidden" name="return_to_domain" value="1">
+                                            <button type="submit" class="btn btn-sm <%= link.is_active ? 'btn-success' : 'btn-danger' %>"><%= link.is_active ? 'ON' : 'OFF' %></button>
+                                        </form>
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <a href="/short-links/<%= link.id %>/report" class="btn btn-sm btn-info text-white"><i class="fas fa-chart-line"></i></a>
+                                        <% if (user.role_name === 'super_admin') { %>
+                                            <form action="/short-links/delete/<%= link.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa link này?')">
+                                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                                <input type="hidden" name="return_to_domain" value="1">
+                                                <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                                            </form>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <div class="modal fade" id="addLinkModal" data-bs-backdrop="static">
             <div class="modal-dialog modal-lg">
                 <form class="modal-content" action="/campaigns/create" method="POST" id="createForm">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <input type="hidden" name="domain_id" value="<%= domain.id %>">
+                    <input type="hidden" id="linkType" value="">
                     <div class="modal-header">
-                        <h5 class="modal-title" data-help="Tạo campaign có điều kiện. Hệ thống sinh tham số nhận diện riêng sau khi lưu.">Tạo Link Ads Mới</h5>
+                        <div>
+                            <h5 class="modal-title" data-help="Chọn đúng loại link trước, sau đó hệ thống chỉ hiện các trường cần thiết cho luồng đó.">Tạo link mới</h5>
+                            <div class="small text-muted">Domain: <strong><%= domain.domain_url %></strong></div>
+                        </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <input type="hidden" name="domain_id" value="<%= domain.id %>">
-                        <input type="hidden" name="copy_from_id" id="copy_from_id">
-
-                        <div class="alert alert-info py-2 small"><i class="fas fa-bolt"></i> Link sẽ được sinh tự động
-                            (VD: ?q=AbC123) sau khi lưu.</div>
-
-                        <div class="row mb-3">
-                            <div class="col-6">
-                                <label class="fw-bold" data-help="Tên nội bộ dùng trong dashboard, báo cáo và log. Nên đặt theo nguồn traffic hoặc mục tiêu chiến dịch.">Tên Chiến Dịch</label>
-                                <input type="text" name="name" class="form-control" required>
-                            </div>
-                            <div class="col-6">
-                                <label class="fw-bold" data-help="URL cuối cùng khi campaign khớp. Các tham số đầu vào còn thiếu trên URL đích sẽ được nối tiếp.">Link Đích (Target)</label>
-                                <input type="url" name="target_url" class="form-control" required>
-                            </div>
+                        <label class="fw-bold mb-2">1. Chọn loại link</label>
+                        <div class="link-type-grid mb-4">
+                            <button type="button" class="link-type-card" data-link-type="conditional">
+                                <span class="type-icon"><i class="fas fa-filter"></i></span>
+                                <strong class="d-block">Link kiểm tra tham số</strong>
+                                <small class="text-muted">Dạng <code>?q=...</code>. Kiểm tra mã link, rules và quốc gia; không đạt sẽ hiện Safe Page.</small>
+                            </button>
+                            <button type="button" class="link-type-card" data-link-type="delayed">
+                                <span class="type-icon"><i class="fas fa-clock"></i></span>
+                                <strong class="d-block">Link tự chuyển sau thời gian chờ</strong>
+                                <small class="text-muted">Dạng <code>/s/...</code>. Hiển thị Safe Page của domain, không đếm ngược, sau đó tự chuyển.</small>
+                            </button>
                         </div>
 
-                        <div class="row mb-3">
-                            <div class="col-md-5">
-                                <label class="fw-bold" data-help="Để mặc định domain hoặc chọn trực tiếp một trong hai mẫu cố định.">Mẫu Safe Page</label>
-                                <select name="safe_template" class="form-select" id="campaignSafePageSelect" onchange="renderCampaignSafePagePreview()">
-                                    <option value="">Mặc định domain</option>
-                                    <option value="clean">Mặc định — trung tính</option>
-                                    <option value="age_gate">18+ Mobile — banner xác nhận tuổi</option>
-                                </select>
+                        <div id="linkConfiguration" class="link-configuration" hidden>
+                            <label class="fw-bold mb-2">2. Nhập thông tin link</label>
+                            <div class="row mb-3 g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Tên link</label>
+                                    <input type="text" name="name" class="form-control" maxlength="150" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Link đích</label>
+                                    <input type="url" name="target_url" class="form-control" placeholder="https://example.com/landing" required>
+                                </div>
                             </div>
-                            <div class="col-md-7">
-                                <label class="fw-bold" data-help="Xem trước giao diện sẽ xuất hiện nếu campaign không thể chuyển hướng.">Preview Safe Page</label>
-                                <iframe id="campaignSafePagePreview" class="w-100 border rounded bg-white" style="height:170px;" sandbox=""></iframe>
-                            </div>
-                        </div>
 
-                        <hr>
-                        <div class="mb-3">
-                            <label class="fw-bold" data-help="Để trống để chấp nhận mọi quốc gia. Khi chọn, người dùng ngoài danh sách sẽ thấy Safe Page.">Quốc gia cho phép</label>
-                            <select class="form-control select2-countries" name="allowed_countries[]"
-                                multiple="multiple" id="countrySelect"></select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="fw-bold" data-help="Sao chép quốc gia và rules từ campaign cũ để tạo nhanh. Tên và URL đích mới vẫn do bạn nhập.">Sao chép cấu hình từ link sẵn có</label>
-                            <select class="form-control" id="copyFromSelect" onchange="onCopySelect()">
-                                <option value="">-- Không sao chép --</option>
-                                <% links.forEach(l=> { %>
-                                    <option value="<%= l.id %>">
-                                        <%= l.name %>
-                                    </option>
-                                    <% }) %>
-                            </select>
-                            <div class="border rounded mt-2 p-2 bg-light" id="configPreview"
-                                style="min-height:60px;font-size:0.9rem;">
-                                Chọn link để xem cấu hình.
-                            </div>
-                        </div>
+                            <section id="conditionalFields" data-flow="conditional" hidden>
+                                <div class="alert alert-primary py-2 small"><i class="fas fa-filter me-1"></i>Hệ thống tự sinh link nhận diện dạng <strong>?q=AbC123</strong>.</div>
+                                <input type="hidden" name="copy_from_id" id="copy_from_id" data-flow-field="conditional">
+                                <div class="mb-3">
+                                    <label class="fw-bold" data-help="Để trống để chấp nhận mọi quốc gia. Nếu chọn, người ngoài danh sách sẽ thấy Safe Page.">Quốc gia cho phép</label>
+                                    <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple" id="countrySelect" data-flow-field="conditional"></select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="fw-bold">Sao chép rules từ link có sẵn</label>
+                                    <select class="form-control" id="copyFromSelect" onchange="onCopySelect()" data-flow-field="conditional">
+                                        <option value="">-- Không sao chép --</option>
+                                        <% links.forEach((link) => { %><option value="<%= link.id %>"><%= link.name %></option><% }) %>
+                                    </select>
+                                    <div class="border rounded mt-2 p-2 bg-light small" id="configPreview">Chọn link để xem cấu hình.</div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="fw-bold" data-help="Tất cả rule phải đạt thì link mới chuyển tới URL đích.">Rules kiểm tra</label>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">Mẫu nhanh</button>
+                                        <ul class="dropdown-menu">
+                                            <li><button class="dropdown-item" type="button" data-rule-template="fb">Facebook Ads</button></li>
+                                            <li><button class="dropdown-item" type="button" data-rule-template="gg">Google Ads</button></li>
+                                            <li><button class="dropdown-item" type="button" data-rule-template="tiktok">TikTok Ads</button></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div id="rules-wrapper" class="border rounded p-2 mb-2 bg-light"></div>
+                                <button type="button" class="btn btn-sm btn-secondary w-100" id="addRuleButton">+ Thêm điều kiện</button>
+                                <div class="mt-3">
+                                    <label class="fw-bold" data-help="Bằng (=) yêu cầu đúng giá trị. Tồn tại chỉ yêu cầu có tên tham số; chuỗi copy dùng macro của nền tảng hoặc chỉ tên key, không gán giá trị xxx.">Chuỗi tham số để copy</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control bg-white" id="rulesQueryString" readonly>
+                                        <button type="button" class="btn btn-outline-primary" onclick="copyGeneratedParams()"><i class="fas fa-copy"></i></button>
+                                    </div>
+                                    <div class="form-text"><strong>Tồn tại</strong>: chỉ kiểm tra có key, không so sánh giá trị. <strong>Bằng</strong>: phải khớp chính xác giá trị đã nhập.</div>
+                                </div>
+                                <input type="hidden" name="rules_json" id="rules_json" data-flow-field="conditional">
+                            </section>
 
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <label class="fw-bold" data-help="Rules được kiểm tra sau khi nhận diện campaign. Tất cả rule phải đạt thì người dùng mới được chuyển tới URL đích.">Luật kiểm tra</label>
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button"
-                                    data-bs-toggle="dropdown">Mẫu Nhanh</button>
-                                <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" href="#" onclick="addTemplate('fb')">Facebook Ads</a>
-                                    </li>
-                                    <li><a class="dropdown-item" href="#" onclick="addTemplate('gg')">Google Ads</a>
-                                    </li>
-                                    <li><a class="dropdown-item" href="#" onclick="addTemplate('tiktok')">TikTok Ads</a>
-                                    </li>
-                                </ul>
-                            </div>
+                            <section id="delayedFields" data-flow="delayed" hidden>
+                                <div class="alert alert-warning py-2 small"><i class="fas fa-clock me-1"></i>Luồng này hiển thị Safe Page đã chọn cho domain, không hiển đếm ngược, sau đó tự chuyển và giữ lại tham số tracking.</div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Thời gian chờ</label>
+                                        <div class="input-group"><input type="number" name="redirect_delay_seconds" class="form-control" min="1" max="30" value="3" data-flow-field="delayed"><span class="input-group-text">giây</span></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Mã ngắn (không bắt buộc)</label>
+                                        <div class="input-group"><span class="input-group-text">/s/</span><input type="text" name="code" class="form-control" pattern="[a-z0-9_-]{3,80}" placeholder="Tự sinh nếu để trống" data-flow-field="delayed"></div>
+                                    </div>
+                                </div>
+                            </section>
                         </div>
-                        <div id="rules-wrapper" class="border rounded p-2 mb-2 bg-light"></div>
-                        <button type="button" class="btn btn-sm btn-secondary w-100" onclick="addNewRule()">+ Thêm điều
-                            kiện</button>
-                        <div class="mt-3">
-                            <label class="fw-bold" data-help="Chuỗi dùng để gắn vào link quảng cáo khi test hoặc setup. Giá trị xxx là chỗ thay bằng macro hay dữ liệu thật của nền tảng.">Chuỗi tham số mẫu</label>
-                            <div class="input-group input-group-sm">
-                                <input type="text" class="form-control bg-white" id="rulesQueryString" readonly value="">
-                                <button type="button" class="btn btn-outline-primary" onclick="copyGeneratedParams()">
-                                    <i class="fas fa-copy"></i>
-                                </button>
-                            </div>
-                            <div class="form-text">Dùng ký tự & chuẩn URL, ví dụ: utm_source=facebook&utm_campaign=xxx</div>
-                        </div>
-                        <input type="hidden" name="rules_json" id="rules_json">
                     </div>
-                    <div class="modal-footer"><button class="btn btn-primary w-100">Tạo Link Ngay</button></div>
+                    <div class="modal-footer"><button type="submit" class="btn btn-primary w-100" id="createLinkSubmit" disabled>Chọn loại link để tiếp tục</button></div>
                 </form>
             </div>
         </div>
@@ -302,38 +415,6 @@
         <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
         <script>
-            const DOMAIN_SAFE_TEMPLATE = <%- JSON.stringify(domain.safe_template || 'clean') %>;
-
-            function buildSafePagePreviewHtml(template) {
-                if (template === 'age_gate') {
-                    return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#eef0f2}.card{width:min(100%,430px)}img{display:block;width:100%;height:auto}</style></head><body><main class="card"><img src="/images/safe-age-gate.jpeg" alt="18+ mobile"></main></body></html>`;
-                }
-                return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f7f8fb;color:#172033;font-family:Arial,sans-serif;text-align:center}.card{max-width:430px;background:#fff;border:1px solid #dde3ee;border-radius:18px;padding:30px;box-shadow:0 18px 50px rgba(23,32,51,.08)}.mark{width:52px;height:52px;margin:0 auto 16px;border-radius:14px;display:grid;place-items:center;background:#eaf1ff;color:#2563eb;font-weight:800}h1{font-size:24px;margin:0 0 10px}p{margin:0;color:#657086;line-height:1.6}</style></head><body><main class="card"><div class="mark">RP</div><h1>Trang thông tin</h1><p>Giao diện trung tính, tải nhanh và tương thích mọi thiết bị.</p></main></body></html>`;
-            }
-
-            function setFramePreview(frameId, template) {
-                const frame = document.getElementById(frameId);
-                if (!frame) return;
-                frame.srcdoc = buildSafePagePreviewHtml(template);
-            }
-
-            function renderDomainSafeDefaultPreview() {
-                const template = document.getElementById('safeTemplateSelect')?.value || 'clean';
-                setFramePreview('domainSafeDefaultPreview', template);
-            }
-
-            function renderCampaignSafePagePreview() {
-                const select = document.getElementById('campaignSafePageSelect');
-                const template = select?.value || DOMAIN_SAFE_TEMPLATE;
-                setFramePreview('campaignSafePagePreview', template);
-            }
-
-            document.addEventListener('DOMContentLoaded', function () {
-                renderDomainSafeDefaultPreview();
-                renderCampaignSafePagePreview();
-                updateRulesQueryString();
-            });
-
             const ALL_COUNTRIES = {
                 "AF": "Afghanistan",
                 "AX": "Åland Islands",
@@ -587,76 +668,118 @@
             };
 
 
-            $(document).ready(function () {
-                const select = $('#countrySelect');
-                for (let [code, name] of Object.entries(ALL_COUNTRIES)) {
-                    select.append(new Option(`${name} (${code})`, code));
-                }
-                select.select2({ placeholder: "Chọn quốc gia...", dropdownParent: $('#addLinkModal') });
-            });
+            const RULE_TEMPLATES = {
+                fb: [
+                    { key: 'utm_source', operator: 'equals', value: 'facebook' },
+                    { key: 'campaign_id', operator: 'exists', value: '', sampleValue: '{{campaign.id}}' },
+                    { key: 'adset_id', operator: 'exists', value: '', sampleValue: '{{adset.id}}' },
+                    { key: 'ad_id', operator: 'exists', value: '', sampleValue: '{{ad.id}}' },
+                    { key: 'placement', operator: 'exists', value: '', sampleValue: '{{placement}}' }
+                ],
+                gg: [
+                    { key: 'utm_source', operator: 'equals', value: 'google' },
+                    { key: 'gclid', operator: 'exists', value: '' },
+                    { key: 'campaignid', operator: 'exists', value: '', sampleValue: '{campaignid}' },
+                    { key: 'adgroupid', operator: 'exists', value: '', sampleValue: '{adgroupid}' },
+                    { key: 'keyword', operator: 'exists', value: '', sampleValue: '{keyword}' }
+                ],
+                tiktok: [
+                    { key: 'utm_source', operator: 'equals', value: 'tiktok' },
+                    { key: 'ttclid', operator: 'exists', value: '' }
+                ]
+            };
 
-            function addNewRule(key = '', op = 'exists', val = '') {
-                let html = `
-                <div class="row g-2 mb-2 rule-row align-items-center">
-                    <div class="col-4"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key (vd: utm_source)" value="${escapeAttr(key)}" oninput="updateRulesQueryString()"></div>
-                    <div class="col-3">
-                        <select class="form-select form-select-sm rule-op" onchange="toggleVal(this); updateRulesQueryString();">
-                            <option value="exists" ${op === 'exists' ? 'selected' : ''}>Tồn tại</option>
-                            <option value="equals" ${op === 'equals' ? 'selected' : ''}>Bằng (=)</option>
-                        </select>
-                    </div>
-                    <div class="col-4"><input type="text" class="form-control form-control-sm rule-val" value="${escapeAttr(val)}" ${op === 'exists' ? 'disabled' : ''} placeholder="Giá trị" oninput="updateRulesQueryString()"></div>
-                    <div class="col-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove(); updateRulesQueryString();">x</button></div>
-                </div>`;
-                $('#rules-wrapper').append(html);
+            function addNewRule(key = '', op = 'exists', val = '', sampleValue = '') {
+                const wrapper = document.getElementById('rules-wrapper');
+                const row = document.createElement('div');
+                row.className = 'row g-2 mb-2 rule-row align-items-center';
+                row.dataset.templateKey = String(key || '');
+                row.dataset.sampleValue = String(sampleValue || '');
+                row.innerHTML = '<div class="col-4"></div><div class="col-3"></div><div class="col-4"></div><div class="col-1"></div>';
+
+                const keyInput = document.createElement('input');
+                keyInput.type = 'text';
+                keyInput.className = 'form-control form-control-sm rule-key';
+                keyInput.placeholder = 'Key (vd: utm_source)';
+                keyInput.value = String(key || '');
+
+                const operator = document.createElement('select');
+                operator.className = 'form-select form-select-sm rule-op';
+                operator.innerHTML = '<option value="exists">Tồn tại</option><option value="equals">Bằng (=)</option>';
+                operator.value = op === 'equals' ? 'equals' : 'exists';
+
+                const valueInput = document.createElement('input');
+                valueInput.type = 'text';
+                valueInput.className = 'form-control form-control-sm rule-val';
+                valueInput.placeholder = 'Giá trị';
+                valueInput.value = String(val || '');
+                valueInput.disabled = operator.value === 'exists';
+
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'btn btn-sm text-danger';
+                remove.setAttribute('aria-label', 'Xóa rule');
+                remove.textContent = '×';
+
+                row.children[0].appendChild(keyInput);
+                row.children[1].appendChild(operator);
+                row.children[2].appendChild(valueInput);
+                row.children[3].appendChild(remove);
+                wrapper.appendChild(row);
+
+                keyInput.addEventListener('input', () => {
+                    if (keyInput.value.trim() !== row.dataset.templateKey) row.dataset.sampleValue = '';
+                    updateRulesQueryString();
+                });
+                valueInput.addEventListener('input', updateRulesQueryString);
+                operator.addEventListener('change', () => {
+                    valueInput.disabled = operator.value === 'exists';
+                    if (valueInput.disabled) valueInput.value = '';
+                    updateRulesQueryString();
+                });
+                remove.addEventListener('click', () => {
+                    row.remove();
+                    updateRulesQueryString();
+                });
                 updateRulesQueryString();
             }
 
-            function toggleVal(sel) {
-                const inp = sel.closest('.rule-row').querySelector('.rule-val');
-                inp.disabled = (sel.value === 'exists');
-                if (inp.disabled) inp.value = '';
-                updateRulesQueryString();
-            }
-
-            function addTemplate(t) {
-                $('#rules-wrapper').empty();
-                if (t === 'fb') {
-                    addNewRule('utm_source', 'equals', 'facebook');
-                    addNewRule('campaign_id', 'exists');
-                    addNewRule('adset_id', 'exists');
-                    addNewRule('ad_id', 'exists');
-                    addNewRule('placement', 'exists');
-                }
-                else if (t === 'gg') {
-                    addNewRule('utm_source', 'equals', 'google');
-                    addNewRule('gclid', 'exists');
-                    addNewRule('campaignid', 'exists');
-                    addNewRule('adgroupid', 'exists');
-                    addNewRule('keyword', 'exists');
-                }
-                else if (t === 'tiktok') {
-                    addNewRule('utm_source', 'equals', 'tiktok');
-                    addNewRule('ttclid', 'exists');
-                }
+            function addTemplate(type) {
+                const wrapper = document.getElementById('rules-wrapper');
+                wrapper.replaceChildren();
+                (RULE_TEMPLATES[type] || []).forEach((rule) => addNewRule(rule.key, rule.operator, rule.value, rule.sampleValue));
                 updateRulesQueryString();
             }
 
             function collectRules() {
-                let rules = [];
-                $('.rule-row').each(function () {
-                    let k = $(this).find('.rule-key').val();
-                    let o = $(this).find('.rule-op').val();
-                    let v = $(this).find('.rule-val').val();
-                    if (k) rules.push({ key: k, operator: o, value: v });
+                return Array.from(document.querySelectorAll('#rules-wrapper .rule-row')).flatMap((row) => {
+                    const key = row.querySelector('.rule-key').value.trim();
+                    if (!key) return [];
+                    return [{
+                        key,
+                        operator: row.querySelector('.rule-op').value,
+                        value: row.querySelector('.rule-val').value.trim()
+                    }];
                 });
-                return rules;
+            }
+
+            function encodeSampleValue(value) {
+                return encodeURIComponent(value).replaceAll('%7B', '{').replaceAll('%7D', '}');
             }
 
             function buildRulesQueryString() {
-                return collectRules().map(rule => {
-                    const value = rule.operator === 'equals' && rule.value ? rule.value : 'xxx';
-                    return `${encodeURIComponent(rule.key)}=${encodeURIComponent(value)}`;
+                return Array.from(document.querySelectorAll('#rules-wrapper .rule-row')).flatMap((row) => {
+                    const key = row.querySelector('.rule-key').value.trim();
+                    if (!key) return [];
+                    const operator = row.querySelector('.rule-op').value;
+                    if (operator === 'equals') {
+                        const value = row.querySelector('.rule-val').value.trim();
+                        return [`${encodeURIComponent(key)}=${encodeURIComponent(value)}`];
+                    }
+                    const sampleValue = row.dataset.sampleValue || '';
+                    return [sampleValue
+                        ? `${encodeURIComponent(key)}=${encodeSampleValue(sampleValue)}`
+                        : encodeURIComponent(key)];
                 }).join('&');
             }
 
@@ -665,11 +788,41 @@
                 if (input) input.value = buildRulesQueryString();
             }
 
-            function copyGeneratedParams() {
+            function setLinkType(type) {
+                const isConditional = type === 'conditional';
+                const isDelayed = type === 'delayed';
+                if (!isConditional && !isDelayed) return;
+
+                const form = document.getElementById('createForm');
+                document.getElementById('linkType').value = type;
+                document.getElementById('linkConfiguration').hidden = false;
+                document.getElementById('conditionalFields').hidden = !isConditional;
+                document.getElementById('delayedFields').hidden = !isDelayed;
+                form.action = isConditional ? '/campaigns/create' : '/short-links/create';
+
+                document.querySelectorAll('[data-flow-field]').forEach((field) => {
+                    field.disabled = field.dataset.flowField !== type;
+                });
+                document.querySelector('[name="redirect_delay_seconds"]').required = isDelayed;
+                document.querySelectorAll('[data-link-type]').forEach((card) => {
+                    card.classList.toggle('is-active', card.dataset.linkType === type);
+                    card.setAttribute('aria-pressed', card.dataset.linkType === type ? 'true' : 'false');
+                });
+
+                const submit = document.getElementById('createLinkSubmit');
+                submit.disabled = false;
+                submit.textContent = isConditional ? 'Tạo link kiểm tra tham số' : 'Tạo link tự chuyển';
+            }
+
+            async function copyGeneratedParams() {
                 const el = document.getElementById('rulesQueryString');
                 if (!el) return;
-                el.select();
-                document.execCommand("copy");
+                try {
+                    await navigator.clipboard.writeText(el.value);
+                } catch (_) {
+                    el.select();
+                    document.execCommand('copy');
+                }
                 alert("Đã copy chuỗi tham số");
             }
 
@@ -694,25 +847,54 @@
                 document.getElementById('copy_from_id').value = id;
                 if (!id) {
                     document.getElementById('configPreview').innerText = 'Chọn link để xem cấu hình.';
-                    $('#campaignSafePageSelect').val('').trigger('change');
-                    renderCampaignSafePagePreview();
                     return;
                 }
                 fetch(`/api/campaigns/${id}/config`).then(r => r.json()).then(cfg => {
                     const rules = (cfg.rules || []).map(r => `${r.key} (${r.operator}${r.value ? ':' + r.value : ''})`).join(', ');
                     const countries = (cfg.filters && cfg.filters.countries && cfg.filters.countries.length) ? cfg.filters.countries.join(', ') : 'All';
                     document.getElementById('configPreview').innerText = `Rules: ${rules || 'Mặc định'} | Countries: ${countries}`;
-                    $('#rules-wrapper').empty();
+                    document.getElementById('rules-wrapper').replaceChildren();
                     (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value));
-                    $('#countrySelect').val(cfg.filters?.countries || []).trigger('change');
-                    $('#campaignSafePageSelect').val(cfg.safe_template || '').trigger('change');
-                    renderCampaignSafePagePreview();
+                    const selectedCountries = cfg.filters?.countries || [];
+                    const countrySelect = document.getElementById('countrySelect');
+                    Array.from(countrySelect.options).forEach((option) => {
+                        option.selected = selectedCountries.includes(option.value);
+                    });
+                    if (window.jQuery && jQuery.fn.select2) jQuery(countrySelect).trigger('change');
                     updateRulesQueryString();
                 }).catch(() => document.getElementById('configPreview').innerText = 'Không tải được cấu hình');
             }
 
-            $('#createForm').on('submit', function () {
-                $('#rules_json').val(JSON.stringify(collectRules()));
+            document.addEventListener('DOMContentLoaded', function () {
+                const countrySelect = document.getElementById('countrySelect');
+                Object.entries(ALL_COUNTRIES).forEach(([code, name]) => {
+                    countrySelect.appendChild(new Option(`${name} (${code})`, code));
+                });
+                if (window.jQuery && jQuery.fn.select2) {
+                    jQuery(countrySelect).select2({ placeholder: 'Chọn quốc gia...', dropdownParent: jQuery('#addLinkModal') });
+                }
+
+                document.querySelectorAll('[data-link-type]').forEach((button) => {
+                    button.addEventListener('click', () => setLinkType(button.dataset.linkType));
+                });
+                document.querySelectorAll('[data-create-link-type]').forEach((button) => {
+                    button.addEventListener('click', () => setLinkType(button.dataset.createLinkType));
+                });
+                document.querySelectorAll('[data-rule-template]').forEach((button) => {
+                    button.addEventListener('click', () => addTemplate(button.dataset.ruleTemplate));
+                });
+                document.getElementById('addRuleButton').addEventListener('click', () => addNewRule());
+                document.getElementById('createForm').addEventListener('submit', function (event) {
+                    const type = document.getElementById('linkType').value;
+                    if (!type) {
+                        event.preventDefault();
+                        return;
+                    }
+                    document.getElementById('rules_json').value = type === 'conditional'
+                        ? JSON.stringify(collectRules())
+                        : '[]';
+                });
+                updateRulesQueryString();
             });
         </script>
         <%- include('../partials/footer') %>

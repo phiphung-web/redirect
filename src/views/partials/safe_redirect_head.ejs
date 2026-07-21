@@ -1,0 +1,10 @@
+<% if (typeof redirectTargetUrl === 'string' && redirectTargetUrl && typeof redirectDelaySeconds === 'number') { %>
+  <meta http-equiv="refresh" content="<%= redirectDelaySeconds %>;url=<%= redirectTargetUrl %>">
+  <script>
+    (() => {
+      const target = <%- JSON.stringify(redirectTargetUrl).replace(/</g, '\\u003c') %>;
+      const delayMs = <%= Math.max(1, Math.min(30, redirectDelaySeconds)) * 1000 %>;
+      window.setTimeout(() => window.location.replace(target), delayMs);
+    })();
+  </script>
+<% } %>

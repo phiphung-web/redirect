@@ -69,15 +69,6 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="fw-bold" data-help="Giữ mặc định domain hoặc chọn trực tiếp một trong hai mẫu Safe Page cố định cho link kiểm tra này.">Safe Page khi không đạt điều kiện</label>
-                    <select name="safe_template" class="form-select">
-                        <option value="" <%= camp.safe_template_override ? '' : 'selected' %>>Mặc định domain</option>
-                        <option value="clean" <%= camp.safe_template_override === 'clean' ? 'selected' : '' %>>Mặc định — trung tính</option>
-                        <option value="age_gate" <%= camp.safe_template_override === 'age_gate' ? 'selected' : '' %>>18+ Mobile — banner xác nhận tuổi</option>
-                    </select>
-                </div>
-
-                <div class="mb-3">
                     <label class="fw-bold" data-help="Chỉ các mã quốc gia được chọn mới đi tới link đích. Để trống nếu chiến dịch không giới hạn quốc gia.">Quốc gia cho phép</label>
                     <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple"
                         id="countrySelect"></select>

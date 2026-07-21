@@ -14,6 +14,7 @@ const {
   trustProxy,
   isProduction,
   product,
+  ssl,
 } = require("./config/app");
 const db = require("./config/db");
 const { requestContext } = require("./middleware/request-context");
@@ -33,6 +34,11 @@ const {
   verifyPasswordWithLazyMigration,
 } = require("./services/passwords");
 const { auditAdminAction } = require("./services/audit");
+const {
+  queueDomainSsl,
+  startSslProvisioner,
+  stopSslProvisioner,
+} = require("./services/ssl-provisioner");
 
 const app = express();
 const PORT = ports.admin;
@@ -167,6 +173,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(requestContext);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use("/assets", express.static(path.join(__dirname, "../public")));
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.get("/healthz", async (req, res) => {
@@ -215,6 +222,7 @@ app.use((req, res, next) => {
   res.locals.requestId = req.requestId;
   res.locals.isProduction = isProduction;
   res.locals.product = product;
+  res.locals.sslAutomationEnabled = ssl.enabled;
   next();
 });
 
@@ -298,8 +306,10 @@ app.get("/redirect", checkAuth, async (req, res) => {
   const rDom = await db.query(
     `
       SELECT d.*, cu.username AS created_by_name, uu.username AS updated_by_name,
-             (SELECT COUNT(*) FROM campaigns c WHERE c.domain_id = d.id) AS link_count,
-             (SELECT COUNT(*) FROM campaigns c WHERE c.domain_id = d.id AND c.is_active) AS link_active
+             (SELECT COUNT(*) FROM campaigns c WHERE c.domain_id = d.id) +
+             (SELECT COUNT(*) FROM short_links s WHERE s.domain_id = d.id) AS link_count,
+             (SELECT COUNT(*) FROM campaigns c WHERE c.domain_id = d.id AND c.is_active) +
+             (SELECT COUNT(*) FROM short_links s WHERE s.domain_id = d.id AND s.is_active) AS link_active
       FROM domains d
       LEFT JOIN users cu ON d.user_id = cu.id
       LEFT JOIN users uu ON d.updated_by = uu.id
@@ -308,7 +318,8 @@ app.get("/redirect", checkAuth, async (req, res) => {
   );
   const stats = await db.query(`
         SELECT (SELECT COUNT(*) FROM domains) as total_domains,
-               (SELECT COUNT(*) FROM campaigns) as total_links,
+               (SELECT COUNT(*) FROM campaigns) +
+               (SELECT COUNT(*) FROM short_links) as total_links,
                (SELECT COUNT(*) FROM traffic_logs) as total_traffic
     `);
   res.render("admin/dashboard", {
@@ -320,28 +331,7 @@ app.get("/redirect", checkAuth, async (req, res) => {
 
 // --- SHORT LINKS ---
 app.get("/short-links", checkAuth, async (req, res) => {
-  const domains = await db.query(
-    `SELECT id, domain_url, status FROM domains ORDER BY domain_url ASC`
-  );
-  const links = await db.query(
-    `
-      SELECT s.*, d.domain_url, cu.username AS created_by_name, uu.username AS updated_by_name
-      FROM short_links s
-      JOIN domains d ON d.id = s.domain_id
-      LEFT JOIN users cu ON s.user_id = cu.id
-      LEFT JOIN users uu ON s.updated_by = uu.id
-      ORDER BY s.id DESC
-      LIMIT 300
-    `
-  );
-  res.render("admin/short_links", {
-    user: req.session.user,
-    domains: domains.rows,
-    links: links.rows.map((row) => ({
-      ...row,
-      full_url: `https://${row.domain_url}/s/${row.code}`,
-    })),
-  });
+  return res.redirect("/redirect");
 });
 
 app.post("/short-links/create", checkAuth, async (req, res) => {
@@ -349,7 +339,10 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
   if (!Number.isInteger(domainId)) return res.send("Domain khong hop le");
 
   try {
-    const title = validateName(req.body.title || "Short link", "Ten link");
+    const title = validateName(
+      req.body.title || req.body.name || "Short link",
+      "Ten link"
+    );
     const targetUrl = normalizeTargetUrl(req.body.target_url);
     const redirectDelaySeconds = Number.parseInt(
       req.body.redirect_delay_seconds,
@@ -399,7 +392,7 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
             redirect_delay_seconds: redirectDelaySeconds,
           },
         });
-        return res.redirect("/short-links");
+        return res.redirect(`/domains/${domainId}`);
       } catch (e) {
         if (e.code === "23505" && code) {
           throw new Error("Ma rut gon da ton tai tren domain nay");
@@ -414,8 +407,8 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
 });
 
 const toggleShortLinkHandler = async (req, res) => {
-  await db.query(
-    `UPDATE short_links SET is_active = NOT is_active, updated_by=$2 WHERE id=$1`,
+  const updated = await db.query(
+    `UPDATE short_links SET is_active = NOT is_active, updated_by=$2 WHERE id=$1 RETURNING domain_id`,
     [req.params.id, req.session.user.id]
   );
   await auditAdminAction({
@@ -424,7 +417,10 @@ const toggleShortLinkHandler = async (req, res) => {
     targetType: "short_link",
     targetId: req.params.id,
   });
-  res.redirect("/short-links");
+  if (req.body.return_to_domain && updated.rowCount) {
+    return res.redirect(`/domains/${updated.rows[0].domain_id}`);
+  }
+  return res.redirect("/short-links");
 };
 app.get("/short-links/toggle/:id", checkAuth, (req, res) =>
   res.status(405).send("Use POST /short-links/toggle/:id")
@@ -432,14 +428,20 @@ app.get("/short-links/toggle/:id", checkAuth, (req, res) =>
 app.post("/short-links/toggle/:id", checkAuth, toggleShortLinkHandler);
 
 const deleteShortLinkHandler = async (req, res) => {
-  await db.query(`DELETE FROM short_links WHERE id=$1`, [req.params.id]);
+  const deleted = await db.query(
+    `DELETE FROM short_links WHERE id=$1 RETURNING domain_id`,
+    [req.params.id]
+  );
   await auditAdminAction({
     req,
     action: "short_link_delete",
     targetType: "short_link",
     targetId: req.params.id,
   });
-  res.redirect("/short-links");
+  if (req.body.return_to_domain && deleted.rowCount) {
+    return res.redirect(`/domains/${deleted.rows[0].domain_id}`);
+  }
+  return res.redirect("/short-links");
 };
 app.get("/short-links/delete/:id", requireRole(["super_admin"]), (req, res) =>
   res.status(405).send("Use POST /short-links/delete/:id")
@@ -746,23 +748,32 @@ app.post("/domains/create", checkAuth, async (req, res) => {
   try {
     const domainUrl = normalizeDomainUrl(req.body.domain_url);
     const safeTemplate = normalizeSafeTemplate(req.body.safe_template);
-    await db.query(
-      `INSERT INTO domains (domain_url, safe_template, user_id, updated_by) VALUES ($1, $2, $3, $4)`,
+    const inserted = await db.query(
+      `INSERT INTO domains (domain_url, safe_template, user_id, updated_by, ssl_status)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
       [
         domainUrl,
         safeTemplate,
         req.session.user.id,
         req.session.user.id,
+        ssl.enabled ? "pending" : "fallback",
       ]
     );
+    const domainId = inserted.rows[0].id;
     await auditAdminAction({
       req,
       action: "domain_create",
       targetType: "domain",
-      targetId: domainUrl,
-      detail: { domain_url: domainUrl, safe_template: safeTemplate },
+      targetId: domainId,
+      detail: {
+        domain_url: domainUrl,
+        safe_template: safeTemplate,
+        auto_ssl: ssl.enabled,
+      },
     });
-    res.redirect("/redirect");
+    queueDomainSsl(domainId);
+    res.redirect(`/domains/${domainId}`);
   } catch (e) {
     res.send("Lỗi: Domain đã tồn tại");
   }
@@ -785,6 +796,28 @@ app.get("/domains/toggle/:id", checkAuth, (req, res) =>
   res.status(405).send("Use POST /domains/toggle/:id")
 );
 app.post("/domains/toggle/:id", checkAuth, toggleDomainHandler);
+
+app.post("/domains/:id/ssl/retry", checkAuth, async (req, res) => {
+  if (!ssl.enabled) {
+    return res.status(503).send("Automatic SSL is not enabled on this server");
+  }
+  const result = await db.query(
+    `UPDATE domains
+     SET ssl_status='pending', ssl_error=NULL, ssl_attempts=0, ssl_updated_at=now()
+     WHERE id=$1
+     RETURNING id`,
+    [req.params.id]
+  );
+  if (!result.rowCount) return res.status(404).send("Domain not found");
+  await auditAdminAction({
+    req,
+    action: "domain_ssl_retry",
+    targetType: "domain",
+    targetId: req.params.id,
+  });
+  queueDomainSsl(result.rows[0].id, { force: true });
+  return res.redirect(`/domains/${result.rows[0].id}`);
+});
 
 // CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A DOMAIN
 const deleteDomainHandler = async (req, res) => {
@@ -827,10 +860,11 @@ const verifyDomainHandler = async (req, res) => {
       });
       return res.json({ status: "error", msg: "ChÆ°a trá» DNS" });
     }
-    db.query(`UPDATE domains SET status='active', updated_by=$2 WHERE id=$1`, [
+    await db.query(`UPDATE domains SET status='active', updated_by=$2 WHERE id=$1`, [
       req.params.id,
       req.session.user.id,
     ]);
+    queueDomainSsl(req.params.id);
     await auditAdminAction({
       req,
       action: "domain_verify",
@@ -845,6 +879,21 @@ app.get("/domains/:id/verify", checkAuth, verifyDomainHandler);
 app.post("/domains/:id/verify", checkAuth, verifyDomainHandler);
 
 // --- LINK CAMPAIGNS ---
+app.get("/domains/:id/safe-preview", checkAuth, async (req, res) => {
+  const result = await db.query(
+    `SELECT domain_url, safe_template FROM domains WHERE id=$1 LIMIT 1`,
+    [req.params.id]
+  );
+  if (!result.rowCount) return res.status(404).send("Domain not found");
+
+  const domain = result.rows[0];
+  const template = normalizeSafeTemplate(domain.safe_template || "clean");
+  return res.render(`safepages/${template}`, {
+    title: domain.domain_url,
+    domain: domain.domain_url,
+  });
+});
+
 app.get("/domains/:id", checkAuth, async (req, res) => {
   const domainId = req.params.id;
   const rDom = await db.query(
@@ -871,12 +920,25 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     [domainId]
   );
 
+  const rShortLinks = await db.query(
+    `
+      SELECT s.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      FROM short_links s
+      LEFT JOIN users cu ON s.user_id = cu.id
+      LEFT JOIN users uu ON s.updated_by = uu.id
+      WHERE s.domain_id=$1
+      ORDER BY s.id DESC
+    `,
+    [domainId]
+  );
+
   const linkStats = await db.query(
     `
-      SELECT COUNT(*) AS total,
-             COUNT(*) FILTER (WHERE is_active) AS active,
-             COUNT(*) FILTER (WHERE NOT is_active) AS inactive
-      FROM campaigns WHERE domain_id=$1
+      SELECT
+        (SELECT COUNT(*) FROM campaigns WHERE domain_id=$1) +
+        (SELECT COUNT(*) FROM short_links WHERE domain_id=$1) AS total,
+        (SELECT COUNT(*) FROM campaigns WHERE domain_id=$1 AND is_active) +
+        (SELECT COUNT(*) FROM short_links WHERE domain_id=$1 AND is_active) AS active
     `,
     [domainId]
   );
@@ -888,6 +950,10 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     l.potential_traffic = 0;
     return l;
   });
+  const shortLinks = rShortLinks.rows.map((link) => ({
+    ...link,
+    full_url: `https://${rDom.rows[0].domain_url}/s/${link.code}`,
+  }));
 
   // Smart Alert Logic (Äáº¿m truy cáº­p sáº¡ch tá»« quá»‘c gia allow)
   const linkIds = links.map((l) => l.id);
@@ -917,35 +983,14 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     user: req.session.user,
     domain: rDom.rows[0],
     links,
+    shortLinks,
     linkStats: linkStats.rows[0],
   });
 });
 
-app.post("/domains/:id/safe-content", checkAuth, async (req, res) => {
-  try {
-    const safeTemplate = normalizeSafeTemplate(req.body.safe_template);
-    const safeContent = {};
-    await db.query(
-      `UPDATE domains SET safe_template=$1, safe_content=$2, updated_by=$3 WHERE id=$4`,
-      [
-        safeTemplate,
-        JSON.stringify(safeContent),
-        req.session.user.id,
-        req.params.id,
-      ]
-    );
-    await auditAdminAction({
-      req,
-      action: "domain_safe_content_update",
-      targetType: "domain",
-      targetId: req.params.id,
-      detail: { safe_template: safeTemplate, safe_content: safeContent },
-    });
-    res.redirect("/domains/" + req.params.id);
-  } catch (e) {
-    res.send(e.message || "Safe content khong hop le");
-  }
-});
+app.all("/domains/:id/safe-content", checkAuth, (_req, res) =>
+  res.status(410).send("Safe Page chi duoc chon khi them domain")
+);
 
 app.post("/campaigns/create", checkAuth, async (req, res) => {
   const {
@@ -955,7 +1000,6 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
     rules_json,
     allowed_countries,
     copy_from_id,
-    safe_template,
   } = req.body;
   try {
     const normalizedDomainId = Number.parseInt(domain_id, 10);
@@ -963,9 +1007,6 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
       throw new Error("Domain khong hop le");
     const normalizedName = validateName(name, "Ten link");
     const normalizedTargetUrl = normalizeTargetUrl(target_url);
-    let normalizedSafeTemplate = safe_template
-      ? normalizeSafeTemplate(safe_template)
-      : null;
     let rulesPayload = parseRules(rules_json);
     let rulesPayloadJson = JSON.stringify(rulesPayload || []);
     const dup = await db.query(
@@ -978,15 +1019,13 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
 
     if (copy_from_id && rulesPayload.length === 0 && !allowed_countries) {
       const rCfg = await db.query(
-        `SELECT rules, filters, safe_template_override FROM campaigns WHERE id=$1 AND domain_id=$2`,
+        `SELECT rules, filters FROM campaigns WHERE id=$1 AND domain_id=$2`,
         [copy_from_id, normalizedDomainId]
       );
       if (rCfg.rowCount) {
         rulesPayload = parseRules(rCfg.rows[0].rules || []);
         filters = buildFilters(rCfg.rows[0].filters?.countries || []);
         rulesPayloadJson = JSON.stringify(rulesPayload || []);
-        if (!normalizedSafeTemplate)
-          normalizedSafeTemplate = rCfg.rows[0].safe_template_override || null;
       }
     }
     const filtersJson = JSON.stringify(filters || {});
@@ -996,8 +1035,8 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
 
     await db.query(
       `
-            INSERT INTO campaigns (domain_id, user_id, name, param_key, param_value, target_url, rules, filters, safe_template_override, updated_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO campaigns (domain_id, user_id, name, param_key, param_value, target_url, rules, filters, updated_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `,
       [
         normalizedDomainId,
@@ -1008,7 +1047,6 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
         normalizedTargetUrl,
         rulesPayloadJson,
         filtersJson,
-        normalizedSafeTemplate,
         req.session.user.id,
       ]
     );
@@ -1021,7 +1059,6 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
       detail: {
         domain_id: normalizedDomainId,
         name: normalizedName,
-        safe_template: normalizedSafeTemplate,
       },
     });
     res.redirect("/domains/" + normalizedDomainId);
@@ -1116,7 +1153,6 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
     rules_json,
     allowed_countries,
     domain_id,
-    safe_template,
   } =
     req.body;
   try {
@@ -1129,9 +1165,6 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
     const filters = buildFilters(allowed_countries);
     const rulesPayloadJson = JSON.stringify(rulesPayload || []);
     const filtersJson = JSON.stringify(filters || {});
-    const normalizedSafeTemplate = safe_template
-      ? normalizeSafeTemplate(safe_template)
-      : null;
     const dup = await db.query(
       `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3 LIMIT 1`,
       [normalizedDomainId, normalizedName, req.params.id]
@@ -1139,13 +1172,12 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
     if (dup.rowCount) return res.send("Ten link bi trung trong domain");
 
     await db.query(
-      `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, safe_template_override=$5, updated_by=$6 WHERE id=$7`,
+      `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, safe_template_override=NULL, updated_by=$5 WHERE id=$6`,
       [
         normalizedName,
         normalizedTargetUrl,
         rulesPayloadJson,
         filtersJson,
-        normalizedSafeTemplate,
         req.session.user.id,
         req.params.id,
       ]
@@ -1166,7 +1198,7 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
 app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
   const campId = req.params.id;
   const r = await db.query(
-    `SELECT id, name, rules, filters, param_key, param_value, safe_template_override FROM campaigns WHERE id=$1`,
+    `SELECT id, name, rules, filters, param_key, param_value FROM campaigns WHERE id=$1`,
     [campId]
   );
   if (!r.rowCount) return res.status(404).json({ error: "not_found" });
@@ -1178,7 +1210,6 @@ app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
     filters: row.filters || {},
     param_key: row.param_key,
     param_value: row.param_value,
-    safe_template: row.safe_template_override,
   });
 });
 
@@ -1655,11 +1686,13 @@ app.use(async (err, req, res, next) => {
 });
 
 if (require.main === module) {
-  const server = app.listen(PORT, process.env.BIND_HOST || "127.0.0.1", () =>
-    console.log(`${product.name} admin listening on ${PORT}`)
-  );
+  const server = app.listen(PORT, process.env.BIND_HOST || "127.0.0.1", () => {
+    console.log(`${product.name} admin listening on ${PORT}`);
+    startSslProvisioner();
+  });
   const shutdown = (signal) => {
     console.log(`${signal} received, closing admin service...`);
+    stopSslProvisioner();
     server.close(async () => {
       await db.end().catch(() => undefined);
       process.exit(0);

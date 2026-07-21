@@ -101,8 +101,7 @@ const getCampaign = async (domainId, entries) => {
   let result;
   try {
     result = await db.query(
-      `SELECT c.*, c.safe_template_override AS safe_page_template,
-              NULL::jsonb AS safe_page_content
+      `SELECT c.*
        FROM campaigns c
        JOIN unnest($2::text[], $3::text[]) AS incoming(param_key, param_value)
          ON c.param_key = incoming.param_key AND c.param_value = incoming.param_value
@@ -176,12 +175,9 @@ app.get(/.*/, async (req, res) => {
 
     domain = await getDomain(host);
 
-    renderSafe = (domData, action = "safe_page", detail) => {
+    renderSafe = (domData, action = "safe_page", detail, options = {}) => {
       if (!domData) return res.status(404).send("Domain not configured");
-      const tpl = normalizeSafeTemplate(
-        campaign?.safe_page_template || domData.safe_template || "clean"
-      );
-      const cfg = campaign?.safe_page_content || domData.safe_content || {};
+      const tpl = normalizeSafeTemplate(domData.safe_template || "clean");
 
       res.set({
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -192,6 +188,7 @@ app.get(/.*/, async (req, res) => {
       logTraffic({
         domainId: domData.id,
         campaignId: campaign?.id || null,
+        shortLinkId: options.shortLinkId || null,
         requestId: req.requestId,
         ip,
         country,
@@ -207,11 +204,9 @@ app.get(/.*/, async (req, res) => {
       });
 
       const viewData = {
-        title: cfg.title || "Welcome",
-        headline: cfg.headline || "Latest updates",
-        themeColor: cfg.themeColor || "#2563eb",
+        title: host,
         domain: host,
-        logo: cfg.logo,
+        ...(options.viewData || {}),
       };
 
       return res.render(`safepages/${tpl}`, viewData, (error, html) => {
@@ -245,23 +240,6 @@ app.get(/.*/, async (req, res) => {
       }
 
       incrementShortLink(shortLink.id);
-      logTraffic({
-        domainId: domain.id,
-        shortLinkId: shortLink.id,
-        requestId: req.requestId,
-        ip,
-        country,
-        city: geo?.city,
-        action: "short_redirect",
-        referer: req.headers.referer,
-        requestUrl,
-        detail: `short=${shortLink.id}`,
-        device: deviceType,
-        os: osName,
-        browser: browserName,
-        ua: uaString,
-      });
-
       const target = new URL(shortLink.target_url);
       queryEntries.forEach(([key, value]) => {
         if (!target.searchParams.has(key)) target.searchParams.append(key, value);
@@ -275,11 +253,12 @@ app.get(/.*/, async (req, res) => {
         ? Math.min(Math.max(configuredDelay, 1), 30)
         : 3;
 
-      res.set("Cache-Control", "no-store, max-age=0");
-      return res.status(200).render("safepages/redirect_wait", {
-        product,
-        targetUrl: target.toString(),
-        delaySeconds: redirectDelaySeconds,
+      return renderSafe(domain, "short_redirect", `short=${shortLink.id}`, {
+        shortLinkId: shortLink.id,
+        viewData: {
+          redirectTargetUrl: target.toString(),
+          redirectDelaySeconds,
+        },
       });
     }
 
@@ -298,7 +277,7 @@ app.get(/.*/, async (req, res) => {
 
     for (const rule of campaign.rules || []) {
       const value = queryParams[rule.key];
-      if (rule.operator === "exists" && (value === undefined || value === "")) {
+      if (rule.operator === "exists" && value === undefined) {
         return renderSafe(domain, "safe_page_missing_param", `missing:${rule.key}`);
       }
       if (

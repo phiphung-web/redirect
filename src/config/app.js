@@ -53,6 +53,25 @@ const performance = {
   counterFlushMs: parseInteger(process.env.COUNTER_FLUSH_MS, 2000),
 };
 
+const ssl = {
+  enabled: parseBoolean(process.env.AUTO_SSL_ENABLED, false),
+  command:
+    process.env.SSL_PROVISION_COMMAND ||
+    "/usr/local/sbin/redirect-pro-provision-domain",
+  timeoutMs: Math.max(
+    30000,
+    parseInteger(process.env.SSL_PROVISION_TIMEOUT_MS, 180000)
+  ),
+  retryIntervalMs: Math.max(
+    60000,
+    parseInteger(process.env.SSL_RETRY_INTERVAL_MS, 300000)
+  ),
+  maxAttempts: Math.max(
+    1,
+    parseInteger(process.env.SSL_MAX_ATTEMPTS, 5)
+  ),
+};
+
 if (isProduction) {
   const unsafeSecrets = [
     "",
@@ -100,4 +119,5 @@ module.exports = {
   },
   product,
   performance,
+  ssl,
 };

@@ -15,10 +15,7 @@
         <p class="eyebrow mb-2">Xin chào, <%= user.username %></p>
         <h1 data-help="Sản phẩm có đúng hai luồng tạo link để thao tác nhanh và tránh nhầm cấu hình.">Hai luồng redirect, một nơi quản lý.</h1>
         <p class="hero-copy">Dùng link kiểm tra cho traffic cần rule; dùng link chờ chuyển cho luồng tự động sau thời gian đã đặt. Cấu hình mới được đồng bộ sang engine trong tối đa 30 giây.</p>
-        <div class="d-flex flex-wrap gap-2">
-          <a class="btn btn-primary" href="/redirect"><i class="fa-solid fa-filter-circle-dollar me-2"></i>Tạo link kiểm tra</a>
-          <a class="btn btn-soft" href="/short-links"><i class="fa-solid fa-clock me-2"></i>Tạo link chờ chuyển</a>
-        </div>
+        <a class="btn btn-primary" href="/redirect"><i class="fa-solid fa-globe me-2"></i>Chọn domain và tạo link</a>
       </div>
       <div class="hero-visual" aria-hidden="true">
         <div class="route-node route-node-source"><i class="fa-solid fa-globe"></i></div>
@@ -35,7 +32,7 @@
         <div><span class="quick-label">Luồng 1</span><h3>Link kiểm tra tham số</h3><p>Kiểm tra tham số, quốc gia và rule trước khi chuyển.</p></div>
         <i class="fa-solid fa-arrow-right quick-arrow"></i>
       </a>
-      <a class="quick-card" href="/short-links">
+      <a class="quick-card" href="/redirect">
         <div class="quick-icon green"><i class="fa-solid fa-link"></i></div>
         <div><span class="quick-label">Luồng 2</span><h3>Link chờ chuyển hướng</h3><p>Không kiểm tra điều kiện; tự chuyển sau 1–30 giây và giữ tham số tracking.</p></div>
         <i class="fa-solid fa-arrow-right quick-arrow"></i>

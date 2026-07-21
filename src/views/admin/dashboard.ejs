@@ -12,8 +12,8 @@
     <section class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
       <div>
         <p class="eyebrow mb-1">Trung tâm điều phối</p>
-        <h1 class="h2 fw-bold mb-2" data-help="Luồng link kiểm tra dùng tham số, quốc gia và rule để quyết định chuyển hướng hay hiển thị Safe Page.">Link kiểm tra tham số</h1>
-        <p class="text-muted mb-0">Luồng 1 · Quản lý domain, điều kiện redirect và một trong hai mẫu Safe Page cố định.</p>
+        <h1 class="h2 fw-bold mb-2" data-help="Mỗi domain có một Safe Page và chứa cả hai loại link: kiểm tra tham số hoặc tự chuyển sau thời gian chờ.">Tên miền &amp; Link</h1>
+        <p class="text-muted mb-0">Chọn một domain để xem Safe Page và tạo một trong hai loại link.</p>
       </div>
       <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDomainModal">
         <i class="fa-solid fa-plus me-2"></i>Thêm domain
@@ -50,19 +50,26 @@
       <% } else { %>
         <div class="table-responsive">
           <table class="table align-middle mb-0">
-            <thead><tr><th class="ps-4">Domain</th><th>Giao diện</th><th>Trạng thái</th><th>Chiến dịch</th><th class="text-end pe-4">Thao tác</th></tr></thead>
+            <thead><tr><th class="ps-4">Domain</th><th>Giao diện</th><th>SSL</th><th>Trạng thái</th><th>Tổng link</th><th class="text-end pe-4">Thao tác</th></tr></thead>
             <tbody>
               <% domains.forEach(d => { %>
                 <tr>
                   <td class="ps-4">
-                    <div class="domain-cell"><div class="domain-avatar"><%= d.domain_url.substring(0, 1).toUpperCase() %></div><div><a href="https://<%= d.domain_url %>" target="_blank" rel="noopener" class="fw-bold text-dark text-decoration-none"><%= d.domain_url %></a><div class="text-muted small">ID #<%= d.id %></div></div></div>
+                    <div class="domain-cell"><div class="domain-avatar"><%= d.domain_url.substring(0, 1).toUpperCase() %></div><div><a href="/domains/<%= d.id %>" class="fw-bold text-dark text-decoration-none"><%= d.domain_url %></a><div class="text-muted small">Bấm vào domain để quản lý link</div></div></div>
                   </td>
-                  <td><span class="badge bg-light text-dark border"><%= d.safe_template === 'age_gate' ? '18+ Mobile' : 'Mặc định' %></span></td>
+                  <td><span class="badge bg-light text-dark border"><%= d.safe_template === 'age_gate' ? 'Safe Page 2 · 18+' : 'Safe Page 1 · Repair' %></span></td>
+                  <td>
+                    <% if (d.ssl_status === 'active') { %><span class="badge bg-success">SSL hoạt động</span>
+                    <% } else if (d.ssl_status === 'provisioning' || d.ssl_status === 'pending') { %><span class="badge bg-warning text-dark">Đang cấp SSL</span>
+                    <% } else if (d.ssl_status === 'error') { %><span class="badge bg-danger">SSL lỗi</span>
+                    <% } else { %><span class="badge bg-info text-dark">TLS Cloudflare</span><% } %>
+                  </td>
                   <td><span class="status-badge <%= d.status === 'active' ? 'active' : 'inactive' %>"><span class="status-dot"></span><%= d.status === 'active' ? 'Hoạt động' : 'Đã tắt' %></span></td>
                   <td><div class="campaign-count"><strong><%= d.link_active || 0 %></strong> hoạt động <span>/ <%= d.link_count || 0 %> tổng</span></div></td>
                   <td class="text-end pe-4 text-nowrap">
                     <form action="/domains/toggle/<%= d.id %>" method="POST" class="d-inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-secondary" title="Bật/tắt"><i class="fa-solid fa-power-off"></i></button></form>
-                    <a href="/domains/<%= d.id %>" class="btn btn-sm btn-primary ms-1">Quản lý</a>
+                    <a href="https://<%= d.domain_url %>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary ms-1" title="Xem Safe Page"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                    <a href="/domains/<%= d.id %>" class="btn btn-sm btn-primary ms-1">Mở domain</a>
                     <% if (user.role_name === 'super_admin') { %><form action="/domains/delete/<%= d.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa domain sẽ xóa toàn bộ chiến dịch và log liên quan. Tiếp tục?')"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Xóa"><i class="fa-solid fa-trash"></i></button></form><% } %>
                   </td>
                 </tr>
@@ -78,10 +85,11 @@
     <div class="modal-dialog modal-dialog-centered">
       <form class="modal-content" action="/domains/create" method="POST">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <div class="modal-header"><div><h5 class="modal-title fw-bold" data-help="Tạo điểm vào mới cho hệ thống. Sau khi lưu, hãy trỏ bản ghi DNS A của domain về IP VPS.">Thêm domain</h5><p class="text-muted small mb-0">Domain cần được trỏ DNS về IP của redirect engine.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-header"><div><h5 class="modal-title fw-bold" data-help="Tạo điểm vào mới cho hệ thống. Sau khi lưu, hệ thống tự xếp hàng kiểm tra và cấp SSL.">Thêm domain</h5><p class="text-muted small mb-0">Hãy cấu hình DNS trước; SSL sẽ được cấp tự động sau khi lưu.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
           <div class="mb-3"><label class="form-label fw-bold" data-help="Nhập hostname thuần, ví dụ go.example.com. Không thêm giao thức, cổng hoặc đường dẫn.">Tên domain</label><input type="text" name="domain_url" class="form-control" required placeholder="go.example.com"><div class="form-text">Chỉ nhập tên miền, không nhập http:// hoặc đường dẫn.</div></div>
-          <div class="mb-2"><label class="form-label fw-bold" data-help="Chỉ có hai mẫu cố định: trang mặc định trung tính và mẫu xác nhận 18+ tối ưu mobile.">Giao diện dự phòng</label><select name="safe_template" class="form-select"><option value="clean">Mặc định — trung tính</option><option value="age_gate">18+ Mobile — ảnh xác nhận độ tuổi</option></select></div>
+          <div class="mb-2"><label class="form-label fw-bold" data-help="Chọn một lần khi thêm domain. Mẫu này áp dụng cho toàn bộ campaign và nội dung Safe Page luôn bằng tiếng Anh.">Giao diện Safe Page</label><select name="safe_template" class="form-select"><option value="clean">Safe Page 1 — Repair Services</option><option value="age_gate">Safe Page 2 — 18+ Age Confirmation</option></select><div class="form-text">Không thể đổi mẫu trong campaign hoặc trang chi tiết domain.</div></div>
+          <div class="alert alert-light border small mt-3 mb-0"><i class="fa-solid fa-shield-halved text-success me-2"></i><%= sslAutomationEnabled ? 'Auto SSL đang bật. Quá trình cấp chứng chỉ chạy nền và có thể mất vài phút.' : 'Máy chủ đang dùng TLS Cloudflare dự phòng; Auto SSL riêng chưa được bật.' %></div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Lưu domain</button></div>
       </form>

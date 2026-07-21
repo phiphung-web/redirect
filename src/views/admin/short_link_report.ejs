@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>Báo cáo link rút gọn - <%= link.title || link.code %></title>
+  <title>Báo cáo link tự chuyển - <%= link.title || link.code %></title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -11,9 +11,10 @@
   <%- include('../partials/header', {
     user,
     active: 'short-links',
-    backUrl: '/short-links',
+    backUrl: '/domains/' + link.domain_id,
     breadcrumb: [
-      { label: 'Rút gọn link', url: '/short-links' },
+      { label: link.domain_url, url: '/domains/' + link.domain_id },
+      { label: 'Link tự chuyển' },
       { label: link.title || link.code },
       { label: 'Báo cáo' }
     ]
@@ -23,7 +24,7 @@
     <div class="card shadow-sm mb-3">
       <div class="card-body d-flex flex-wrap justify-content-between align-items-start gap-3">
         <div>
-          <div class="text-muted small">Link rút gọn</div>
+          <div class="text-muted small">Link tự chuyển sau thời gian chờ</div>
           <h4 class="mb-1" data-help="Báo cáo của link chuyển hướng này, tách biệt với báo cáo campaign."><%= link.title || link.code %></h4>
           <div class="input-group input-group-sm" style="max-width:520px;">
             <input type="text" class="form-control bg-white text-primary fw-bold" value="https://<%= link.domain_url %>/s/<%= link.code %>" readonly id="shortReportUrl">

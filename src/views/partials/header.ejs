@@ -25,10 +25,7 @@
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0 app-nav-links">
         <li class="nav-item">
-          <a class="nav-link <%= currentMenu === 'redirect' ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-filter-circle-dollar me-2"></i>Link kiểm tra</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link <%= currentMenu === 'short-links' ? 'active' : '' %>" href="/short-links"><i class="fa-solid fa-clock me-2"></i>Link chờ chuyển</a>
+          <a class="nav-link <%= ['redirect','short-links'].includes(currentMenu) ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-globe me-2"></i>Tên miền &amp; Link</a>
         </li>
         <% if (isAdmin) { %>
           <li class="nav-item dropdown">

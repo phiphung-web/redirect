@@ -15,6 +15,7 @@ const path = require("path");
 const db = require("../src/config/db");
 const adsApp = require("../src/server-ads");
 const adminApp = require("../src/server-admin");
+const ecosystem = require("../ecosystem.config.cjs");
 const {
   SAFE_TEMPLATES,
   normalizeSafeTemplate,
@@ -32,6 +33,15 @@ const extractCsrf = (html) => {
   assert.ok(match, "missing csrf token");
   return match[1];
 };
+
+test("production PM2 profile uses a bounded redirect cluster", () => {
+  const ads = ecosystem.apps.find((app) => app.name === "linkpilot-ads");
+  const admin = ecosystem.apps.find((app) => app.name === "linkpilot-admin");
+  assert.equal(ads.exec_mode, "cluster");
+  assert.equal(ads.instances, 4);
+  assert.equal(admin.exec_mode, "fork");
+  assert.equal(admin.instances, 1);
+});
 
 test("product exposes exactly the two fixed safe page templates", () => {
   assert.deepEqual([...SAFE_TEMPLATES], ["clean", "age_gate"]);

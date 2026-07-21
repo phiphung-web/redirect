@@ -12,6 +12,10 @@ const path = require("path");
 const db = require("../src/config/db");
 const adsApp = require("../src/server-ads");
 const adminApp = require("../src/server-admin");
+const {
+  SAFE_TEMPLATES,
+  normalizeSafeTemplate,
+} = require("../src/utils/validation");
 
 const product = {
   name: "LinkPilot",
@@ -25,6 +29,12 @@ const extractCsrf = (html) => {
   assert.ok(match, "missing csrf token");
   return match[1];
 };
+
+test("product exposes exactly the two fixed safe page templates", () => {
+  assert.deepEqual([...SAFE_TEMPLATES], ["clean", "age_gate"]);
+  assert.equal(normalizeSafeTemplate("age_gate"), "age_gate");
+  assert.equal(normalizeSafeTemplate("custom"), "clean");
+});
 
 test("product login, welcome and dashboard views render", async () => {
   const views = path.join(__dirname, "../src/views/admin");
@@ -62,10 +72,11 @@ test("product login, welcome and dashboard views render", async () => {
     }
   );
   assert.match(login, /Chào mừng trở lại/);
-  assert.match(welcome, /Kiểm soát toàn bộ luồng redirect/);
+  assert.match(welcome, /Hai luồng redirect/);
   assert.match(dashboard, /Chưa có domain nào/);
-  assert.match(shortLinks, /value="delayed" checked/);
-  assert.match(shortLinks, /Không kiểm tra campaign/);
+  assert.match(shortLinks, /name="redirect_delay_seconds"/);
+  assert.match(shortLinks, /min="1" max="30"/);
+  assert.doesNotMatch(shortLinks, /name="redirect_mode"/);
   assert.match(waitPage, /data-delay="3"/);
   assert.match(waitPage, /https:\/\/target\.test\/landing\?utm_source=email/);
 });
@@ -77,6 +88,68 @@ test("Facebook setup template no longer copies fbclid or fbcid", () => {
   );
   assert.doesNotMatch(source, /fbclid|fbcid/i);
   assert.match(source, /addNewRule\('campaign_id', 'exists'\)/);
+});
+
+test("contextual help is available across the admin product", () => {
+  const viewsRoot = path.join(__dirname, "../src/views");
+  const adminRoot = path.join(viewsRoot, "admin");
+  const criticalViews = [
+    "dashboard.ejs",
+    "domain_detail.ejs",
+    "campaign_edit.ejs",
+    "short_links.ejs",
+    "report_v2.ejs",
+    "short_link_report.ejs",
+    "system.ejs",
+    "users_list.ejs",
+  ];
+
+  let helpAnchorCount = 0;
+  criticalViews.forEach((file) => {
+    const source = fs.readFileSync(path.join(adminRoot, file), "utf8");
+    const count = (source.match(/data-help=/g) || []).length;
+    assert.ok(count > 0, `${file} must contain contextual help`);
+    helpAnchorCount += count;
+  });
+
+  const footer = fs.readFileSync(
+    path.join(viewsRoot, "partials/footer.ejs"),
+    "utf8"
+  );
+  const css = fs.readFileSync(
+    path.join(__dirname, "../public/css/app.css"),
+    "utf8"
+  );
+  const users = fs.readFileSync(path.join(adminRoot, "users_list.ejs"), "utf8");
+
+  assert.ok(helpAnchorCount >= 30, "major admin sections should be documented");
+  assert.match(footer, /id="globalHelpPopover"/);
+  assert.match(footer, /aria-expanded/);
+  assert.match(footer, /mouseenter/);
+  assert.match(footer, /keydown/);
+  assert.match(css, /\.help-tip/);
+  assert.match(css, /\.help-popover/);
+  assert.match(users, /type="password"/);
+  assert.match(users, /autocomplete="new-password"/);
+});
+
+test("all EJS view templates compile", () => {
+  const viewsRoot = path.join(__dirname, "../src/views");
+  const folders = ["admin", "partials", "safepages"];
+
+  folders.forEach((folder) => {
+    const folderPath = path.join(viewsRoot, folder);
+    fs.readdirSync(folderPath)
+      .filter((file) => file.endsWith(".ejs"))
+      .forEach((file) => {
+        const fullPath = path.join(folderPath, file);
+        const source = fs.readFileSync(fullPath, "utf8");
+        assert.doesNotThrow(
+          () => ejs.compile(source, { filename: fullPath }),
+          `${folder}/${file} should compile`
+        );
+      });
+  });
 });
 
 test("health endpoints report database readiness", async () => {
@@ -147,7 +220,7 @@ test("ads redirects matched campaign and appends missing params", async () => {
   assert.ok(res.headers["x-request-id"]);
 });
 
-test("ads redirects active short link", async () => {
+test("ads gives legacy short links the default 3-second wait", async () => {
   let clickUpdated = false;
   let trafficLogged = false;
 
@@ -200,8 +273,9 @@ test("ads redirects active short link", async () => {
     .set("Host", "example.com")
     .set("User-Agent", "Mozilla/5.0");
 
-  assert.equal(res.status, 302);
-  assert.equal(res.headers.location, "https://target.test/promo?utm_source=email");
+  assert.equal(res.status, 200);
+  assert.match(res.text, /data-delay="3"/);
+  assert.match(res.text, /https:\/\/target\.test\/promo\?utm_source=email/);
   assert.equal(clickUpdated, true);
   assert.equal(trafficLogged, true);
   assert.ok(res.headers["x-request-id"]);
@@ -330,7 +404,7 @@ test("ads renders clean safe page template", async () => {
   assert.match(res.text, /clean\.example/);
 });
 
-test("ads renders sanitized custom safe page template", async () => {
+test("legacy custom safe page values fall back to the fixed clean template", async () => {
   db.query = async (sql) => {
     if (sql.includes("FROM domains WHERE domain_url")) {
       return {
@@ -367,14 +441,14 @@ test("ads renders sanitized custom safe page template", async () => {
     .set("User-Agent", "Mozilla/5.0");
 
   assert.equal(res.status, 200);
-  assert.match(res.text, /Custom Safe/);
-  assert.match(res.text, /\.hero \{ color: red; \}/);
+  assert.match(res.text, /Custom Headline/);
+  assert.doesNotMatch(res.text, /Custom Safe/);
   assert.doesNotMatch(res.text, /<script/i);
   assert.doesNotMatch(res.text, /onclick=/i);
   assert.doesNotMatch(res.text, /javascript:/i);
 });
 
-test("ads uses campaign safe page override when rendering safe page", async () => {
+test("ads uses the fixed mobile age-gate campaign override", async () => {
   db.query = async (sql) => {
     if (sql.includes("FROM domains WHERE domain_url")) {
       return {
@@ -401,13 +475,8 @@ test("ads uses campaign safe page override when rendering safe page", async () =
             filters: {},
             rules: [],
             target_url: "https://target.test/landing",
-            safe_page_template: "custom",
-            safe_page_content: {
-              title: "Campaign Safe",
-              headline: "Campaign Headline",
-              custom_html: "<main><h1>Campaign Override</h1></main>",
-              custom_css: "main{color:blue;}",
-            },
+            safe_page_template: "age_gate",
+            safe_page_content: null,
           },
         ],
       };
@@ -424,8 +493,16 @@ test("ads uses campaign safe page override when rendering safe page", async () =
     .set("User-Agent", "Mozilla/5.0");
 
   assert.equal(res.status, 200);
-  assert.match(res.text, /Campaign Override/);
+  assert.match(res.text, /safe-age-gate\.jpeg/);
+  assert.match(res.text, /data-choice="yes"/);
   assert.doesNotMatch(res.text, /Domain Safe/);
+});
+
+test("redirect engine serves the bundled age-gate image", async () => {
+  const res = await request(adsApp).get("/assets/images/safe-age-gate.jpeg");
+  assert.equal(res.status, 200);
+  assert.match(res.headers["content-type"], /^image\/jpeg/);
+  assert.ok(Number(res.headers["content-length"] || res.body.length) > 40000);
 });
 
 test("admin login lazy-migrates plain password and creates domain via csrf form", async () => {
@@ -496,16 +573,16 @@ test("admin login lazy-migrates plain password and creates domain via csrf form"
     .type("form")
     .send({
       domain_url: "https://News24h.com/some/path",
-      safe_template: "shop",
+      safe_template: "age_gate",
       _csrf: dashboardCsrf,
     });
 
   assert.equal(createRes.status, 302);
   assert.equal(createRes.headers.location, "/redirect");
-  assert.deepEqual(insertedDomain, ["news24h.com", "shop", 10, 10]);
+  assert.deepEqual(insertedDomain, ["news24h.com", "age_gate", 10, 10]);
 });
 
-test("admin creates a delayed short link with a fixed 3-second delay", async () => {
+test("admin creates an automatic redirect with a configurable delay", async () => {
   let insertedSql = "";
   let insertedParams = null;
 
@@ -567,10 +644,10 @@ test("admin creates a delayed short link with a fixed 3-second delay", async () 
     .type("form")
     .send({
       domain_id: "5",
-      title: "Chờ 3 giây",
+      title: "Chờ 7 giây",
       target_url: "https://target.test/landing",
       code: "wait3",
-      redirect_mode: "delayed",
+      redirect_delay_seconds: "7",
       _csrf: formCsrf,
     });
 
@@ -581,9 +658,9 @@ test("admin creates a delayed short link with a fixed 3-second delay", async () 
     5,
     11,
     "wait3",
-    "Chờ 3 giây",
+    "Chờ 7 giây",
     "https://target.test/landing",
     11,
-    3,
+    7,
   ]);
 });

@@ -13,11 +13,11 @@
       <div>
         <div class="product-chip mb-3"><span class="status-dot"></span>Hệ thống sẵn sàng</div>
         <p class="eyebrow mb-2">Xin chào, <%= user.username %></p>
-        <h1>Kiểm soát toàn bộ luồng redirect từ một nơi.</h1>
-        <p class="hero-copy">Thiết lập domain, tạo chiến dịch và theo dõi hiệu quả theo quy trình rõ ràng. Cấu hình mới được đồng bộ sang engine trong tối đa 30 giây.</p>
+        <h1 data-help="Sản phẩm có đúng hai luồng tạo link để thao tác nhanh và tránh nhầm cấu hình.">Hai luồng redirect, một nơi quản lý.</h1>
+        <p class="hero-copy">Dùng link kiểm tra cho traffic cần rule; dùng link chờ chuyển cho luồng tự động sau thời gian đã đặt. Cấu hình mới được đồng bộ sang engine trong tối đa 30 giây.</p>
         <div class="d-flex flex-wrap gap-2">
-          <a class="btn btn-primary" href="/redirect"><i class="fa-solid fa-plus me-2"></i>Tạo chiến dịch</a>
-          <a class="btn btn-soft" href="/short-links"><i class="fa-solid fa-link me-2"></i>Tạo link chuyển hướng</a>
+          <a class="btn btn-primary" href="/redirect"><i class="fa-solid fa-filter-circle-dollar me-2"></i>Tạo link kiểm tra</a>
+          <a class="btn btn-soft" href="/short-links"><i class="fa-solid fa-clock me-2"></i>Tạo link chờ chuyển</a>
         </div>
       </div>
       <div class="hero-visual" aria-hidden="true">
@@ -32,17 +32,12 @@
     <section class="quick-grid mb-4">
       <a class="quick-card" href="/redirect">
         <div class="quick-icon primary"><i class="fa-solid fa-route"></i></div>
-        <div><span class="quick-label">Bước 1</span><h3>Domain & chiến dịch</h3><p>Thêm domain, tạo rule và chọn URL đích.</p></div>
-        <i class="fa-solid fa-arrow-right quick-arrow"></i>
-      </a>
-      <a class="quick-card" href="/safe-pages">
-        <div class="quick-icon violet"><i class="fa-solid fa-layer-group"></i></div>
-        <div><span class="quick-label">Bước 2</span><h3>Giao diện dự phòng</h3><p>Chuẩn bị mẫu hiển thị khi rule không khớp.</p></div>
+        <div><span class="quick-label">Luồng 1</span><h3>Link kiểm tra tham số</h3><p>Kiểm tra tham số, quốc gia và rule trước khi chuyển.</p></div>
         <i class="fa-solid fa-arrow-right quick-arrow"></i>
       </a>
       <a class="quick-card" href="/short-links">
         <div class="quick-icon green"><i class="fa-solid fa-link"></i></div>
-        <div><span class="quick-label">Tiện ích</span><h3>Link nhanh</h3><p>Tạo link gọn và vẫn giữ nguyên tham số tracking.</p></div>
+        <div><span class="quick-label">Luồng 2</span><h3>Link chờ chuyển hướng</h3><p>Không kiểm tra điều kiện; tự chuyển sau 1–30 giây và giữ tham số tracking.</p></div>
         <i class="fa-solid fa-arrow-right quick-arrow"></i>
       </a>
     </section>
@@ -50,7 +45,7 @@
     <section class="card-surface operating-note">
       <div class="d-flex align-items-start gap-3">
         <div class="quick-icon amber"><i class="fa-solid fa-lightbulb"></i></div>
-        <div><h3 class="h6 fw-bold mb-2">Quy trình vận hành đề xuất</h3><p class="text-muted mb-0">Tạo domain → kiểm tra DNS → tạo chiến dịch → mở link thử → theo dõi báo cáo. Hãy thử trên một domain phụ trước khi đưa traffic thật vào hệ thống.</p></div>
+        <div><h3 class="h6 fw-bold mb-2" data-help="Quy trình này giảm lỗi DNS và cấu hình sai. Chỉ đưa traffic thật vào sau khi link thử trả đúng đích và ghi nhận log.">Quy trình vận hành đề xuất</h3><p class="text-muted mb-0">Tạo domain → chọn một trong hai Safe Page → chọn luồng link → mở link thử → theo dõi báo cáo. Hãy thử trên domain phụ trước khi đưa traffic thật vào hệ thống.</p></div>
       </div>
     </section>
   </div>

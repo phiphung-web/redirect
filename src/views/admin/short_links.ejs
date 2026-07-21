@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Link chuyển hướng</title>
+  <title>Link chờ chuyển hướng</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
   <%- include('../partials/header', {
     user,
     active: 'short-links',
-    breadcrumb: [{ label: 'Link chuyển hướng' }]
+    breadcrumb: [{ label: 'Link chờ chuyển hướng' }]
   }) %>
 
   <div class="container-xxl pb-5 mt-3">
@@ -21,8 +21,8 @@
             <div class="d-flex align-items-center gap-3">
               <div class="brand-mark"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
               <div>
-                <h1 class="h5 mb-1">Tạo link chuyển hướng</h1>
-                <p class="text-muted small mb-0">Không kiểm tra campaign, quốc gia hay thiết bị.</p>
+                <h1 class="h5 mb-1" data-help="Luồng này không kiểm tra campaign, quốc gia, thiết bị hoặc tham số. Trang chờ được hiển thị trong khoảng thời gian bạn đặt rồi tự động chuyển tới link đích.">Tạo link chờ chuyển hướng</h1>
+                <p class="text-muted small mb-0">Luồng 2 · Tự động chuyển sau thời gian chờ.</p>
               </div>
             </div>
           </div>
@@ -31,7 +31,7 @@
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 
             <div class="mb-3">
-              <label class="form-label fw-bold">Domain</label>
+              <label class="form-label fw-bold" data-help="Chọn domain sẽ tạo đường dẫn /s/mã-ngắn. Domain cần hoạt động và đã trỏ DNS về VPS.">Domain</label>
               <select name="domain_id" class="form-select" required <%= domains.length ? '' : 'disabled' %>>
                 <% domains.forEach((domain) => { %>
                   <option value="<%= domain.id %>"><%= domain.domain_url %><%= domain.status === 'active' ? '' : ' (inactive)' %></option>
@@ -43,38 +43,27 @@
             </div>
 
             <div class="mb-3">
-              <label class="form-label fw-bold">Tên link</label>
+              <label class="form-label fw-bold" data-help="Tên nội bộ để dễ tìm trong danh sách và báo cáo; người truy cập không nhìn thấy tên này.">Tên link</label>
               <input type="text" name="title" class="form-control" maxlength="150" placeholder="VD: Landing khuyến mãi" required>
             </div>
 
             <div class="mb-3">
-              <label class="form-label fw-bold">Link đích</label>
+              <label class="form-label fw-bold" data-help="URL cuối cùng người dùng sẽ được chuyển tới. Tham số trên link truy cập được nối tiếp nếu link đích chưa có cùng key.">Link đích</label>
               <input type="url" name="target_url" class="form-control" placeholder="https://example.com/landing" required>
               <div class="form-text">Các tham số trên link truy cập sẽ được chuyển tiếp sang link đích.</div>
             </div>
 
-            <fieldset class="mb-3">
-              <legend class="form-label fw-bold mb-2">Cách chuyển hướng</legend>
-              <div class="vstack gap-2">
-                <label class="border rounded-3 p-3 d-flex gap-3 align-items-start bg-light" role="button">
-                  <input class="form-check-input mt-1" type="radio" name="redirect_mode" value="delayed" checked>
-                  <span>
-                    <strong class="d-block">Chờ 3 giây</strong>
-                    <small class="text-muted">Hiện trang đếm ngược rồi tự động chuyển.</small>
-                  </span>
-                </label>
-                <label class="border rounded-3 p-3 d-flex gap-3 align-items-start" role="button">
-                  <input class="form-check-input mt-1" type="radio" name="redirect_mode" value="immediate">
-                  <span>
-                    <strong class="d-block">Chuyển ngay</strong>
-                    <small class="text-muted">Phản hồi 302 ngay khi người dùng mở link.</small>
-                  </span>
-                </label>
+            <div class="mb-3">
+              <label class="form-label fw-bold" data-help="Số giây hiển thị trang đếm ngược trước khi tự động chuyển. Giới hạn 1–30 giây để tránh giữ người dùng quá lâu.">Thời gian chờ</label>
+              <div class="input-group">
+                <input type="number" name="redirect_delay_seconds" class="form-control" min="1" max="30" step="1" value="3" required>
+                <span class="input-group-text">giây</span>
               </div>
-            </fieldset>
+              <div class="form-text">Trang chờ trả HTTP 200 rồi tự động chuyển; không chạy bộ lọc tham số.</div>
+            </div>
 
             <div class="mb-4">
-              <label class="form-label fw-bold">Mã ngắn</label>
+              <label class="form-label fw-bold" data-help="Phần nằm sau /s/. Để trống để hệ thống tạo mã ngẫu nhiên không trùng trên domain đã chọn.">Mã ngắn</label>
               <div class="input-group">
                 <span class="input-group-text">/s/</span>
                 <input type="text" name="code" class="form-control" pattern="[a-z0-9_-]{3,80}" placeholder="để trống để tự sinh">
@@ -93,8 +82,8 @@
         <div class="card shadow-sm border-0">
           <div class="card-header bg-white border-0 pt-4 px-4 d-flex align-items-center justify-content-between">
             <div>
-              <h2 class="h5 mb-1">Danh sách link</h2>
-              <p class="text-muted small mb-0">Link chờ chạy riêng, không đi qua bộ lọc campaign.</p>
+              <h2 class="h5 mb-1" data-help="Theo dõi link, số click, trạng thái và chế độ chuyển. Tắt link sẽ đưa người dùng về giao diện dự phòng của domain.">Danh sách link</h2>
+              <p class="text-muted small mb-0">Tất cả link trong luồng này đều hiển thị trang chờ trước khi chuyển.</p>
             </div>
             <span class="badge rounded-pill text-bg-primary"><%= links.length %> link</span>
           </div>
@@ -115,7 +104,6 @@
                   <tr><td colspan="6" class="text-center py-5 text-muted">Chưa có link chuyển hướng nào.</td></tr>
                 <% } %>
                 <% links.forEach((link) => { %>
-                  <% const isDelayed = Number(link.redirect_delay_seconds || 0) > 0; %>
                   <tr>
                     <td style="min-width:210px">
                       <div class="fw-bold"><%= link.title || link.code %></div>
@@ -132,11 +120,7 @@
                       <div class="mt-1"><span class="badge bg-light text-secondary border">/s/<%= link.code %></span></div>
                     </td>
                     <td>
-                      <% if (isDelayed) { %>
-                        <span class="badge text-bg-warning"><i class="fa-regular fa-clock me-1"></i>Chờ <%= link.redirect_delay_seconds %> giây</span>
-                      <% } else { %>
-                        <span class="badge text-bg-light border text-secondary">Chuyển ngay</span>
-                      <% } %>
+                      <span class="badge text-bg-warning"><i class="fa-regular fa-clock me-1"></i>Chờ <%= link.redirect_delay_seconds || 3 %> giây</span>
                     </td>
                     <td><strong><%= link.clicks || 0 %></strong></td>
                     <td>

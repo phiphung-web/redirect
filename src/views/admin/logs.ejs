@@ -18,14 +18,14 @@
     <div class="container bg-white p-4 rounded shadow-sm mt-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h4 class="mb-0">Lịch sử log: <span class="text-primary"><%= camp.name %></span></h4>
+                <h4 class="mb-0" data-help="Log thô dùng để kiểm tra từng request của campaign và lý do redirect hoặc hiển thị Safe Page.">Lịch sử log: <span class="text-primary"><%= camp.name %></span></h4>
                 <small class="text-muted">ID: <%= camp.id %></small>
             </div>
             <div></div>
         </div>
         <form class="row g-2 mb-3" method="GET">
             <div class="col-auto">
-                <label class="form-label">Action</label>
+                <label class="form-label" data-help="Lọc theo kết quả xử lý: redirect thành công hoặc các trạng thái Safe Page/fail.">Action</label>
                 <select name="action" class="form-select form-select-sm">
                     <option value="" <%= !action ? 'selected' : '' %>>Tất cả</option>
                     <option value="redirect" <%= action==='redirect' ? 'selected' : '' %>>redirect</option>
@@ -44,7 +44,7 @@
                 <input type="date" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
             </div>
             <div class="col-auto">
-                <label class="form-label">Số dòng</label>
+                <label class="form-label" data-help="Giới hạn số bản ghi tải trong một lần để tránh trang log quá nặng.">Số dòng</label>
                 <input type="number" name="limit" value="<%= limit %>" min="50" max="2000" class="form-control form-control-sm">
             </div>
             <div class="col-auto align-self-end">

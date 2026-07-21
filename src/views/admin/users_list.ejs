@@ -17,11 +17,11 @@
     }) %>
     <div class="container mt-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="mb-0">Người dùng</h3>
+            <h3 class="mb-0" data-help="Quản lý tài khoản được phép truy cập trang quản trị và phạm vi quyền của từng người.">Người dùng</h3>
             <div></div>
         </div>
         <div class="card shadow-sm mb-4">
-            <div class="card-header bg-white fw-bold">Danh sách</div>
+            <div class="card-header bg-white fw-bold"><span data-help="Tài khoản Inactive không thể đăng nhập nhưng lịch sử thao tác vẫn được giữ lại.">Danh sách</span></div>
             <div class="card-body p-0">
                 <table class="table table-hover mb-0 align-middle">
                     <thead class="table-light">
@@ -52,20 +52,20 @@
         </div>
 
         <div class="card shadow-sm">
-            <div class="card-header bg-white fw-bold">Tạo người dùng</div>
+            <div class="card-header bg-white fw-bold"><span data-help="Mỗi người vận hành nên có tài khoản riêng để nhật ký quản trị ghi đúng người thực hiện.">Tạo người dùng</span></div>
             <form class="card-body" action="/users/create" method="POST">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <label class="form-label">Username</label>
+                        <label class="form-label" data-help="Tên đăng nhập duy nhất. Nên dùng tên dễ nhận diện theo người vận hành.">Username</label>
                         <input type="text" name="username" class="form-control" required>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Password</label>
-                        <input type="text" name="password" class="form-control" required>
+                        <label class="form-label" data-help="Dùng mật khẩu riêng, tối thiểu 12 ký tự và không gửi qua kênh công khai.">Password</label>
+                        <input type="password" name="password" class="form-control" minlength="12" autocomplete="new-password" required>
                     </div>
                 <div class="col-md-4">
-                    <label class="form-label">Role</label>
+                    <label class="form-label" data-help="Role quyết định màn hình và thao tác tài khoản được phép sử dụng. Chỉ cấp quyền cao nhất khi thật sự cần.">Role</label>
                     <select name="role_id" class="form-select">
                             <% roles.forEach(r => { %>
                                 <option value="<%= r.id %>"><%= r.name %></option>

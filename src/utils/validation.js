@@ -1,9 +1,7 @@
-const SAFE_TEMPLATES = new Set(["news", "shop", "clean", "custom"]);
+const SAFE_TEMPLATES = new Set(["clean", "age_gate"]);
 const PARAM_TOKEN_RE = /^[A-Za-z0-9_.-]{1,100}$/;
 const SHORT_CODE_RE = /^[a-z0-9_-]{3,80}$/;
 const COUNTRY_RE = /^[A-Z]{2}$/;
-const MAX_CUSTOM_HTML_LENGTH = 50000;
-const MAX_CUSTOM_CSS_LENGTH = 20000;
 
 const normalizeDomainUrl = (value) => {
   const raw = String(value || "").trim().toLowerCase();
@@ -115,56 +113,15 @@ const validateName = (value, field = "Ten") => {
   return normalized;
 };
 
-const sanitizeCustomHtml = (value) => {
-  return String(value || "")
-    .slice(0, MAX_CUSTOM_HTML_LENGTH)
-    .replace(/<\s*style[\s\S]*?<\/\s*style\s*>/gi, "")
-    .replace(
-      /<\s*\/?\s*(script|iframe|object|embed|form|input|button|textarea|select|option|link|meta|base)[^>]*>/gi,
-      ""
-    )
-    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/\s+(href|src)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi, ' $1="#"')
-    .replace(/\s+(href|src)\s*=\s*javascript:[^\s>]*/gi, ' $1="#"')
-    .trim();
-};
-
-const sanitizeCustomCss = (value) => {
-  return String(value || "")
-    .slice(0, MAX_CUSTOM_CSS_LENGTH)
-    .replace(/@import\b[^;]*;?/gi, "")
-    .replace(/expression\s*\([^)]*\)/gi, "")
-    .replace(/url\s*\(\s*(['"]?)\s*javascript:[^)]+\)/gi, "none")
-    .replace(/[<>]/g, "")
-    .trim();
-};
-
-const normalizeSafeContent = (input = {}) => {
-  const title = String(input.title || "").trim().slice(0, 150);
-  const headline = String(input.headline || "").trim().slice(0, 200);
-  const logo = String(input.logo || "").trim();
-  if (logo) normalizeTargetUrl(logo);
-  return {
-    title: title || "Tin Tuc 24h",
-    headline: headline || "Cap nhat moi nhat",
-    logo: logo || null,
-    custom_html: sanitizeCustomHtml(input.custom_html),
-    custom_css: sanitizeCustomCss(input.custom_css),
-  };
-};
-
 module.exports = {
   SAFE_TEMPLATES,
   buildFilters,
   normalizeCountries,
   normalizeDomainUrl,
-  normalizeSafeContent,
   normalizeSafeTemplate,
   normalizeShortCode,
   normalizeTargetUrl,
   parseRules,
-  sanitizeCustomCss,
-  sanitizeCustomHtml,
   validateName,
   validateParamKey,
   validateParamValue,

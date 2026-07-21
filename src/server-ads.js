@@ -22,8 +22,6 @@ const {
 const {
   normalizeSafeTemplate,
   normalizeShortCode,
-  sanitizeCustomCss,
-  sanitizeCustomHtml,
 } = require("./utils/validation");
 
 const app = express();
@@ -35,6 +33,13 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(requestContext);
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
+app.use(
+  "/assets",
+  express.static(path.join(__dirname, "../public"), {
+    immutable: true,
+    maxAge: "7d",
+  })
+);
 
 const normalizeQueryEntries = (query) =>
   Object.entries(query)
@@ -96,9 +101,9 @@ const getCampaign = async (domainId, entries) => {
   let result;
   try {
     result = await db.query(
-      `SELECT c.*, sp.template AS safe_page_template, sp.content AS safe_page_content
+      `SELECT c.*, c.safe_template_override AS safe_page_template,
+              NULL::jsonb AS safe_page_content
        FROM campaigns c
-       LEFT JOIN safe_pages sp ON sp.id = c.safe_page_id AND sp.is_active
        JOIN unnest($2::text[], $3::text[]) AS incoming(param_key, param_value)
          ON c.param_key = incoming.param_key AND c.param_value = incoming.param_value
        WHERE c.domain_id=$1
@@ -207,8 +212,6 @@ app.get(/.*/, async (req, res) => {
         themeColor: cfg.themeColor || "#2563eb",
         domain: host,
         logo: cfg.logo,
-        customHtml: sanitizeCustomHtml(cfg.custom_html),
-        customCss: sanitizeCustomCss(cfg.custom_css),
       };
 
       return res.render(`safepages/${tpl}`, viewData, (error, html) => {
@@ -269,19 +272,15 @@ app.get(/.*/, async (req, res) => {
         10
       );
       const redirectDelaySeconds = Number.isInteger(configuredDelay)
-        ? Math.min(Math.max(configuredDelay, 0), 10)
-        : 0;
+        ? Math.min(Math.max(configuredDelay, 1), 30)
+        : 3;
 
-      if (redirectDelaySeconds > 0) {
-        res.set("Cache-Control", "no-store, max-age=0");
-        return res.status(200).render("safepages/redirect_wait", {
-          product,
-          targetUrl: target.toString(),
-          delaySeconds: redirectDelaySeconds,
-        });
-      }
-
-      return res.redirect(302, target.toString());
+      res.set("Cache-Control", "no-store, max-age=0");
+      return res.status(200).render("safepages/redirect_wait", {
+        product,
+        targetUrl: target.toString(),
+        delaySeconds: redirectDelaySeconds,
+      });
     }
 
     campaign = await getCampaign(domain.id, queryEntries);
@@ -343,7 +342,7 @@ app.get(/.*/, async (req, res) => {
 });
 
 if (require.main === module) {
-  const server = app.listen(PORT, () =>
+  const server = app.listen(PORT, process.env.BIND_HOST || "127.0.0.1", () =>
     console.log(`${product.name} redirect engine listening on ${PORT}`)
   );
 

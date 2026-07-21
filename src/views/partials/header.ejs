@@ -2,7 +2,7 @@
   const currentMenu = typeof active === 'string' ? active : '';
   const isAdmin = user && (user.role_name === 'super_admin' || user.role_name === 'admin');
   const isSuper = user && user.role_name === 'super_admin';
-  const initials = user?.username ? user.username.substring(0, 2).toUpperCase() : 'LP';
+  const initials = user?.username ? user.username.substring(0, 2).toUpperCase() : 'RP';
   const crumbList = Array.isArray(typeof breadcrumb !== 'undefined' ? breadcrumb : null) ? breadcrumb : [];
   const backLink = (typeof backUrl !== 'undefined' && backUrl) ? backUrl : null;
 %>
@@ -25,13 +25,10 @@
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0 app-nav-links">
         <li class="nav-item">
-          <a class="nav-link <%= currentMenu === 'redirect' ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-route me-2"></i>Chiến dịch</a>
+          <a class="nav-link <%= currentMenu === 'redirect' ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-filter-circle-dollar me-2"></i>Link kiểm tra</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link <%= currentMenu === 'short-links' ? 'active' : '' %>" href="/short-links"><i class="fa-solid fa-link me-2"></i>Link chuyển hướng</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link <%= currentMenu === 'safe-pages' ? 'active' : '' %>" href="/safe-pages"><i class="fa-solid fa-layer-group me-2"></i>Giao diện</a>
+          <a class="nav-link <%= currentMenu === 'short-links' ? 'active' : '' %>" href="/short-links"><i class="fa-solid fa-clock me-2"></i>Link chờ chuyển</a>
         </li>
         <% if (isAdmin) { %>
           <li class="nav-item dropdown">

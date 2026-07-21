@@ -38,10 +38,10 @@
             <div class="card mb-4 shadow-sm">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div>
-                        <h3 class="mb-1 text-primary">
+                        <h3 class="mb-1 text-primary" data-help="Trang quản lý tập trung của domain: kiểm tra DNS, cấu hình giao diện dự phòng và quản lý các chiến dịch có điều kiện.">
                             <%= domain.domain_url %>
                         </h3>
-                        <span class="badge bg-secondary">Giao diện sạch: <%= domain.safe_template %></span>
+                        <span class="badge bg-secondary">Safe Page: <%= domain.safe_template === 'age_gate' ? '18+ Mobile' : 'Mặc định' %></span>
                         <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>">
                             <%= domain.status.toUpperCase() %>
                         </span>
@@ -70,74 +70,39 @@
 
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-white">
-                    <div class="fw-bold">Safe Page mặc định của domain</div>
-                    <div class="text-muted small">Dùng khi link/campaign chưa chọn mẫu riêng, không match campaign, short link lỗi/OFF hoặc hệ thống cần fallback an toàn.</div>
+                    <div class="fw-bold" data-help="Hệ thống chỉ giữ hai mẫu cố định để thao tác nhanh và tránh giao diện tùy chỉnh không đồng nhất.">Safe Page của domain</div>
+                    <div class="text-muted small">Chọn mẫu mặc định trung tính hoặc mẫu 18+ tối ưu mobile. Không còn chức năng tạo thêm giao diện.</div>
                 </div>
                 <form class="card-body" action="/domains/<%= domain.id %>/safe-content" method="POST">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="row g-4 align-items-start">
                         <div class="col-lg-5">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="form-label fw-bold mb-0">Giao diện mặc định hiện tại</label>
-                                <span class="badge bg-light text-dark border"><%= domain.safe_template %></span>
+                            <label class="form-label fw-bold" data-help="Mẫu này xuất hiện khi link kiểm tra không đạt điều kiện, bị tắt hoặc không tồn tại.">Mẫu đang dùng</label>
+                            <select name="safe_template" class="form-select" id="safeTemplateSelect" onchange="renderDomainSafeDefaultPreview()">
+                                <option value="clean" <%= domain.safe_template === 'clean' ? 'selected' : '' %>>Mặc định — trung tính</option>
+                                <option value="age_gate" <%= domain.safe_template === 'age_gate' ? 'selected' : '' %>>18+ Mobile — banner xác nhận tuổi</option>
+                            </select>
+                            <div class="alert alert-light border small mt-3 mb-0">
+                                Campaign có thể dùng mẫu của domain hoặc chọn một trong đúng hai mẫu này làm ngoại lệ.
                             </div>
-                            <iframe id="domainSafeDefaultPreview" class="w-100 border rounded bg-white" style="height:300px;" sandbox=""></iframe>
-                            <div class="form-text">Mẫu fallback cấp domain. Link không chọn mẫu riêng sẽ dùng giao diện này.</div>
+                            <button type="submit" class="btn btn-primary mt-3">Lưu Safe Page</button>
                         </div>
                         <div class="col-lg-7">
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Template mặc định</label>
-                                    <select name="safe_template" class="form-select" id="safeTemplateSelect" onchange="toggleCustomSafeFields(); renderDomainSafeDefaultPreview();">
-                                        <option value="clean" <%= domain.safe_template === 'clean' ? 'selected' : '' %>>Clean</option>
-                                        <option value="news" <%= domain.safe_template === 'news' ? 'selected' : '' %>>News</option>
-                                        <option value="shop" <%= domain.safe_template === 'shop' ? 'selected' : '' %>>Shop</option>
-                                        <option value="custom" <%= domain.safe_template === 'custom' ? 'selected' : '' %>>Custom</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Logo URL</label>
-                                    <input type="url" name="safe_logo" id="domainSafeLogo" class="form-control" value="<%= domain.safe_content?.logo || '' %>" oninput="renderDomainSafeDefaultPreview()">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Title</label>
-                                    <input type="text" name="safe_title" id="domainSafeTitle" class="form-control" value="<%= domain.safe_content?.title || '' %>" oninput="renderDomainSafeDefaultPreview()">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Headline</label>
-                                    <input type="text" name="safe_headline" id="domainSafeHeadline" class="form-control" value="<%= domain.safe_content?.headline || '' %>" oninput="renderDomainSafeDefaultPreview()">
-                                </div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold mb-0">Xem trước mobile</label>
+                                <span class="badge bg-light text-dark border">2 mẫu cố định</span>
                             </div>
-                            <div class="row g-3 mt-1" id="customSafeFields">
-                                <div class="col-md-7">
-                                    <label class="form-label fw-bold">Custom HTML</label>
-                                    <textarea name="safe_custom_html" id="domainSafeCustomHtml" class="form-control font-monospace" rows="9" placeholder="<section class='hero'>..." oninput="renderDomainSafeDefaultPreview()"><%= domain.safe_content?.custom_html || '' %></textarea>
-                                    <div class="form-text">HTML tĩnh cho phần body. Hệ thống sẽ loại bỏ script, form, iframe và event handler.</div>
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="form-label fw-bold">Custom CSS</label>
-                                    <textarea name="safe_custom_css" id="domainSafeCustomCss" class="form-control font-monospace" rows="9" placeholder=".hero { ... }" oninput="renderDomainSafeDefaultPreview()"><%= domain.safe_content?.custom_css || '' %></textarea>
-                                    <div class="form-text">CSS tĩnh, không dùng @import hoặc javascript URL.</div>
-                                </div>
-                            </div>
-                            <div class="mt-3 text-end">
-                                <button type="submit" class="btn btn-outline-primary">Lưu mặc định</button>
-                            </div>
+                            <iframe id="domainSafeDefaultPreview" class="w-100 border rounded bg-white" style="height:360px;" sandbox=""></iframe>
                         </div>
                     </div>
                 </form>
             </div>
 
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-                <div class="text-muted small">
-                    Mẫu giao diện tự tạo được quản lý ở tab riêng. Khi tạo link, chỉ cần chọn mẫu đã có.
-                </div>
-                <a href="/safe-pages?domain_id=<%= domain.id %>" class="btn btn-outline-primary">
-                    <i class="fas fa-palette me-1"></i> Quản lý giao diện mẫu
-                </a>
-            </div>
-
             <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex align-items-center justify-content-between">
+                    <div class="fw-bold" data-help="Campaign chỉ chuyển hướng khi tham số đầu vào và các bộ lọc cấu hình đều khớp. Link chuyển hướng độc lập được quản lý ở tab Link chuyển hướng.">Danh sách chiến dịch</div>
+                    <span class="badge bg-light text-dark border"><%= links.length %> chiến dịch</span>
+                </div>
                 <table class="table table-hover mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
@@ -164,7 +129,7 @@
                                             <small class="text-muted d-block text-truncate" style="max-width: 200px;">
                                                 <%= l.target_url %>
                                             </small>
-                                            <small class="text-muted d-block">Safe Page: <%= l.safe_page_name || 'Mặc định domain' %></small>
+                                            <small class="text-muted d-block">Safe Page: <%= l.safe_template_override === 'age_gate' ? '18+ Mobile' : l.safe_template_override === 'clean' ? 'Mặc định' : 'Theo domain' %></small>
                                             <small class="text-muted">By <%= l.created_by_name || 'N/A' %> | Update: <%=
                                                         l.updated_by_name || l.created_by_name || '-' %></small>
                                         </td>
@@ -240,7 +205,7 @@
                 <form class="modal-content" action="/campaigns/create" method="POST" id="createForm">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="modal-header">
-                        <h5 class="modal-title">Tạo Link Ads Mới</h5>
+                        <h5 class="modal-title" data-help="Tạo campaign có điều kiện. Hệ thống sinh tham số nhận diện riêng sau khi lưu.">Tạo Link Ads Mới</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
@@ -252,39 +217,38 @@
 
                         <div class="row mb-3">
                             <div class="col-6">
-                                <label class="fw-bold">Tên Chiến Dịch</label>
+                                <label class="fw-bold" data-help="Tên nội bộ dùng trong dashboard, báo cáo và log. Nên đặt theo nguồn traffic hoặc mục tiêu chiến dịch.">Tên Chiến Dịch</label>
                                 <input type="text" name="name" class="form-control" required>
                             </div>
                             <div class="col-6">
-                                <label class="fw-bold">Link Đích (Target)</label>
+                                <label class="fw-bold" data-help="URL cuối cùng khi campaign khớp. Các tham số đầu vào còn thiếu trên URL đích sẽ được nối tiếp.">Link Đích (Target)</label>
                                 <input type="url" name="target_url" class="form-control" required>
                             </div>
                         </div>
 
                         <div class="row mb-3">
                             <div class="col-md-5">
-                                <label class="fw-bold">Mẫu Safe Page</label>
-                                <select name="safe_page_id" class="form-select" id="campaignSafePageSelect" onchange="renderCampaignSafePagePreview()">
+                                <label class="fw-bold" data-help="Để mặc định domain hoặc chọn trực tiếp một trong hai mẫu cố định.">Mẫu Safe Page</label>
+                                <select name="safe_template" class="form-select" id="campaignSafePageSelect" onchange="renderCampaignSafePagePreview()">
                                     <option value="">Mặc định domain</option>
-                                    <% safePages.filter(sp => sp.is_active).forEach(sp => { %>
-                                        <option value="<%= sp.id %>"><%= sp.name %> (<%= sp.template %>)</option>
-                                    <% }) %>
+                                    <option value="clean">Mặc định — trung tính</option>
+                                    <option value="age_gate">18+ Mobile — banner xác nhận tuổi</option>
                                 </select>
                             </div>
                             <div class="col-md-7">
-                                <label class="fw-bold">Preview Safe Page</label>
+                                <label class="fw-bold" data-help="Xem trước giao diện sẽ xuất hiện nếu campaign không thể chuyển hướng.">Preview Safe Page</label>
                                 <iframe id="campaignSafePagePreview" class="w-100 border rounded bg-white" style="height:170px;" sandbox=""></iframe>
                             </div>
                         </div>
 
                         <hr>
                         <div class="mb-3">
-                            <label class="fw-bold">Quốc gia cho phép</label>
+                            <label class="fw-bold" data-help="Để trống để chấp nhận mọi quốc gia. Khi chọn, người dùng ngoài danh sách sẽ thấy Safe Page.">Quốc gia cho phép</label>
                             <select class="form-control select2-countries" name="allowed_countries[]"
                                 multiple="multiple" id="countrySelect"></select>
                         </div>
                         <div class="mb-3">
-                            <label class="fw-bold">Sao chép cấu hình từ link sẵn có</label>
+                            <label class="fw-bold" data-help="Sao chép quốc gia và rules từ campaign cũ để tạo nhanh. Tên và URL đích mới vẫn do bạn nhập.">Sao chép cấu hình từ link sẵn có</label>
                             <select class="form-control" id="copyFromSelect" onchange="onCopySelect()">
                                 <option value="">-- Không sao chép --</option>
                                 <% links.forEach(l=> { %>
@@ -300,7 +264,7 @@
                         </div>
 
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <label class="fw-bold">Luật kiểm tra</label>
+                            <label class="fw-bold" data-help="Rules được kiểm tra sau khi nhận diện campaign. Tất cả rule phải đạt thì người dùng mới được chuyển tới URL đích.">Luật kiểm tra</label>
                             <div class="dropdown">
                                 <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button"
                                     data-bs-toggle="dropdown">Mẫu Nhanh</button>
@@ -318,7 +282,7 @@
                         <button type="button" class="btn btn-sm btn-secondary w-100" onclick="addNewRule()">+ Thêm điều
                             kiện</button>
                         <div class="mt-3">
-                            <label class="fw-bold">Chuỗi tham số mẫu</label>
+                            <label class="fw-bold" data-help="Chuỗi dùng để gắn vào link quảng cáo khi test hoặc setup. Giá trị xxx là chỗ thay bằng macro hay dữ liệu thật của nền tảng.">Chuỗi tham số mẫu</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control bg-white" id="rulesQueryString" readonly value="">
                                 <button type="button" class="btn btn-outline-primary" onclick="copyGeneratedParams()">
@@ -338,84 +302,33 @@
         <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
         <script>
-            const DOMAIN_SAFE_PAGE = <%- JSON.stringify({
-                id: '',
-                name: 'Mặc định domain',
-                template: domain.safe_template,
-                content: domain.safe_content || {}
-            }).replace(/</g, '\\u003c') %>;
-            const SAFE_PAGES = <%- JSON.stringify(safePages.map(sp => ({
-                id: sp.id,
-                name: sp.name,
-                template: sp.template,
-                content: sp.content || {},
-                is_active: sp.is_active
-            }))).replace(/</g, '\\u003c') %>;
+            const DOMAIN_SAFE_TEMPLATE = <%- JSON.stringify(domain.safe_template || 'clean') %>;
 
-            function escapeHtml(value) {
-                return String(value || '').replace(/[&<>"']/g, function (char) {
-                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
-                });
-            }
-
-            function escapeAttr(value) {
-                return escapeHtml(value).replace(/`/g, '&#96;');
-            }
-
-            function buildSafePagePreviewHtml(page) {
-                const cfg = page.content || {};
-                const title = escapeHtml(cfg.title || 'Tin tức 24h');
-                const headline = escapeHtml(cfg.headline || 'Cập nhật mới nhất');
-                const logo = cfg.logo ? `<img src="${escapeAttr(cfg.logo)}" style="max-height:42px;max-width:160px;margin-bottom:10px;">` : '';
-                if (page.template === 'custom') {
-                    const html = cfg.custom_html || `<main class="fallback"><h1>${headline}</h1><p>${title}</p></main>`;
-                    const css = cfg.custom_css || '.fallback{min-height:100vh;display:grid;place-items:center;text-align:center;padding:24px;}';
-                    return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:Arial,sans-serif;}img{max-width:100%;height:auto;}${css}</style></head><body>${html}</body></html>`;
+            function buildSafePagePreviewHtml(template) {
+                if (template === 'age_gate') {
+                    return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#eef0f2}.card{width:min(100%,430px)}img{display:block;width:100%;height:auto}</style></head><body><main class="card"><img src="/images/safe-age-gate.jpeg" alt="18+ mobile"></main></body></html>`;
                 }
-                const palette = page.template === 'shop'
-                    ? 'background:#f8fafc;color:#172033;--accent:#16a34a;'
-                    : page.template === 'news'
-                        ? 'background:#fff7ed;color:#1f2937;--accent:#d97706;'
-                        : 'background:#f7f8fb;color:#172033;--accent:#2563eb;';
-                return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:Arial,sans-serif;${palette}}.wrap{min-height:100vh;display:grid;place-items:center;padding:18px;text-align:center}.card{max-width:520px}.badge{display:inline-block;background:var(--accent);color:white;border-radius:999px;padding:4px 10px;font-size:12px;margin-bottom:10px}h1{font-size:24px;margin:0 0 8px}p{margin:0;color:#667085;font-size:14px}</style></head><body><main class="wrap"><section class="card">${logo}<div class="badge">${escapeHtml(page.template)}</div><h1>${headline}</h1><p>${title}</p></section></main></body></html>`;
+                return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f7f8fb;color:#172033;font-family:Arial,sans-serif;text-align:center}.card{max-width:430px;background:#fff;border:1px solid #dde3ee;border-radius:18px;padding:30px;box-shadow:0 18px 50px rgba(23,32,51,.08)}.mark{width:52px;height:52px;margin:0 auto 16px;border-radius:14px;display:grid;place-items:center;background:#eaf1ff;color:#2563eb;font-weight:800}h1{font-size:24px;margin:0 0 10px}p{margin:0;color:#657086;line-height:1.6}</style></head><body><main class="card"><div class="mark">RP</div><h1>Trang thông tin</h1><p>Giao diện trung tính, tải nhanh và tương thích mọi thiết bị.</p></main></body></html>`;
             }
 
-            function setFramePreview(frameId, page) {
+            function setFramePreview(frameId, template) {
                 const frame = document.getElementById(frameId);
                 if (!frame) return;
-                frame.srcdoc = buildSafePagePreviewHtml(page);
+                frame.srcdoc = buildSafePagePreviewHtml(template);
             }
 
             function renderDomainSafeDefaultPreview() {
-                const page = {
-                    template: document.getElementById('safeTemplateSelect')?.value || 'clean',
-                    content: {
-                        title: document.getElementById('domainSafeTitle')?.value || '',
-                        headline: document.getElementById('domainSafeHeadline')?.value || '',
-                        logo: document.getElementById('domainSafeLogo')?.value || '',
-                        custom_html: document.getElementById('domainSafeCustomHtml')?.value || '',
-                        custom_css: document.getElementById('domainSafeCustomCss')?.value || ''
-                    }
-                };
-                setFramePreview('domainSafeDefaultPreview', page);
+                const template = document.getElementById('safeTemplateSelect')?.value || 'clean';
+                setFramePreview('domainSafeDefaultPreview', template);
             }
 
             function renderCampaignSafePagePreview() {
                 const select = document.getElementById('campaignSafePageSelect');
-                const id = select ? select.value : '';
-                const page = id ? SAFE_PAGES.find(sp => String(sp.id) === String(id)) : DOMAIN_SAFE_PAGE;
-                setFramePreview('campaignSafePagePreview', page || DOMAIN_SAFE_PAGE);
-            }
-
-            function toggleCustomSafeFields() {
-                const select = document.getElementById('safeTemplateSelect');
-                const fields = document.getElementById('customSafeFields');
-                if (!select || !fields) return;
-                fields.style.display = select.value === 'custom' ? '' : 'none';
+                const template = select?.value || DOMAIN_SAFE_TEMPLATE;
+                setFramePreview('campaignSafePagePreview', template);
             }
 
             document.addEventListener('DOMContentLoaded', function () {
-                toggleCustomSafeFields();
                 renderDomainSafeDefaultPreview();
                 renderCampaignSafePagePreview();
                 updateRulesQueryString();
@@ -792,7 +705,7 @@
                     $('#rules-wrapper').empty();
                     (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value));
                     $('#countrySelect').val(cfg.filters?.countries || []).trigger('change');
-                    $('#campaignSafePageSelect').val(cfg.safe_page_id || '').trigger('change');
+                    $('#campaignSafePageSelect').val(cfg.safe_template || '').trigger('change');
                     renderCampaignSafePagePreview();
                     updateRulesQueryString();
                 }).catch(() => document.getElementById('configPreview').innerText = 'Không tải được cấu hình');

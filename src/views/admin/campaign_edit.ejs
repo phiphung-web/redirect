@@ -27,7 +27,7 @@
         <div class="container bg-white p-4 rounded shadow-sm mt-3" style="max-width: 900px;">
             <div class="d-flex justify-content-between mb-4">
                 <div>
-                    <h3 class="mb-0">Chi tiết link: <span class="text-primary">
+                    <h3 class="mb-0" data-help="Chỉnh URL đích, phạm vi quốc gia và các quy tắc tham số của chiến dịch. Thay đổi có thể mất tối đa 30 giây để hết cache.">Chi tiết link: <span class="text-primary">
                             <%= camp.name %>
                         </span></h3>
                     <small class="text-muted">ID: <%= camp.id %> | Domain: <%= domain.domain_url %></small><br>
@@ -58,24 +58,33 @@
 
                 <div class="row mb-3">
                     <div class="col-md-6">
-                        <label class="fw-bold">Tên Chiến Dịch</label>
+                        <label class="fw-bold" data-help="Tên nội bộ giúp phân biệt chiến dịch trong dashboard, log và báo cáo.">Tên Chiến Dịch</label>
                         <input type="text" name="name" class="form-control" value="<%= camp.name %>" required>
                     </div>
                     <div class="col-md-6">
-                        <label class="fw-bold">Link Đích (Target)</label>
+                        <label class="fw-bold" data-help="URL được sử dụng khi tham số khớp và toàn bộ bộ lọc của chiến dịch đều đạt.">Link Đích (Target)</label>
                         <input type="url" name="target_url" class="form-control" value="<%= camp.target_url %>"
                             required>
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="fw-bold">Quốc gia cho phép</label>
+                    <label class="fw-bold" data-help="Giữ mặc định domain hoặc chọn trực tiếp một trong hai mẫu Safe Page cố định cho link kiểm tra này.">Safe Page khi không đạt điều kiện</label>
+                    <select name="safe_template" class="form-select">
+                        <option value="" <%= camp.safe_template_override ? '' : 'selected' %>>Mặc định domain</option>
+                        <option value="clean" <%= camp.safe_template_override === 'clean' ? 'selected' : '' %>>Mặc định — trung tính</option>
+                        <option value="age_gate" <%= camp.safe_template_override === 'age_gate' ? 'selected' : '' %>>18+ Mobile — banner xác nhận tuổi</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="fw-bold" data-help="Chỉ các mã quốc gia được chọn mới đi tới link đích. Để trống nếu chiến dịch không giới hạn quốc gia.">Quốc gia cho phép</label>
                     <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple"
                         id="countrySelect"></select>
                     <small class="text-muted">Để trống = Tất cả quốc gia.</small>
                 </div>
 
-                <label class="fw-bold mb-2">Quy tắc Tham số (Rules)</label>
+                <label class="fw-bold mb-2" data-help="Mỗi rule kiểm tra một query parameter. Tồn tại chỉ yêu cầu có key; Bằng yêu cầu đúng cả key và giá trị.">Quy tắc Tham số (Rules)</label>
                 <div id="rules-wrapper" class="bg-light p-3 rounded border mb-3"></div>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="addNewRule()">+ Thêm điều kiện</button>
 

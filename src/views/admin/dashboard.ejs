@@ -12,8 +12,8 @@
     <section class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
       <div>
         <p class="eyebrow mb-1">Trung tâm điều phối</p>
-        <h1 class="h2 fw-bold mb-2">Domain và chiến dịch</h1>
-        <p class="text-muted mb-0">Quản lý điểm vào, trạng thái redirect và cấu hình dự phòng của từng domain.</p>
+        <h1 class="h2 fw-bold mb-2" data-help="Luồng link kiểm tra dùng tham số, quốc gia và rule để quyết định chuyển hướng hay hiển thị Safe Page.">Link kiểm tra tham số</h1>
+        <p class="text-muted mb-0">Luồng 1 · Quản lý domain, điều kiện redirect và một trong hai mẫu Safe Page cố định.</p>
       </div>
       <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDomainModal">
         <i class="fa-solid fa-plus me-2"></i>Thêm domain
@@ -37,7 +37,7 @@
 
     <section class="card domain-table-card">
       <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between flex-wrap gap-2 px-4 py-3">
-        <div><h2 class="h6 fw-bold mb-1">Danh sách domain</h2><p class="text-muted small mb-0">Cấu hình mới có thể mất tối đa 30 giây để đồng bộ cache.</p></div>
+        <div><h2 class="h6 fw-bold mb-1" data-help="Danh sách toàn bộ domain đã kết nối. Nút Quản lý mở cấu hình chiến dịch, giao diện dự phòng và báo cáo của domain.">Danh sách domain</h2><p class="text-muted small mb-0">Cấu hình mới có thể mất tối đa 30 giây để đồng bộ cache.</p></div>
         <span class="badge text-bg-light"><%= domains.length %> domain</span>
       </div>
       <% if (!domains.length) { %>
@@ -57,7 +57,7 @@
                   <td class="ps-4">
                     <div class="domain-cell"><div class="domain-avatar"><%= d.domain_url.substring(0, 1).toUpperCase() %></div><div><a href="https://<%= d.domain_url %>" target="_blank" rel="noopener" class="fw-bold text-dark text-decoration-none"><%= d.domain_url %></a><div class="text-muted small">ID #<%= d.id %></div></div></div>
                   </td>
-                  <td><span class="badge bg-light text-dark border"><%= d.safe_template %></span></td>
+                  <td><span class="badge bg-light text-dark border"><%= d.safe_template === 'age_gate' ? '18+ Mobile' : 'Mặc định' %></span></td>
                   <td><span class="status-badge <%= d.status === 'active' ? 'active' : 'inactive' %>"><span class="status-dot"></span><%= d.status === 'active' ? 'Hoạt động' : 'Đã tắt' %></span></td>
                   <td><div class="campaign-count"><strong><%= d.link_active || 0 %></strong> hoạt động <span>/ <%= d.link_count || 0 %> tổng</span></div></td>
                   <td class="text-end pe-4 text-nowrap">
@@ -78,10 +78,10 @@
     <div class="modal-dialog modal-dialog-centered">
       <form class="modal-content" action="/domains/create" method="POST">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <div class="modal-header"><div><h5 class="modal-title fw-bold">Thêm domain</h5><p class="text-muted small mb-0">Domain cần được trỏ DNS về IP của redirect engine.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-header"><div><h5 class="modal-title fw-bold" data-help="Tạo điểm vào mới cho hệ thống. Sau khi lưu, hãy trỏ bản ghi DNS A của domain về IP VPS.">Thêm domain</h5><p class="text-muted small mb-0">Domain cần được trỏ DNS về IP của redirect engine.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <div class="mb-3"><label class="form-label fw-bold">Tên domain</label><input type="text" name="domain_url" class="form-control" required placeholder="go.example.com"><div class="form-text">Chỉ nhập tên miền, không nhập http:// hoặc đường dẫn.</div></div>
-          <div class="mb-2"><label class="form-label fw-bold">Giao diện dự phòng</label><select name="safe_template" class="form-select"><option value="clean">Clean — tối giản</option><option value="news">News — tin tức</option><option value="shop">Shop — cửa hàng</option><option value="custom">Custom — tùy chỉnh</option></select></div>
+          <div class="mb-3"><label class="form-label fw-bold" data-help="Nhập hostname thuần, ví dụ go.example.com. Không thêm giao thức, cổng hoặc đường dẫn.">Tên domain</label><input type="text" name="domain_url" class="form-control" required placeholder="go.example.com"><div class="form-text">Chỉ nhập tên miền, không nhập http:// hoặc đường dẫn.</div></div>
+          <div class="mb-2"><label class="form-label fw-bold" data-help="Chỉ có hai mẫu cố định: trang mặc định trung tính và mẫu xác nhận 18+ tối ưu mobile.">Giao diện dự phòng</label><select name="safe_template" class="form-select"><option value="clean">Mặc định — trung tính</option><option value="age_gate">18+ Mobile — ảnh xác nhận độ tuổi</option></select></div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Lưu domain</button></div>
       </form>

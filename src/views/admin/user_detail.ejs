@@ -18,7 +18,7 @@
     }) %>
     <div class="container" style="max-width: 800px;">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="mb-0">User: <%= target.username %></h3>
+            <h3 class="mb-0" data-help="Xem quyền, trạng thái và các tài nguyên gần đây do tài khoản này tạo.">User: <%= target.username %></h3>
             <div></div>
         </div>
         <div class="card shadow-sm mb-3">
@@ -30,7 +30,7 @@
         </div>
         <% if (viewer.role_name === 'super_admin') { %>
         <div class="card shadow-sm mb-3">
-            <div class="card-header bg-white fw-bold">Đổi role</div>
+            <div class="card-header bg-white fw-bold"><span data-help="Thay đổi có hiệu lực với lần kiểm tra quyền tiếp theo. Tránh tự hạ quyền tài khoản quản trị duy nhất.">Đổi role</span></div>
             <form class="card-body" action="/users/view/<%= target.id %>/role" method="POST">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <div class="row g-3 align-items-center">
@@ -52,7 +52,7 @@
         <div class="row g-3">
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white fw-bold">Domain gần đây</div>
+                    <div class="card-header bg-white fw-bold"><span data-help="Các domain mới nhất được ghi nhận là do tài khoản này tạo.">Domain gần đây</span></div>
                     <div class="card-body">
                         <% if(recentDomains.length===0){ %><div class="text-muted">Không có</div><% } %>
                         <ul class="list-group list-group-flush">
@@ -65,7 +65,7 @@
             </div>
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white fw-bold">Link gần đây</div>
+                    <div class="card-header bg-white fw-bold"><span data-help="Các campaign mới nhất được ghi nhận là do tài khoản này tạo.">Link gần đây</span></div>
                     <div class="card-body">
                         <% if(recentCamps.length===0){ %><div class="text-muted">Không có</div><% } %>
                         <ul class="list-group list-group-flush">

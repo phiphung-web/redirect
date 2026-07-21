@@ -1,13 +1,12 @@
 # LinkPilot / Redirect Pro
 
-Production-oriented redirect and campaign management for a single organization. The product keeps the public redirect engine isolated from the admin panel and is tuned to start on a small Vultr VPS.
+Production-oriented redirect and campaign management for a single organization. The product keeps the public redirect engine isolated from the admin panel and runs on a standard Ubuntu VPS, including the current Contabo deployment.
 
 ## Product modules
 
-- domain and campaign management;
-- parameter, country and device routing;
-- reusable fallback page templates;
-- immediate or 3-second delayed links that preserve tracking parameters;
+- conditional links with parameter, country and device routing;
+- automatic redirect links with a configurable 1-30 second wait;
+- exactly two built-in fallback layouts: neutral default and mobile 18+ age gate;
 - campaign and short-link reports;
 - users, roles and admin audit logs;
 - health endpoints, database backups and raw-log retention.
@@ -63,7 +62,7 @@ npm test
 pm2 start ecosystem.config.cjs
 ```
 
-See [docs/VULTR_DEPLOY.md](docs/VULTR_DEPLOY.md) for the full Vultr, PostgreSQL, Nginx, SSL, backup and scaling procedure.
+See [docs/VULTR_DEPLOY.md](docs/VULTR_DEPLOY.md) for the generic Ubuntu VPS, PostgreSQL, Nginx, SSL, backup and scaling procedure.
 
 ## Operations
 

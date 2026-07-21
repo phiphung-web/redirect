@@ -20,7 +20,7 @@
   <div class="container bg-white p-4 rounded shadow-sm mt-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <div>
-        <h4 class="mb-0">Log: <span class="text-primary"><%= link.title || link.code %></span></h4>
+        <h4 class="mb-0" data-help="Danh sách chi tiết các lượt mở link chuyển hướng, gồm IP, quốc gia, thiết bị, referer và URL request.">Log: <span class="text-primary"><%= link.title || link.code %></span></h4>
         <small class="text-muted">https://<%= link.domain_url %>/s/<%= link.code %></small>
       </div>
     </div>
@@ -35,7 +35,7 @@
         <input type="date" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
       </div>
       <div class="col-auto">
-        <label class="form-label">Số dòng</label>
+        <label class="form-label" data-help="Giới hạn số bản ghi tải trong một lần, tối đa 2.000 dòng.">Số dòng</label>
         <input type="number" name="limit" value="<%= limit %>" min="50" max="2000" class="form-control form-control-sm">
       </div>
       <div class="col-auto align-self-end">

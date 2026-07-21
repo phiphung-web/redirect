@@ -20,7 +20,6 @@ const { requestContext } = require("./middleware/request-context");
 const {
   buildFilters,
   normalizeDomainUrl,
-  normalizeSafeContent,
   normalizeSafeTemplate,
   normalizeShortCode,
   normalizeTargetUrl,
@@ -58,13 +57,6 @@ const generateCode = (len = 8) => {
 };
 
 const generateShortCode = (len = 7) => generateCode(len).toLowerCase();
-
-const normalizeOptionalId = (value, field = "ID") => {
-  if (value === undefined || value === null || value === "") return null;
-  const id = Number.parseInt(value, 10);
-  if (!Number.isInteger(id)) throw new Error(`${field} khong hop le`);
-  return id;
-};
 
 const parseMonthRange = (monthStr) => {
   const now = new Date();
@@ -359,7 +351,17 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
   try {
     const title = validateName(req.body.title || "Short link", "Ten link");
     const targetUrl = normalizeTargetUrl(req.body.target_url);
-    const redirectDelaySeconds = req.body.redirect_mode === "delayed" ? 3 : 0;
+    const redirectDelaySeconds = Number.parseInt(
+      req.body.redirect_delay_seconds,
+      10
+    );
+    if (
+      !Number.isInteger(redirectDelaySeconds) ||
+      redirectDelaySeconds < 1 ||
+      redirectDelaySeconds > 30
+    ) {
+      throw new Error("Thoi gian cho phai tu 1 den 30 giay");
+    }
     let code = req.body.code ? normalizeShortCode(req.body.code) : null;
     const domain = await db.query(`SELECT id FROM domains WHERE id=$1 LIMIT 1`, [
       domainId,
@@ -725,88 +727,19 @@ app.get("/short-links/:id/report/export", checkAuth, async (req, res) => {
 });
 
 // --- SAFE PAGE TEMPLATES ---
-app.get("/safe-pages", checkAuth, async (req, res) => {
-  let selectedDomainId = null;
-  try {
-    selectedDomainId = normalizeOptionalId(req.query.domain_id, "Domain");
-  } catch {
-    return res.redirect("/safe-pages");
-  }
-  const domains = await db.query(
-    `SELECT id, domain_url, status FROM domains ORDER BY domain_url ASC`
-  );
-  const params = [];
-  let where = "";
-  if (selectedDomainId) {
-    params.push(selectedDomainId);
-    where = "WHERE sp.domain_id=$1";
-  }
-  const safePages = await db.query(
-    `
-      SELECT sp.*, d.domain_url, cu.username AS created_by_name, uu.username AS updated_by_name,
-             (SELECT COUNT(*) FROM campaigns c WHERE c.safe_page_id = sp.id) AS used_by_links
-      FROM safe_pages sp
-      JOIN domains d ON d.id = sp.domain_id
-      LEFT JOIN users cu ON sp.user_id = cu.id
-      LEFT JOIN users uu ON sp.updated_by = uu.id
-      ${where}
-      ORDER BY sp.id DESC
-    `,
-    params
-  );
-
-  res.render("admin/safe_pages", {
-    user: req.session.user,
-    domains: domains.rows,
-    safePages: safePages.rows,
-    selectedDomainId,
-  });
-});
-
-app.post("/safe-pages/create", checkAuth, async (req, res) => {
-  try {
-    const domainId = normalizeOptionalId(req.body.domain_id, "Domain");
-    if (!domainId) throw new Error("Domain khong hop le");
-    const name = validateName(req.body.safe_page_name, "Ten mau");
-    const template = normalizeSafeTemplate(req.body.safe_page_template);
-    const content = normalizeSafeContent({
-      title: req.body.safe_page_title,
-      headline: req.body.safe_page_headline,
-      logo: req.body.safe_page_logo,
-      custom_html: req.body.safe_page_custom_html,
-      custom_css: req.body.safe_page_custom_css,
-    });
-    const domain = await db.query(`SELECT id FROM domains WHERE id=$1 LIMIT 1`, [
-      domainId,
-    ]);
-    if (!domain.rowCount) throw new Error("Domain khong ton tai");
-
-    await db.query(
-      `
-        INSERT INTO safe_pages (domain_id, user_id, name, template, content, updated_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-      [
-        domainId,
-        req.session.user.id,
-        name,
-        template,
-        JSON.stringify(content),
-        req.session.user.id,
-      ]
-    );
-    await auditAdminAction({
-      req,
-      action: "safe_page_create",
-      targetType: "safe_page",
-      targetId: `${domainId}:${name}`,
-      detail: { domain_id: domainId, name, template },
-    });
-    res.redirect(`/safe-pages?domain_id=${domainId}`);
-  } catch (e) {
-    res.send(e.message || "Mau safe page khong hop le");
-  }
-});
+app.get("/safe-pages", checkAuth, (req, res) => res.redirect("/redirect"));
+app.all(
+  [
+    "/safe-pages/create",
+    "/safe-pages/update/:id",
+    "/safe-pages/toggle/:id",
+    "/safe-pages/delete/:id",
+    "/domains/:id/safe-pages/create",
+  ],
+  checkAuth,
+  (_req, res) =>
+    res.status(410).send("Thu vien mau tuy chinh da duoc thay bang 2 mau co dinh")
+);
 
 // --- DOMAIN (CRUD) ---
 app.post("/domains/create", checkAuth, async (req, res) => {
@@ -928,25 +861,12 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
 
   const rLinks = await db.query(
     `
-      SELECT c.*, sp.name AS safe_page_name, cu.username AS created_by_name, uu.username AS updated_by_name
+      SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name
       FROM campaigns c
-      LEFT JOIN safe_pages sp ON sp.id = c.safe_page_id
       LEFT JOIN users cu ON c.user_id = cu.id
       LEFT JOIN users uu ON c.updated_by = uu.id
       WHERE c.domain_id=$1
       ORDER BY c.id DESC
-    `,
-    [domainId]
-  );
-
-  const safePages = await db.query(
-    `
-      SELECT sp.*, cu.username AS created_by_name, uu.username AS updated_by_name
-      FROM safe_pages sp
-      LEFT JOIN users cu ON sp.user_id = cu.id
-      LEFT JOIN users uu ON sp.updated_by = uu.id
-      WHERE sp.domain_id=$1
-      ORDER BY sp.id DESC
     `,
     [domainId]
   );
@@ -998,20 +918,13 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     domain: rDom.rows[0],
     links,
     linkStats: linkStats.rows[0],
-    safePages: safePages.rows,
   });
 });
 
 app.post("/domains/:id/safe-content", checkAuth, async (req, res) => {
   try {
     const safeTemplate = normalizeSafeTemplate(req.body.safe_template);
-    const safeContent = normalizeSafeContent({
-      title: req.body.safe_title,
-      headline: req.body.safe_headline,
-      logo: req.body.safe_logo,
-      custom_html: req.body.safe_custom_html,
-      custom_css: req.body.safe_custom_css,
-    });
+    const safeContent = {};
     await db.query(
       `UPDATE domains SET safe_template=$1, safe_content=$2, updated_by=$3 WHERE id=$4`,
       [
@@ -1034,136 +947,6 @@ app.post("/domains/:id/safe-content", checkAuth, async (req, res) => {
   }
 });
 
-app.post("/domains/:id/safe-pages/create", checkAuth, async (req, res) => {
-  try {
-    const domainId = normalizeOptionalId(req.params.id, "Domain");
-    const name = validateName(req.body.safe_page_name, "Ten mau");
-    const template = normalizeSafeTemplate(req.body.safe_page_template);
-    const content = normalizeSafeContent({
-      title: req.body.safe_page_title,
-      headline: req.body.safe_page_headline,
-      logo: req.body.safe_page_logo,
-      custom_html: req.body.safe_page_custom_html,
-      custom_css: req.body.safe_page_custom_css,
-    });
-    await db.query(
-      `
-        INSERT INTO safe_pages (domain_id, user_id, name, template, content, updated_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-      [
-        domainId,
-        req.session.user.id,
-        name,
-        template,
-        JSON.stringify(content),
-        req.session.user.id,
-      ]
-    );
-    await auditAdminAction({
-      req,
-      action: "safe_page_create",
-      targetType: "safe_page",
-      targetId: `${domainId}:${name}`,
-      detail: { domain_id: domainId, name, template },
-    });
-    res.redirect("/domains/" + domainId);
-  } catch (e) {
-    res.send(e.message || "Mau safe page khong hop le");
-  }
-});
-
-app.post("/safe-pages/update/:id", checkAuth, async (req, res) => {
-  try {
-    const name = validateName(req.body.safe_page_name, "Ten mau");
-    const template = normalizeSafeTemplate(req.body.safe_page_template);
-    const content = normalizeSafeContent({
-      title: req.body.safe_page_title,
-      headline: req.body.safe_page_headline,
-      logo: req.body.safe_page_logo,
-      custom_html: req.body.safe_page_custom_html,
-      custom_css: req.body.safe_page_custom_css,
-    });
-    const r = await db.query(
-      `
-        UPDATE safe_pages
-        SET name=$1, template=$2, content=$3, updated_by=$4
-        WHERE id=$5
-        RETURNING domain_id
-      `,
-      [name, template, JSON.stringify(content), req.session.user.id, req.params.id]
-    );
-    await auditAdminAction({
-      req,
-      action: "safe_page_update",
-      targetType: "safe_page",
-      targetId: req.params.id,
-      detail: { name, template },
-    });
-    const redirectUrl =
-      req.body.return_to === "safe-pages" && r.rowCount
-        ? `/safe-pages?domain_id=${r.rows[0].domain_id}`
-        : r.rowCount
-        ? "/domains/" + r.rows[0].domain_id
-        : "/redirect";
-    res.redirect(redirectUrl);
-  } catch (e) {
-    res.send(e.message || "Mau safe page khong hop le");
-  }
-});
-
-const toggleSafePageHandler = async (req, res) => {
-  const r = await db.query(
-    `UPDATE safe_pages SET is_active = NOT is_active, updated_by=$2 WHERE id=$1 RETURNING domain_id`,
-    [req.params.id, req.session.user.id]
-  );
-  await auditAdminAction({
-    req,
-    action: "safe_page_toggle",
-    targetType: "safe_page",
-    targetId: req.params.id,
-  });
-  const redirectUrl =
-    req.body.return_to === "safe-pages" && r.rowCount
-      ? `/safe-pages?domain_id=${r.rows[0].domain_id}`
-      : r.rowCount
-      ? "/domains/" + r.rows[0].domain_id
-      : "/redirect";
-  res.redirect(redirectUrl);
-};
-app.get("/safe-pages/toggle/:id", checkAuth, (req, res) =>
-  res.status(405).send("Use POST /safe-pages/toggle/:id")
-);
-app.post("/safe-pages/toggle/:id", checkAuth, toggleSafePageHandler);
-
-const deleteSafePageHandler = async (req, res) => {
-  const r = await db.query(
-    `DELETE FROM safe_pages WHERE id=$1 RETURNING domain_id`,
-    [req.params.id]
-  );
-  await auditAdminAction({
-    req,
-    action: "safe_page_delete",
-    targetType: "safe_page",
-    targetId: req.params.id,
-  });
-  const redirectUrl =
-    req.body.return_to === "safe-pages" && r.rowCount
-      ? `/safe-pages?domain_id=${r.rows[0].domain_id}`
-      : r.rowCount
-      ? "/domains/" + r.rows[0].domain_id
-      : "/redirect";
-  res.redirect(redirectUrl);
-};
-app.get("/safe-pages/delete/:id", requireRole(["super_admin"]), (req, res) =>
-  res.status(405).send("Use POST /safe-pages/delete/:id")
-);
-app.post(
-  "/safe-pages/delete/:id",
-  requireRole(["super_admin"]),
-  deleteSafePageHandler
-);
-
 app.post("/campaigns/create", checkAuth, async (req, res) => {
   const {
     domain_id,
@@ -1172,7 +955,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
     rules_json,
     allowed_countries,
     copy_from_id,
-    safe_page_id,
+    safe_template,
   } = req.body;
   try {
     const normalizedDomainId = Number.parseInt(domain_id, 10);
@@ -1180,7 +963,9 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
       throw new Error("Domain khong hop le");
     const normalizedName = validateName(name, "Ten link");
     const normalizedTargetUrl = normalizeTargetUrl(target_url);
-    let normalizedSafePageId = normalizeOptionalId(safe_page_id, "Safe page");
+    let normalizedSafeTemplate = safe_template
+      ? normalizeSafeTemplate(safe_template)
+      : null;
     let rulesPayload = parseRules(rules_json);
     let rulesPayloadJson = JSON.stringify(rulesPayload || []);
     const dup = await db.query(
@@ -1191,24 +976,17 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
 
     let filters = buildFilters(allowed_countries);
 
-    if (normalizedSafePageId) {
-      const rSafePage = await db.query(
-        `SELECT id FROM safe_pages WHERE id=$1 AND domain_id=$2 AND is_active LIMIT 1`,
-        [normalizedSafePageId, normalizedDomainId]
-      );
-      if (!rSafePage.rowCount) throw new Error("Mau safe page khong hop le");
-    }
-
     if (copy_from_id && rulesPayload.length === 0 && !allowed_countries) {
       const rCfg = await db.query(
-        `SELECT rules, filters, safe_page_id FROM campaigns WHERE id=$1 AND domain_id=$2`,
+        `SELECT rules, filters, safe_template_override FROM campaigns WHERE id=$1 AND domain_id=$2`,
         [copy_from_id, normalizedDomainId]
       );
       if (rCfg.rowCount) {
         rulesPayload = parseRules(rCfg.rows[0].rules || []);
         filters = buildFilters(rCfg.rows[0].filters?.countries || []);
         rulesPayloadJson = JSON.stringify(rulesPayload || []);
-        if (!normalizedSafePageId) normalizedSafePageId = rCfg.rows[0].safe_page_id || null;
+        if (!normalizedSafeTemplate)
+          normalizedSafeTemplate = rCfg.rows[0].safe_template_override || null;
       }
     }
     const filtersJson = JSON.stringify(filters || {});
@@ -1218,7 +996,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
 
     await db.query(
       `
-            INSERT INTO campaigns (domain_id, user_id, name, param_key, param_value, target_url, rules, filters, safe_page_id, updated_by)
+            INSERT INTO campaigns (domain_id, user_id, name, param_key, param_value, target_url, rules, filters, safe_template_override, updated_by)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
       [
@@ -1230,7 +1008,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
         normalizedTargetUrl,
         rulesPayloadJson,
         filtersJson,
-        normalizedSafePageId,
+        normalizedSafeTemplate,
         req.session.user.id,
       ]
     );
@@ -1240,7 +1018,11 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
       action: "campaign_create",
       targetType: "campaign",
       targetId: `${normalizedDomainId}:${normalizedName}`,
-      detail: { domain_id: normalizedDomainId, name: normalizedName, safe_page_id: normalizedSafePageId },
+      detail: {
+        domain_id: normalizedDomainId,
+        name: normalizedName,
+        safe_template: normalizedSafeTemplate,
+      },
     });
     res.redirect("/domains/" + normalizedDomainId);
   } catch (e) {
@@ -1328,7 +1110,14 @@ app.get("/campaigns/edit/:id", checkAuth, async (req, res) => {
 });
 
 app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
-  const { name, target_url, rules_json, allowed_countries, domain_id } =
+  const {
+    name,
+    target_url,
+    rules_json,
+    allowed_countries,
+    domain_id,
+    safe_template,
+  } =
     req.body;
   try {
     const normalizedDomainId = Number.parseInt(domain_id, 10);
@@ -1340,6 +1129,9 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
     const filters = buildFilters(allowed_countries);
     const rulesPayloadJson = JSON.stringify(rulesPayload || []);
     const filtersJson = JSON.stringify(filters || {});
+    const normalizedSafeTemplate = safe_template
+      ? normalizeSafeTemplate(safe_template)
+      : null;
     const dup = await db.query(
       `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3 LIMIT 1`,
       [normalizedDomainId, normalizedName, req.params.id]
@@ -1347,12 +1139,13 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
     if (dup.rowCount) return res.send("Ten link bi trung trong domain");
 
     await db.query(
-      `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, updated_by=$5 WHERE id=$6`,
+      `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, safe_template_override=$5, updated_by=$6 WHERE id=$7`,
       [
         normalizedName,
         normalizedTargetUrl,
         rulesPayloadJson,
         filtersJson,
+        normalizedSafeTemplate,
         req.session.user.id,
         req.params.id,
       ]
@@ -1373,7 +1166,7 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
 app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
   const campId = req.params.id;
   const r = await db.query(
-    `SELECT id, name, rules, filters, param_key, param_value, safe_page_id FROM campaigns WHERE id=$1`,
+    `SELECT id, name, rules, filters, param_key, param_value, safe_template_override FROM campaigns WHERE id=$1`,
     [campId]
   );
   if (!r.rowCount) return res.status(404).json({ error: "not_found" });
@@ -1385,7 +1178,7 @@ app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
     filters: row.filters || {},
     param_key: row.param_key,
     param_value: row.param_value,
-    safe_page_id: row.safe_page_id,
+    safe_template: row.safe_template_override,
   });
 });
 
@@ -1862,7 +1655,7 @@ app.use(async (err, req, res, next) => {
 });
 
 if (require.main === module) {
-  const server = app.listen(PORT, () =>
+  const server = app.listen(PORT, process.env.BIND_HOST || "127.0.0.1", () =>
     console.log(`${product.name} admin listening on ${PORT}`)
   );
   const shutdown = (signal) => {

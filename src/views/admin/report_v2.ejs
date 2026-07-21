@@ -33,7 +33,7 @@
       <div class="card-body d-flex flex-wrap justify-content-between align-items-start gap-3">
         <div>
           <div class="text-muted small">Chiến dịch</div>
-          <h4 class="mb-1"><%= camp.name %></h4>
+          <h4 class="mb-1" data-help="Báo cáo của riêng campaign này trong khoảng thời gian đã chọn."><%= camp.name %></h4>
           <div class="text-muted small">Khoảng: <%= rangeLabel %></div>
           <div class="text-muted small">Nhóm theo: <%= bucketType === 'hour' ? 'Khung giờ' : bucketType === 'day' ? 'Ngày' : bucketType === 'week' ? 'Tuần' : 'Tháng' %></div>
         </div>
@@ -47,7 +47,7 @@
               <option value="all" <%= preset === 'all' ? 'selected' : '' %>>Tất cả</option>
               <option value="custom" <%= preset === 'custom' ? 'selected' : '' %>>Tùy chọn</option>
             </select>
-            <label for="presetSelect">Mốc thời gian</label>
+            <label for="presetSelect" data-help="Chọn khoảng thống kê có sẵn hoặc Tùy chọn để nhập ngày bắt đầu và kết thúc.">Mốc thời gian</label>
           </div>
           <div class="form-floating custom-range d-none" id="startWrap">
             <input type="date" class="form-control" id="startDate" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>">
@@ -66,7 +66,7 @@
       <div class="col-md-3">
         <div class="card shadow-sm metric-card h-100">
           <div class="card-body">
-            <div class="label">Redirect</div>
+            <div class="label" data-help="Số request vượt qua toàn bộ rules và bộ lọc để chuyển tới URL đích.">Redirect</div>
             <div class="value text-success fw-bold"><%= summary.redirects || 0 %></div>
             <div class="delta text-muted small">So với kỳ trước: <%= delta.redirects >= 0 ? '+' : '' %><%= delta.redirects %></div>
           </div>
@@ -75,7 +75,7 @@
       <div class="col-md-3">
         <div class="card shadow-sm metric-card h-100">
           <div class="card-body">
-            <div class="label">Fail</div>
+            <div class="label" data-help="Số request không đạt điều kiện và được đưa về Safe Page.">Fail</div>
             <div class="value text-danger fw-bold"><%= summary.fail || 0 %></div>
             <div class="delta text-muted small">So với kỳ trước: <%= delta.safe >= 0 ? '+' : '' %><%= delta.safe %></div>
           </div>
@@ -84,7 +84,7 @@
       <div class="col-md-3">
         <div class="card shadow-sm metric-card h-100">
           <div class="card-body">
-            <div class="label">Pass rate</div>
+            <div class="label" data-help="Tỷ lệ Redirect chia cho tổng số request đã ghi nhận trong kỳ.">Pass rate</div>
             <div class="value fw-bold"><%= summary.pass_rate %>%</div>
             <div class="delta text-muted small">Chênh lệch: <%= delta.pass_rate >= 0 ? '+' : '' %><%= Math.round(delta.pass_rate * 10) / 10 %>%</div>
           </div>
@@ -93,7 +93,7 @@
       <div class="col-md-3">
         <div class="card shadow-sm metric-card h-100">
           <div class="card-body">
-            <div class="label">Tổng lượt</div>
+            <div class="label" data-help="Tổng Redirect và Fail đã ghi nhận trong khoảng thời gian đang xem.">Tổng lượt</div>
             <div class="value fw-bold"><%= summary.total || 0 %></div>
             <div class="delta text-muted small">Kỳ trước: <%= previous.total || 0 %></div>
           </div>
@@ -105,7 +105,7 @@
       <div class="col-lg-8">
         <div class="card shadow-sm h-100">
           <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <span><i class="fa-solid fa-chart-line me-2"></i>Biểu đồ lưu lượng</span>
+            <span data-help="Biểu đồ thể hiện Redirect và Fail theo giờ, ngày, tuần hoặc tháng tùy độ dài khoảng thời gian."><i class="fa-solid fa-chart-line me-2"></i>Biểu đồ lưu lượng</span>
             <span class="text-muted small"><%= presetLabel %> · <%= rangeLabel %></span>
           </div>
           <div class="card-body">
@@ -115,7 +115,7 @@
       </div>
       <div class="col-lg-4">
         <div class="card shadow-sm h-100">
-          <div class="card-header bg-white"><b>Top quốc gia</b></div>
+          <div class="card-header bg-white"><b data-help="Quốc gia được suy ra từ IP truy cập; kết quả có thể sai lệch với VPN hoặc proxy.">Top quốc gia</b></div>
           <div class="card-body p-0">
             <table class="table table-sm mb-0">
               <thead class="table-light"><tr><th>Quốc gia</th><th class="text-end">Hit</th><th class="text-end">Pass</th></tr></thead>
@@ -201,7 +201,7 @@
 
     <div class="card shadow-sm mt-3">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h6 class="mb-0">Log mới (50)</h6>
+        <h6 class="mb-0" data-help="50 request gần nhất của campaign, dùng để kiểm tra URL, thiết bị và lý do pass/fail.">Log mới (50)</h6>
         <a class="btn btn-link btn-sm" href="/campaigns/<%= camp.id %>/logs">Xem tất cả</a>
       </div>
       <div class="table-responsive p-3">

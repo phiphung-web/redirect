@@ -24,7 +24,7 @@
       <div class="card-body d-flex flex-wrap justify-content-between align-items-start gap-3">
         <div>
           <div class="text-muted small">Link rút gọn</div>
-          <h4 class="mb-1"><%= link.title || link.code %></h4>
+          <h4 class="mb-1" data-help="Báo cáo của link chuyển hướng này, tách biệt với báo cáo campaign."><%= link.title || link.code %></h4>
           <div class="input-group input-group-sm" style="max-width:520px;">
             <input type="text" class="form-control bg-white text-primary fw-bold" value="https://<%= link.domain_url %>/s/<%= link.code %>" readonly id="shortReportUrl">
             <button class="btn btn-outline-primary" type="button" onclick="copyShortReportUrl()"><i class="fa-solid fa-copy"></i></button>
@@ -41,7 +41,7 @@
               <option value="all" <%= preset === 'all' ? 'selected' : '' %>>Tất cả</option>
               <option value="custom" <%= preset === 'custom' ? 'selected' : '' %>>Tùy chọn</option>
             </select>
-            <label for="presetSelect">Mốc thời gian</label>
+            <label for="presetSelect" data-help="Chọn khoảng thời gian dùng cho toàn bộ số liệu, bảng phân bổ và log bên dưới.">Mốc thời gian</label>
           </div>
           <div class="form-floating custom-range d-none">
             <input type="date" class="form-control" id="startDate" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>">
@@ -101,7 +101,7 @@
       </div>
       <div class="col-lg-4">
         <div class="card shadow-sm mb-3">
-          <div class="card-header bg-white"><b>Top quốc gia</b></div>
+          <div class="card-header bg-white"><b data-help="Phân bổ click theo quốc gia suy ra từ địa chỉ IP.">Top quốc gia</b></div>
           <div class="table-responsive">
             <table class="table table-sm mb-0">
               <tbody>
@@ -114,7 +114,7 @@
           </div>
         </div>
         <div class="card shadow-sm">
-          <div class="card-header bg-white"><b>Thiết bị</b></div>
+          <div class="card-header bg-white"><b data-help="Loại thiết bị được suy ra từ User-Agent và có thể không chính xác với một số trình duyệt riêng tư.">Thiết bị</b></div>
           <div class="table-responsive">
             <table class="table table-sm mb-0">
               <tbody>
@@ -131,7 +131,7 @@
 
     <div class="card shadow-sm mt-3">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <b>Log mới</b>
+        <b data-help="Các lượt mở link gần nhất cùng nguồn giới thiệu, thiết bị và URL request.">Log mới</b>
         <a class="btn btn-link btn-sm" href="/short-links/<%= link.id %>/logs">Xem tất cả</a>
       </div>
       <div class="table-responsive p-3">

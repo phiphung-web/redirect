@@ -15,16 +15,18 @@ Production-oriented redirect and campaign management for a single organization. 
 
 The redirect hot path uses short-lived in-process caches for domain, campaign and short-link configuration. Traffic logs and counters are buffered in production so redirect responses are not blocked by reporting writes.
 
-Default low-resource profile:
+Default production profile for a 6-vCPU / 12-GB VPS:
 
-- one redirect process;
+- four clustered redirect workers (bounded to at most six);
 - one admin process;
-- PostgreSQL pool limited to 6 connections per process;
+- PostgreSQL pool limited to 8 connections per process;
 - 30-second routing cache;
 - five-minute stale-cache safety window during short database interruptions;
 - traffic inserts in batches of 100;
 - counter flush every two seconds;
 - raw logs retained for 30 days.
+
+See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the measured Contabo baseline, tuned result and capacity caveats.
 
 ## Local development
 

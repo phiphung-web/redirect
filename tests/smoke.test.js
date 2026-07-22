@@ -218,6 +218,16 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
       { key: "campaign_id", operator: "exists", value: "", copyValue: "{{campaign.id}}" },
     ]
   );
+
+  const editSource = fs.readFileSync(
+    path.join(__dirname, "../src/views/admin/campaign_edit.ejs"),
+    "utf8"
+  );
+  assert.match(editSource, /SYSTEM_RULE_KEYS = new Set\(\['fbclid', 'fbcid'\]\)/);
+  assert.match(editSource, /if \(SYSTEM_RULE_KEYS\.has\(String\(key\)\.trim\(\)\.toLowerCase\(\)\)\) return/);
+  assert.match(editSource, /const rules = \[\{ key: 'fbclid', operator: 'exists', value: '' \}\]/);
+  assert.match(source, /\/images\/meta-url-parameters-guide\.svg/);
+  assert.match(source, /Dán chuỗi ở đâu\?/);
 });
 
 test("report time filters keep labels outside controls", () => {

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="656" height="150" viewBox="0 0 656 150" role="img" aria-labelledby="title desc">
+  <title id="title">Vị trí dán thông số URL trong Meta Ads</title>
+  <desc id="desc">Minh họa trường Thông số URL với chuỗi key1=value1&amp;key2=value2</desc>
+  <rect width="656" height="150" fill="#eef3ff"/>
+  <rect x="60" width="536" height="150" fill="#ffffff"/>
+  <text x="80" y="9" fill="#131722" font-family="Arial, sans-serif" font-size="18" font-weight="700">Sự kiện offline</text>
+  <circle cx="219" cy="3" r="7" fill="#5f6368"/>
+  <text x="217" y="6" fill="#ffffff" font-family="Arial, sans-serif" font-size="9" font-weight="700">i</text>
+  <text x="80" y="44" fill="#131722" font-family="Arial, sans-serif" font-size="18" font-weight="700">Thông số URL</text>
+  <circle cx="207" cy="37" r="7" fill="#5f6368"/>
+  <text x="205" y="40" fill="#ffffff" font-family="Arial, sans-serif" font-size="9" font-weight="700">i</text>
+  <rect x="80" y="55" width="495" height="45" rx="5" fill="#ffffff" stroke="#b8c2d6"/>
+  <text x="96" y="84" fill="#737b8c" font-family="Arial, sans-serif" font-size="18">key1=value1&amp;key2=value2</text>
+  <text x="80" y="130" fill="#246bce" font-family="Arial, sans-serif" font-size="18">Tạo thông số URL</text>
+</svg>

@@ -343,6 +343,7 @@
 
             const oldRules = <%- JSON.stringify(camp.rules || []) %>;
             const oldCountryFilter = <%- JSON.stringify(camp.filters?.countries || []) %>;
+            const SYSTEM_RULE_KEYS = new Set(['fbclid', 'fbcid']);
 
             $(document).ready(function () {
                 const select = $('#countrySelect');
@@ -354,6 +355,7 @@
             });
 
             function addNewRule(key = '', op = 'exists', val = '', copyValue = '') {
+                if (SYSTEM_RULE_KEYS.has(String(key).trim().toLowerCase())) return;
                 const row = $(`
                 <div class="row g-2 mb-2 rule-row align-items-center">
                     <div class="col-md-3"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key"></div>
@@ -381,13 +383,13 @@
             }
 
             function collectRules() {
-                const rules = [];
+                const rules = [{ key: 'fbclid', operator: 'exists', value: '' }];
                 $('.rule-row').each(function () {
                     let k = $(this).find('.rule-key').val();
                     let o = $(this).find('.rule-op').val();
                     let v = $(this).find('.rule-val').val();
                     let copyValue = o === 'exists' ? $(this).find('.rule-copy-val').val() : '';
-                    if (k) rules.push({ key: k, operator: o, value: v, ...(copyValue ? { copyValue } : {}) });
+                    if (k && !SYSTEM_RULE_KEYS.has(String(k).trim().toLowerCase())) rules.push({ key: k, operator: o, value: v, ...(copyValue ? { copyValue } : {}) });
                 });
                 return rules;
             }

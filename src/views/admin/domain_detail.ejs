@@ -89,6 +89,23 @@
             background: #fbfcfe;
         }
 
+        .meta-parameter-guide {
+            padding: 12px;
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .meta-parameter-guide img {
+            display: block;
+            width: 100%;
+            max-width: 656px;
+            height: auto;
+            margin-top: 9px;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+        }
+
         @media (max-width: 767px) {
             .link-type-grid { grid-template-columns: 1fr; }
             .tracking-copy-group { flex-direction: column; }
@@ -388,6 +405,11 @@
                                         <div class="d-flex flex-wrap justify-content-between gap-2 mt-2 small">
                                             <span class="text-muted">Chuỗi được tạo trực tiếp từ 4 giá trị phía trên.</span>
                                             <span id="copyGeneratedParamsStatus" role="status" aria-live="polite"></span>
+                                        </div>
+                                        <div class="meta-parameter-guide mt-3">
+                                            <div class="small fw-bold"><i class="fas fa-location-dot text-primary me-1"></i>Dán chuỗi ở đâu?</div>
+                                            <div class="small text-muted mt-1">Trong Meta Ads, mở <strong>cấp Quảng cáo</strong> → <strong>Theo dõi</strong> → dán vào ô <strong>Thông số URL</strong>. Không thêm dấu <code>?</code> ở đầu.</div>
+                                            <img src="/images/meta-url-parameters-guide.svg" alt="Minh họa ô Thông số URL trong Meta Ads" loading="lazy">
                                         </div>
                                     </div>
                                 </div>

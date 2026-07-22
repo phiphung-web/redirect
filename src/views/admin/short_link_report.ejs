@@ -6,6 +6,10 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .report-filter-field { min-width: 150px; }
+    .report-filter-field .form-label { margin-bottom: 4px; color: #667085; font-size: .78rem; font-weight: 700; }
+  </style>
 </head>
 <body class="bg-light">
   <%- include('../partials/header', {
@@ -33,7 +37,8 @@
           <div class="text-muted small mt-1">Khoảng: <%= rangeLabel %> · Nhóm theo: <%= bucketType %></div>
         </div>
         <form class="d-flex flex-wrap align-items-end gap-2" method="get">
-          <div class="form-floating">
+          <div class="report-filter-field">
+            <label class="form-label" for="presetSelect" data-help="Chọn khoảng thời gian dùng cho toàn bộ số liệu, bảng phân bổ và log bên dưới.">Mốc thời gian</label>
             <select class="form-select" id="presetSelect" name="preset" onchange="toggleCustomPreset(this.value)">
               <option value="today" <%= preset === 'today' ? 'selected' : '' %>>Hôm nay</option>
               <option value="this_week" <%= preset === 'this_week' ? 'selected' : '' %>>Tuần này</option>
@@ -42,15 +47,14 @@
               <option value="all" <%= preset === 'all' ? 'selected' : '' %>>Tất cả</option>
               <option value="custom" <%= preset === 'custom' ? 'selected' : '' %>>Tùy chọn</option>
             </select>
-            <label for="presetSelect" data-help="Chọn khoảng thời gian dùng cho toàn bộ số liệu, bảng phân bổ và log bên dưới.">Mốc thời gian</label>
           </div>
-          <div class="form-floating custom-range d-none">
+          <div class="report-filter-field custom-range d-none">
+            <label class="form-label" for="startDate">Từ ngày</label>
             <input type="date" class="form-control" id="startDate" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>">
-            <label for="startDate">Từ ngày</label>
           </div>
-          <div class="form-floating custom-range d-none">
+          <div class="report-filter-field custom-range d-none">
+            <label class="form-label" for="endDate">Đến ngày</label>
             <input type="date" class="form-control" id="endDate" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>">
-            <label for="endDate">Đến ngày</label>
           </div>
           <button class="btn btn-primary" type="submit">Lọc</button>
           <a class="btn btn-outline-primary" href="/short-links/<%= link.id %>/report/export">CSV</a>

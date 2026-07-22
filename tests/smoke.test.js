@@ -154,7 +154,8 @@ test("product login, welcome and dashboard views render", async () => {
   assert.match(dashboard, /Chưa có domain nào/);
   assert.match(domainDetail, /data-create-link-type="conditional"/);
   assert.match(domainDetail, /data-create-link-type="delayed"/);
-  assert.match(domainDetail, /src="\/domains\/1\/safe-preview"/);
+  assert.match(domainDetail, /Mở Safe Page/);
+  assert.doesNotMatch(domainDetail, /<iframe[^>]+safe-preview/);
   assert.match(delayedSafePage, /Repair &amp; Maintenance Services/);
   assert.match(delayedSafePage, /const delayMs = 3000/);
   assert.match(delayedSafePage, /https:\/\/target\.test\/landing\?utm_source=email/);
@@ -166,7 +167,6 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
     path.join(__dirname, "../src/views/admin/domain_detail.ejs"),
     "utf8"
   );
-  assert.match(source, /key: 'fbclid', operator: 'exists', value: ''/);
   assert.match(source, /data-rule-template="fb_custom"/);
   assert.match(source, /key: 'utm_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}'/);
   assert.match(source, /key: 'utm_source', operator: 'exists', value: '', copyValue: '{{site_source_name}}'/);
@@ -190,6 +190,21 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
   assert.match(source, /data-link-type="conditional"/);
   assert.match(source, /data-link-type="delayed"/);
   assert.match(source, /form\.action = isConditional \? '\/campaigns\/create' : '\/short-links\/create'/);
+  assert.match(source, /Facebook Ads — 4 tham số/);
+  assert.match(source, /data-simple-param="utm_source"/);
+  assert.match(source, /data-simple-param="utm_medium"/);
+  assert.match(source, /data-simple-param="utm_campaign"/);
+  assert.match(source, /data-simple-param="utm_content"/);
+  assert.match(source, /Cài đặt nâng cao/);
+  assert.match(source, /class="collapse" id="advancedConditionalSettings"/);
+  assert.match(source, /if \(isConditional && !document\.querySelector\('#rules-wrapper \.rule-row'\)\) \{\s*addTemplate\('fb_custom'\)/);
+  assert.match(source, /return \[\{ key: 'fbclid', operator: 'exists', value: '' \}, \.\.\.configurableRules\]/);
+  assert.match(source, /row\.classList\.toggle\('d-none', isExcluded\)/);
+  assert.doesNotMatch(source, /fb_custom: \[\s*\{ key: 'fbclid'/);
+  assert.match(source, /id="copyGeneratedParamsButton"/);
+  assert.match(source, /id="copyGeneratedParamsStatus"/);
+  assert.match(source, /Đã sao chép — dán vào mục Thông số URL của quảng cáo/);
+  assert.doesNotMatch(source, /alert\("Đã copy chuỗi tham số"\)/);
   assert.doesNotMatch(source, /escapeAttr\(/);
   const inlineScripts = [...source.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.ok(inlineScripts.length > 0);
@@ -203,6 +218,15 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
       { key: "campaign_id", operator: "exists", value: "", copyValue: "{{campaign.id}}" },
     ]
   );
+});
+
+test("report time filters keep labels outside controls", () => {
+  const report = fs.readFileSync(path.join(__dirname, "../src/views/admin/report_v2.ejs"), "utf8");
+  const shortReport = fs.readFileSync(path.join(__dirname, "../src/views/admin/short_link_report.ejs"), "utf8");
+  [report, shortReport].forEach((source) => {
+    assert.match(source, /class="report-filter-field"/);
+    assert.doesNotMatch(source, /class="form-floating/);
+  });
 });
 
 test("admin analytics separate successful link traffic from raw safe-page requests", () => {

@@ -14,6 +14,8 @@
     .table-log td { font-size: 0.9rem; vertical-align: middle; }
     code.url-snippet { word-break: break-all; white-space: normal; }
     .breadcrumb-bar + .container-xxl { margin-top: 0; }
+    .report-filter-field { min-width: 150px; }
+    .report-filter-field .form-label { margin-bottom: 4px; color: #667085; font-size: .78rem; font-weight: 700; }
   </style>
 </head>
 <body class="bg-light">
@@ -38,7 +40,8 @@
           <div class="text-muted small">Nhóm theo: <%= bucketType === 'hour' ? 'Khung giờ' : bucketType === 'day' ? 'Ngày' : bucketType === 'week' ? 'Tuần' : 'Tháng' %></div>
         </div>
         <form class="d-flex flex-wrap align-items-end gap-2" method="get">
-          <div class="form-floating">
+          <div class="report-filter-field">
+            <label class="form-label" for="presetSelect" data-help="Chọn khoảng thống kê có sẵn hoặc Tùy chọn để nhập ngày bắt đầu và kết thúc.">Mốc thời gian</label>
             <select class="form-select" id="presetSelect" name="preset" onchange="toggleCustomPreset(this.value)">
               <option value="today" <%= preset === 'today' ? 'selected' : '' %>>Hôm nay</option>
               <option value="this_week" <%= preset === 'this_week' ? 'selected' : '' %>>Tuần này</option>
@@ -47,15 +50,14 @@
               <option value="all" <%= preset === 'all' ? 'selected' : '' %>>Tất cả</option>
               <option value="custom" <%= preset === 'custom' ? 'selected' : '' %>>Tùy chọn</option>
             </select>
-            <label for="presetSelect" data-help="Chọn khoảng thống kê có sẵn hoặc Tùy chọn để nhập ngày bắt đầu và kết thúc.">Mốc thời gian</label>
           </div>
-          <div class="form-floating custom-range d-none" id="startWrap">
+          <div class="report-filter-field custom-range d-none" id="startWrap">
+            <label class="form-label" for="startDate">Từ ngày</label>
             <input type="date" class="form-control" id="startDate" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>">
-            <label for="startDate">Từ ngày</label>
           </div>
-          <div class="form-floating custom-range d-none" id="endWrap">
+          <div class="report-filter-field custom-range d-none" id="endWrap">
+            <label class="form-label" for="endDate">Đến ngày</label>
             <input type="date" class="form-control" id="endDate" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>">
-            <label for="endDate">Đến ngày</label>
           </div>
           <button class="btn btn-primary" type="submit">Lọc</button>
         </form>

@@ -10,6 +10,8 @@
     "backup": "node scripts/backup-database.js",
     "create:admin": "node scripts/create-admin.js",
     "cleanup:logs": "node scripts/cleanup-traffic.js",
+    "monitor": "node scripts/monitor-system.js",
+    "start:telegram": "node src/services/telegram-bot.js",
     "test": "node tests/smoke.test.js",
     "test:load": "node scripts/load-test.js"
   },

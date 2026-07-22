@@ -72,6 +72,64 @@ const ssl = {
   ),
 };
 
+const telegram = {
+  enabled: parseBoolean(process.env.TELEGRAM_ALERTS_ENABLED, false),
+  botToken: String(process.env.TELEGRAM_BOT_TOKEN || "").trim(),
+  botUsername: String(process.env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@/, ""),
+  adminChatId: String(
+    process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || ""
+  ).trim(),
+  requestTimeoutMs: Math.max(
+    3000,
+    parseInteger(process.env.TELEGRAM_REQUEST_TIMEOUT_MS, 10000)
+  ),
+  alertCooldownMs:
+    Math.max(1, parseInteger(process.env.TELEGRAM_ALERT_COOLDOWN_MINUTES, 15)) *
+    60000,
+};
+
+const monitoring = {
+  expectedIpv4: String(process.env.MONITOR_EXPECTED_IPV4 || "").trim(),
+  diskPath: process.env.MONITOR_DISK_PATH || (isProduction ? "/opt/linkpilot" : "."),
+  diskUsagePercent: Math.min(
+    99,
+    Math.max(50, parseInteger(process.env.MONITOR_DISK_USAGE_PERCENT, 85))
+  ),
+  memoryUsagePercent: Math.min(
+    99,
+    Math.max(50, parseInteger(process.env.MONITOR_MEMORY_USAGE_PERCENT, 90))
+  ),
+  backupMaxAgeHours: Math.max(
+    1,
+    parseInteger(process.env.MONITOR_BACKUP_MAX_AGE_HOURS, 30)
+  ),
+  sslExpiryWarningDays: Math.max(
+    1,
+    parseInteger(process.env.MONITOR_SSL_EXPIRY_WARNING_DAYS, 14)
+  ),
+  repeatMinutes: Math.max(
+    15,
+    parseInteger(process.env.MONITOR_ALERT_REPEAT_MINUTES, 360)
+  ),
+  stateFile:
+    process.env.MONITOR_STATE_FILE ||
+    (isProduction
+      ? "/var/lib/linkpilot/monitor-state.json"
+      : "./.runtime/monitor-state.json"),
+  adminHealthUrl:
+    process.env.MONITOR_ADMIN_HEALTH_URL ||
+    `http://127.0.0.1:${parseInteger(
+      process.env.ADMIN_PORT || process.env.PORT,
+      4002
+    )}/healthz`,
+  adsHealthUrl:
+    process.env.MONITOR_ADS_HEALTH_URL ||
+    `http://127.0.0.1:${parseInteger(
+      process.env.ADS_PORT || process.env.PORT,
+      4001
+    )}/healthz`,
+};
+
 if (isProduction) {
   const unsafeSecrets = [
     "",
@@ -120,4 +178,6 @@ module.exports = {
   product,
   performance,
   ssl,
+  telegram,
+  monitoring,
 };

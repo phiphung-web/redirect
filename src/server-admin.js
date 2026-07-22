@@ -1,5 +1,6 @@
 require("dotenv").config({ quiet: true });
 const express = require("express");
+const crypto = require("node:crypto");
 const session = require("express-session");
 const PgSession = require("connect-pg-simple")(session);
 const helmet = require("helmet");
@@ -15,9 +16,11 @@ const {
   isProduction,
   product,
   ssl,
+  telegram,
 } = require("./config/app");
 const db = require("./config/db");
 const { requestContext } = require("./middleware/request-context");
+const { fileAuditMiddleware } = require("./services/file-audit");
 const {
   buildFilters,
   normalizeDomainUrl,
@@ -39,6 +42,11 @@ const {
   startSslProvisioner,
   stopSslProvisioner,
 } = require("./services/ssl-provisioner");
+const {
+  notifyConfigError,
+  sendTelegramMessage,
+} = require("./services/telegram-alerts");
+const { hashConnectCode } = require("./services/telegram-bot");
 
 const app = express();
 const PORT = ports.admin;
@@ -216,6 +224,7 @@ app.use(
     },
   })
 );
+app.use(fileAuditMiddleware);
 app.use(csrf());
 app.use((req, res, next) => {
   res.locals.csrfToken = req.csrfToken();
@@ -237,7 +246,7 @@ const checkAuth = (req, res, next) => {
 const requireRole = (rolesArray) => {
   return (req, res, next) => {
     if (!req.session.user) return res.redirect("/login");
-    const userRole = req.session.user.role_name; // 'super_admin', 'admin', 'user'
+    const userRole = req.session.user.role_name; // 'super_admin' or 'user'
 
     if (rolesArray.includes(userRole)) {
       next();
@@ -247,6 +256,54 @@ const requireRole = (rolesArray) => {
   };
 };
 
+const OWNED_RESOURCE_TABLES = {
+  domain: "domains",
+  campaign: "campaigns",
+  shortLink: "short_links",
+};
+
+const requireOwnedResource = (resourceType, getId) => {
+  return async (req, res, next) => {
+    if (!req.session.user) return res.redirect("/login");
+    if (req.session.user.role_name === "super_admin") return next();
+
+    const table = OWNED_RESOURCE_TABLES[resourceType];
+    const resourceId = Number.parseInt(getId(req), 10);
+    if (!table || !Number.isInteger(resourceId)) {
+      return res.status(400).send("Tài nguyên không hợp lệ");
+    }
+
+    const result = await db.query(
+      `SELECT user_id FROM ${table} WHERE id=$1 LIMIT 1`,
+      [resourceId]
+    );
+    if (!result.rowCount) {
+      return res.status(404).send("Không tìm thấy tài nguyên");
+    }
+    if (Number(result.rows[0].user_id) !== Number(req.session.user.id)) {
+      return res.status(403).send("Bạn không có quyền với tài nguyên này");
+    }
+    return next();
+  };
+};
+
+const ownDomainFromBody = requireOwnedResource(
+  "domain",
+  (req) => req.body.domain_id
+);
+const ownDomainFromParams = requireOwnedResource(
+  "domain",
+  (req) => req.params.id
+);
+const ownCampaignFromParams = requireOwnedResource(
+  "campaign",
+  (req) => req.params.id
+);
+const ownShortLinkFromParams = requireOwnedResource(
+  "shortLink",
+  (req) => req.params.id
+);
+
 // AUTH
 app.get("/login", (req, res) => res.render("admin/login", { error: null }));
 app.post("/login", loginRateLimit, async (req, res) => {
@@ -254,7 +311,8 @@ app.post("/login", loginRateLimit, async (req, res) => {
   const r = await db.query(
     `
         SELECT u.*, r.name as role_name FROM users u
-        JOIN roles r ON u.role_id = r.id WHERE u.username = $1
+        JOIN roles r ON u.role_id = r.id
+        WHERE u.username = $1 AND u.is_active=true
     `,
     [username]
   );
@@ -296,6 +354,108 @@ const logoutHandler = async (req, res) => {
 app.get("/logout", (req, res) => res.status(405).send("Use POST /logout"));
 app.post("/logout", logoutHandler);
 
+// --- TELEGRAM ACCOUNT LINK ---
+app.get("/account/telegram", checkAuth, async (req, res) => {
+  const result = await db.query(
+    `SELECT telegram_chat_id, telegram_username, telegram_link_alerts,
+            telegram_system_alerts, telegram_connected_at,
+            telegram_connect_expires_at
+     FROM users WHERE id=$1 LIMIT 1`,
+    [req.session.user.id]
+  );
+  const connectCode = req.session.telegramConnectCode || null;
+  const notice = req.session.telegramNotice || null;
+  delete req.session.telegramConnectCode;
+  delete req.session.telegramNotice;
+  res.render("admin/telegram_settings", {
+    user: req.session.user,
+    settings: result.rows[0] || {},
+    connectCode,
+    notice,
+    telegramEnabled: telegram.enabled && Boolean(telegram.botToken),
+    telegramBotUsername: telegram.botUsername,
+  });
+});
+
+app.post("/account/telegram/code", checkAuth, async (req, res) => {
+  if (!telegram.enabled || !telegram.botToken) {
+    return res.status(503).send("Telegram chưa được cấu hình trên máy chủ");
+  }
+  const code = crypto.randomBytes(5).toString("hex").toUpperCase();
+  await db.query(
+    `UPDATE users
+     SET telegram_connect_code_hash=$1,
+         telegram_connect_expires_at=now() + interval '15 minutes'
+     WHERE id=$2`,
+    [hashConnectCode(code), req.session.user.id]
+  );
+  req.session.telegramConnectCode = code;
+  await auditAdminAction({
+    req,
+    action: "telegram_connect_code_create",
+    targetType: "user",
+    targetId: req.session.user.id,
+  });
+  return res.redirect("/account/telegram");
+});
+
+app.post("/account/telegram/preferences", checkAuth, async (req, res) => {
+  const allowSystemAlerts = req.session.user.role_name === "super_admin";
+  await db.query(
+    `UPDATE users
+     SET telegram_link_alerts=$1, telegram_system_alerts=$2
+     WHERE id=$3`,
+    [
+      req.body.telegram_link_alerts === "on",
+      allowSystemAlerts && req.body.telegram_system_alerts === "on",
+      req.session.user.id,
+    ]
+  );
+  req.session.telegramNotice = "Đã lưu loại thông báo Telegram.";
+  return res.redirect("/account/telegram");
+});
+
+app.post("/account/telegram/test", checkAuth, async (req, res) => {
+  const result = await db.query(
+    `SELECT telegram_chat_id FROM users WHERE id=$1 LIMIT 1`,
+    [req.session.user.id]
+  );
+  const chatId = result.rows[0]?.telegram_chat_id;
+  if (!chatId) {
+    req.session.telegramNotice = "Bạn chưa kết nối Telegram.";
+    return res.redirect("/account/telegram");
+  }
+  try {
+    await sendTelegramMessage(
+      chatId,
+      `✅ ${product.name}: kết nối Telegram đang hoạt động.\nBạn sẽ nhận cảnh báo riêng cho domain và link do tài khoản này tạo.`
+    );
+    req.session.telegramNotice = "Đã gửi thông báo thử nghiệm.";
+  } catch (error) {
+    req.session.telegramNotice = `Không gửi được Telegram: ${error.message}`;
+  }
+  return res.redirect("/account/telegram");
+});
+
+app.post("/account/telegram/disconnect", checkAuth, async (req, res) => {
+  await db.query(
+    `UPDATE users
+     SET telegram_chat_id=NULL, telegram_username=NULL,
+         telegram_connected_at=NULL, telegram_connect_code_hash=NULL,
+         telegram_connect_expires_at=NULL
+     WHERE id=$1`,
+    [req.session.user.id]
+  );
+  await auditAdminAction({
+    req,
+    action: "telegram_disconnect",
+    targetType: "user",
+    targetId: req.session.user.id,
+  });
+  req.session.telegramNotice = "Đã ngắt kết nối Telegram.";
+  return res.redirect("/account/telegram");
+});
+
 // --- LANDING ---
 app.get("/", checkAuth, async (req, res) => {
   res.render("admin/welcome", { user: req.session.user });
@@ -303,6 +463,8 @@ app.get("/", checkAuth, async (req, res) => {
 
 // --- DASHBOARD ---
 app.get("/redirect", checkAuth, async (req, res) => {
+  const scopedUserId =
+    req.session.user.role_name === "super_admin" ? null : req.session.user.id;
   const rDom = await db.query(
     `
       SELECT d.*, cu.username AS created_by_name, uu.username AS updated_by_name,
@@ -316,19 +478,31 @@ app.get("/redirect", checkAuth, async (req, res) => {
       FROM domains d
       LEFT JOIN users cu ON d.user_id = cu.id
       LEFT JOIN users uu ON d.updated_by = uu.id
+      WHERE ($1::int IS NULL OR d.user_id=$1)
       ORDER BY d.id DESC
-    `
+    `,
+    [scopedUserId]
   );
   const stats = await db.query(`
-        SELECT (SELECT COUNT(*) FROM domains) as total_domains,
-               (SELECT COUNT(*) FROM campaigns) +
-               (SELECT COUNT(*) FROM short_links) as total_links,
+        SELECT (SELECT COUNT(*) FROM domains) AS total_domains_unscoped,
+               (SELECT COUNT(*) FROM domains
+                WHERE ($1::int IS NULL OR user_id=$1)) as total_domains,
+               (SELECT COUNT(*) FROM campaigns c
+                WHERE ($1::int IS NULL OR c.user_id=$1)) +
+               (SELECT COUNT(*) FROM short_links s
+                WHERE ($1::int IS NULL OR s.user_id=$1)) as total_links,
                (SELECT COUNT(*) FROM traffic_logs
-                 WHERE action IN ('redirect', 'short_redirect_confirmed')) as total_traffic,
+                 WHERE action IN ('redirect', 'short_redirect_confirmed')
+                   AND ($1::int IS NULL OR domain_id IN
+                     (SELECT id FROM domains WHERE user_id=$1))) as total_traffic,
                (SELECT COUNT(*) FROM traffic_logs
-                WHERE action LIKE 'safe_page%') as total_safe_views,
-               (SELECT COUNT(*) FROM traffic_logs) as total_raw_requests
-    `);
+                 WHERE action LIKE 'safe_page%'
+                   AND ($1::int IS NULL OR domain_id IN
+                     (SELECT id FROM domains WHERE user_id=$1))) as total_safe_views,
+               (SELECT COUNT(*) FROM traffic_logs
+                 WHERE ($1::int IS NULL OR domain_id IN
+                   (SELECT id FROM domains WHERE user_id=$1))) as total_raw_requests
+    `, [scopedUserId]);
   res.render("admin/dashboard", {
     user: req.session.user,
     domains: rDom.rows,
@@ -341,9 +515,13 @@ app.get("/short-links", checkAuth, async (req, res) => {
   return res.redirect("/redirect");
 });
 
-app.post("/short-links/create", checkAuth, async (req, res) => {
+app.post("/short-links/create", checkAuth, ownDomainFromBody, async (req, res) => {
   const domainId = Number.parseInt(req.body.domain_id, 10);
-  if (!Number.isInteger(domainId)) return res.send("Domain khong hop le");
+  if (!Number.isInteger(domainId)) {
+    const error = new Error("Domain khong hop le");
+    notifyConfigError(req, "Tạo link tự động", error);
+    return res.send(error.message);
+  }
 
   try {
     const title = validateName(
@@ -409,6 +587,7 @@ app.post("/short-links/create", checkAuth, async (req, res) => {
     }
     return res.send("Khong tao duoc ma rut gon, vui long thu lai");
   } catch (e) {
+    notifyConfigError(req, "Tạo link tự động", e, [`Domain ID: ${domainId}`]);
     return res.send(e.message || "Link rut gon khong hop le");
   }
 });
@@ -429,10 +608,11 @@ const toggleShortLinkHandler = async (req, res) => {
   }
   return res.redirect("/short-links");
 };
+
 app.get("/short-links/toggle/:id", checkAuth, (req, res) =>
   res.status(405).send("Use POST /short-links/toggle/:id")
 );
-app.post("/short-links/toggle/:id", checkAuth, toggleShortLinkHandler);
+app.post("/short-links/toggle/:id", checkAuth, ownShortLinkFromParams, toggleShortLinkHandler);
 
 const deleteShortLinkHandler = async (req, res) => {
   const deleted = await db.query(
@@ -450,16 +630,17 @@ const deleteShortLinkHandler = async (req, res) => {
   }
   return res.redirect("/short-links");
 };
-app.get("/short-links/delete/:id", requireRole(["super_admin"]), (req, res) =>
+app.get("/short-links/delete/:id", checkAuth, ownShortLinkFromParams, (req, res) =>
   res.status(405).send("Use POST /short-links/delete/:id")
 );
 app.post(
   "/short-links/delete/:id",
-  requireRole(["super_admin"]),
+  checkAuth,
+  ownShortLinkFromParams,
   deleteShortLinkHandler
 );
 
-app.get("/short-links/:id/report", checkAuth, async (req, res) => {
+app.get("/short-links/:id/report", checkAuth, ownShortLinkFromParams, async (req, res) => {
   const shortLinkId = req.params.id;
   const preset = req.query.preset || "today";
   const now = new Date();
@@ -697,7 +878,7 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
   });
 });
 
-app.get("/short-links/:id/logs", checkAuth, async (req, res) => {
+app.get("/short-links/:id/logs", checkAuth, ownShortLinkFromParams, async (req, res) => {
   const shortLinkId = req.params.id;
   const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
   const now = new Date();
@@ -741,7 +922,7 @@ app.get("/short-links/:id/logs", checkAuth, async (req, res) => {
   });
 });
 
-app.get("/short-links/:id/report/export", checkAuth, async (req, res) => {
+app.get("/short-links/:id/report/export", checkAuth, ownShortLinkFromParams, async (req, res) => {
   const shortLinkId = req.params.id;
   const { normalized, start, end } = parseMonthRange(req.query.month);
   const rLink = await db.query(`SELECT title FROM short_links WHERE id=$1`, [
@@ -833,6 +1014,9 @@ app.post("/domains/create", checkAuth, async (req, res) => {
     queueDomainSsl(domainId);
     res.redirect(`/domains/${domainId}`);
   } catch (e) {
+    notifyConfigError(req, "Thêm domain", e, [
+      `Domain nhập vào: ${req.body.domain_url || "trống"}`,
+    ]);
     res.send("Lỗi: Domain đã tồn tại");
   }
 });
@@ -853,9 +1037,9 @@ const toggleDomainHandler = async (req, res) => {
 app.get("/domains/toggle/:id", checkAuth, (req, res) =>
   res.status(405).send("Use POST /domains/toggle/:id")
 );
-app.post("/domains/toggle/:id", checkAuth, toggleDomainHandler);
+app.post("/domains/toggle/:id", checkAuth, ownDomainFromParams, toggleDomainHandler);
 
-app.post("/domains/:id/ssl/retry", checkAuth, async (req, res) => {
+app.post("/domains/:id/ssl/retry", checkAuth, ownDomainFromParams, async (req, res) => {
   if (!ssl.enabled) {
     return res.status(503).send("Automatic SSL is not enabled on this server");
   }
@@ -892,12 +1076,13 @@ const deleteDomainHandler = async (req, res) => {
     res.send("Lỗi khi xóa domain: " + e.message);
   }
 };
-app.get("/domains/delete/:id", requireRole(["super_admin"]), (req, res) =>
+app.get("/domains/delete/:id", checkAuth, ownDomainFromParams, (req, res) =>
   res.status(405).send("Use POST /domains/delete/:id")
 );
 app.post(
   "/domains/delete/:id",
-  requireRole(["super_admin"]),
+  checkAuth,
+  ownDomainFromParams,
   deleteDomainHandler
 );
 
@@ -908,6 +1093,9 @@ const verifyDomainHandler = async (req, res) => {
   if (!r.rowCount) return res.json({ status: "error" });
   dns.resolve4(r.rows[0].domain_url, async (err, addrs) => {
     if (err) {
+      notifyConfigError(req, "Kiểm tra DNS domain", err, [
+        `Domain: ${r.rows[0].domain_url}`,
+      ]);
       await auditAdminAction({
         req,
         action: "domain_verify",
@@ -933,11 +1121,11 @@ const verifyDomainHandler = async (req, res) => {
     res.json({ status: "success", msg: "OK: " + addrs[0] });
   });
 };
-app.get("/domains/:id/verify", checkAuth, verifyDomainHandler);
-app.post("/domains/:id/verify", checkAuth, verifyDomainHandler);
+app.get("/domains/:id/verify", checkAuth, ownDomainFromParams, verifyDomainHandler);
+app.post("/domains/:id/verify", checkAuth, ownDomainFromParams, verifyDomainHandler);
 
 // --- LINK CAMPAIGNS ---
-app.get("/domains/:id/safe-preview", checkAuth, async (req, res) => {
+app.get("/domains/:id/safe-preview", checkAuth, ownDomainFromParams, async (req, res) => {
   const result = await db.query(
     `SELECT domain_url, safe_template FROM domains WHERE id=$1 LIMIT 1`,
     [req.params.id]
@@ -952,7 +1140,7 @@ app.get("/domains/:id/safe-preview", checkAuth, async (req, res) => {
   });
 });
 
-app.get("/domains/:id", checkAuth, async (req, res) => {
+app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
   const domainId = req.params.id;
   const rDom = await db.query(
     `
@@ -1074,7 +1262,7 @@ app.all("/domains/:id/safe-content", checkAuth, (_req, res) =>
   res.status(410).send("Safe Page chi duoc chon khi them domain")
 );
 
-app.post("/campaigns/create", checkAuth, async (req, res) => {
+app.post("/campaigns/create", checkAuth, ownDomainFromBody, async (req, res) => {
   const {
     domain_id,
     name,
@@ -1095,7 +1283,7 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
       `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) LIMIT 1`,
       [normalizedDomainId, normalizedName]
     );
-    if (dup.rowCount) return res.send("Ten link bi trung trong domain");
+    if (dup.rowCount) throw new Error("Ten link bi trung trong domain");
 
     let filters = buildFilters(allowed_countries);
 
@@ -1145,6 +1333,10 @@ app.post("/campaigns/create", checkAuth, async (req, res) => {
     });
     res.redirect("/domains/" + normalizedDomainId);
   } catch (e) {
+    notifyConfigError(req, "Tạo link điều kiện", e, [
+      `Domain ID: ${domain_id || "trống"}`,
+      `Tên link: ${name || "trống"}`,
+    ]);
     res.send(e.message);
   }
 });
@@ -1168,7 +1360,12 @@ const toggleCampaignHandler = async (req, res) => {
 app.get("/campaigns/toggle/:id", checkAuth, (req, res) =>
   res.status(405).send("Use POST /campaigns/toggle/:id")
 );
-app.post("/campaigns/toggle/:id", checkAuth, toggleCampaignHandler);
+app.post(
+  "/campaigns/toggle/:id",
+  checkAuth,
+  ownCampaignFromParams,
+  toggleCampaignHandler
+);
 
 // CHá»ˆ SUPER ADMIN ÄÆ¯á»¢C XÃ“A LINK
 const deleteCampaignHandler = async (req, res) => {
@@ -1194,16 +1391,18 @@ const deleteCampaignHandler = async (req, res) => {
 };
 app.get(
   "/campaigns/delete/:id",
-  requireRole(["super_admin"]),
+  checkAuth,
+  ownCampaignFromParams,
   (req, res) => res.status(405).send("Use POST /campaigns/delete/:id")
 );
 app.post(
   "/campaigns/delete/:id",
-  requireRole(["super_admin"]),
+  checkAuth,
+  ownCampaignFromParams,
   deleteCampaignHandler
 );
 
-app.get("/campaigns/edit/:id", checkAuth, async (req, res) => {
+app.get("/campaigns/edit/:id", checkAuth, ownCampaignFromParams, async (req, res) => {
   const r = await db.query(
     `SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name
      FROM campaigns c
@@ -1228,7 +1427,7 @@ app.get("/campaigns/edit/:id", checkAuth, async (req, res) => {
   });
 });
 
-app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
+app.post("/campaigns/update/:id", checkAuth, ownCampaignFromParams, async (req, res) => {
   const {
     name,
     target_url,
@@ -1251,7 +1450,7 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
       `SELECT 1 FROM campaigns WHERE domain_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3 LIMIT 1`,
       [normalizedDomainId, normalizedName, req.params.id]
     );
-    if (dup.rowCount) return res.send("Ten link bi trung trong domain");
+    if (dup.rowCount) throw new Error("Ten link bi trung trong domain");
 
     await db.query(
       `UPDATE campaigns SET name=$1, target_url=$2, rules=$3, filters=$4, safe_template_override=NULL, updated_by=$5 WHERE id=$6`,
@@ -1273,11 +1472,15 @@ app.post("/campaigns/update/:id", checkAuth, async (req, res) => {
     });
     res.redirect("/domains/" + normalizedDomainId);
   } catch (e) {
+    notifyConfigError(req, "Cập nhật link điều kiện", e, [
+      `Link ID: ${req.params.id}`,
+      `Tên link: ${name || "trống"}`,
+    ]);
     return res.send(e.message || "Rules khong hop le");
   }
 });
 
-app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
+app.get("/api/campaigns/:id/config", checkAuth, ownCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const r = await db.query(
     `SELECT id, name, rules, filters, param_key, param_value FROM campaigns WHERE id=$1`,
@@ -1296,7 +1499,7 @@ app.get("/api/campaigns/:id/config", checkAuth, async (req, res) => {
 });
 
 // ... 기존 routes ...
-app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
+app.get("/campaigns/:id/report/v2", checkAuth, ownCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const preset = req.query.preset || "today"; // today/this_week/this_month/this_year/all/custom
   const now = new Date();
@@ -1524,7 +1727,7 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
     end,
   });
 });
-app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
+app.get("/campaigns/:id/report", checkAuth, ownCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const query = req.originalUrl.includes("?")
     ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
@@ -1532,7 +1735,7 @@ app.get("/campaigns/:id/report", checkAuth, async (req, res) => {
   return res.redirect(`/campaigns/${campId}/report/v2${query}`);
 });
 
-app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {
+app.get("/campaigns/:id/logs", checkAuth, ownCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const action = req.query.action;
   const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
@@ -1569,7 +1772,7 @@ app.get("/campaigns/:id/logs", checkAuth, async (req, res) => {
   });
 });
 
-app.get("/campaigns/:id/report/export", checkAuth, async (req, res) => {
+app.get("/campaigns/:id/report/export", checkAuth, ownCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const { normalized, start, end } = parseMonthRange(req.query.month);
   const rCamp = await db.query(`SELECT name FROM campaigns WHERE id=$1`, [
@@ -1613,62 +1816,41 @@ app.get("/campaigns/:id/report/export", checkAuth, async (req, res) => {
 
 // --- MODULE QUáº¢N TRá»Š USER (PHÃ‚N QUYá»€N) ---
 // Chá»‰ Super Admin vÃ  Admin má»›i Ä‘Æ°á»£c vÃ o xem danh sÃ¡ch
-app.get("/users", requireRole(["super_admin", "admin"]), async (req, res) => {
+app.get("/users", requireRole(["super_admin"]), async (req, res) => {
   const currentUserRole = req.session.user.role_name;
-  let sql = "";
-
-  if (currentUserRole === "super_admin") {
-    // Super Admin tháº¥y táº¥t cáº£
-    sql = `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name
-               FROM users u LEFT JOIN roles r ON u.role_id = r.id ORDER BY u.id ASC`;
-  } else {
-    // Admin chá»‰ tháº¥y User thÆ°á»ng
-    sql = `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name
-               FROM users u LEFT JOIN roles r ON u.role_id = r.id
-               WHERE r.name = 'user' ORDER BY u.id ASC`;
-  }
-
-  const u = await db.query(sql);
-
-  // Láº¥y list Role Ä‘á»ƒ táº¡o user má»›i
-  let roleSql = "SELECT * FROM roles";
-  if (currentUserRole === "admin") roleSql += " WHERE name = 'user'"; // Admin chá»‰ táº¡o Ä‘c User
-  const roles = await db.query(roleSql);
+  const u = await db.query(
+    `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name
+     FROM users u LEFT JOIN roles r ON u.role_id = r.id ORDER BY u.id ASC`
+  );
 
   res.render("admin/users_list", {
     user: req.session.user,
     users: u.rows,
-    roles: roles.rows,
     currentUserRole,
   });
 });
 
 app.post(
   "/users/create",
-  requireRole(["super_admin", "admin"]),
+  requireRole(["super_admin"]),
   async (req, res) => {
-    // Validate: Admin khÃ´ng Ä‘Æ°á»£c táº¡o Super Admin hay Admin khÃ¡c (Cháº·n á»Ÿ backend cho cháº¯c)
-    if (req.session.user.role_name === "admin") {
-      const rRole = await db.query(`SELECT name FROM roles WHERE id=$1`, [
-        req.body.role_id,
-      ]);
-      if (rRole.rows[0].name !== "user")
-        return res.send("Admin chá»‰ Ä‘Æ°á»£c táº¡o User thÆ°á»ng!");
-    }
-
     try {
       const username = validateName(req.body.username, "Username");
       const passwordHash = await hashPassword(req.body.password);
+      const role = await db.query(
+        `SELECT id FROM roles WHERE name='user' LIMIT 1`
+      );
+      if (!role.rowCount) throw new Error("Role user chưa được khởi tạo");
       await db.query(
         `INSERT INTO users (username, password_hash, role_id) VALUES ($1, $2, $3)`,
-        [username, passwordHash, req.body.role_id]
+        [username, passwordHash, role.rows[0].id]
       );
       await auditAdminAction({
         req,
         action: "user_create",
         targetType: "user",
         targetId: username,
-        detail: { role_id: req.body.role_id },
+        detail: { role: "user" },
       });
       res.redirect("/users");
     } catch (e) {
@@ -1677,7 +1859,7 @@ app.post(
   }
 );
 
-app.get("/users/view/:id", requireRole(["super_admin", "admin"]), async (req, res) => {
+app.get("/users/view/:id", requireRole(["super_admin"]), async (req, res) => {
   const userId = req.params.id;
   const u = await db.query(
     `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name, u.role_id
@@ -1693,7 +1875,9 @@ app.get("/users/view/:id", requireRole(["super_admin", "admin"]), async (req, re
     `SELECT id, name, created_at FROM campaigns WHERE user_id=$1 ORDER BY id DESC LIMIT 5`,
     [userId]
   );
-  const roles = await db.query(`SELECT * FROM roles`);
+  const roles = await db.query(
+    `SELECT * FROM roles WHERE name IN ('super_admin', 'user') ORDER BY name`
+  );
   res.render("admin/user_detail", {
     viewer: req.session.user,
     target: u.rows[0],
@@ -1707,8 +1891,36 @@ app.post(
   "/users/view/:id/role",
   requireRole(["super_admin"]),
   async (req, res) => {
+    const role = await db.query(
+      `SELECT id, name FROM roles
+       WHERE id=$1 AND name IN ('super_admin', 'user') LIMIT 1`,
+      [req.body.role_id]
+    );
+    if (!role.rowCount) return res.status(400).send("Role không hợp lệ");
+
+    const target = await db.query(
+      `SELECT r.name AS role_name
+       FROM users u JOIN roles r ON r.id=u.role_id
+       WHERE u.id=$1 LIMIT 1`,
+      [req.params.id]
+    );
+    if (!target.rowCount) return res.status(404).send("Không tìm thấy user");
+    if (
+      target.rows[0].role_name === "super_admin" &&
+      role.rows[0].name !== "super_admin"
+    ) {
+      const count = await db.query(
+        `SELECT COUNT(*)::int AS total
+         FROM users u JOIN roles r ON r.id=u.role_id
+         WHERE r.name='super_admin' AND u.is_active=true`
+      );
+      if (count.rows[0].total <= 1) {
+        return res.status(400).send("Phải giữ lại ít nhất một super admin");
+      }
+    }
+
     await db.query(`UPDATE users SET role_id=$1 WHERE id=$2`, [
-      req.body.role_id,
+      role.rows[0].id,
       req.params.id,
     ]);
     await auditAdminAction({
@@ -1716,7 +1928,7 @@ app.post(
       action: "user_role_update",
       targetType: "user",
       targetId: req.params.id,
-      detail: { role_id: req.body.role_id },
+      detail: { role_id: role.rows[0].id, role_name: role.rows[0].name },
     });
     res.redirect("/users/view/" + req.params.id);
   }
@@ -1730,14 +1942,21 @@ const deleteUserHandler = async (req, res) => {
     // 1. KhÃ´ng tá»± xÃ³a mÃ¬nh
     if (targetId == curUser.id) return res.send("KhÃ´ng thá»ƒ tá»± xÃ³a chÃ­nh mÃ¬nh!");
 
-    // 2. Admin khÃ´ng Ä‘Æ°á»£c xÃ³a Super Admin hoáº·c Admin khÃ¡c
-    if (curUser.role_name === "admin") {
-      const rTarget = await db.query(
-        `SELECT r.name FROM users u JOIN roles r ON u.role_id=r.id WHERE u.id=$1`,
-        [targetId]
+    const target = await db.query(
+      `SELECT r.name AS role_name
+       FROM users u JOIN roles r ON r.id=u.role_id
+       WHERE u.id=$1 LIMIT 1`,
+      [targetId]
+    );
+    if (target.rows[0]?.role_name === "super_admin") {
+      const count = await db.query(
+        `SELECT COUNT(*)::int AS total
+         FROM users u JOIN roles r ON r.id=u.role_id
+         WHERE r.name='super_admin' AND u.is_active=true`
       );
-      if (rTarget.rows[0].name !== "user")
-        return res.send("Báº¡n chá»‰ Ä‘Æ°á»£c xÃ³a User thÆ°á»ng!");
+      if (count.rows[0].total <= 1) {
+        return res.status(400).send("Phải giữ lại ít nhất một super admin");
+      }
     }
 
     await db.query(`DELETE FROM users WHERE id=$1`, [targetId]);
@@ -1751,12 +1970,12 @@ const deleteUserHandler = async (req, res) => {
   };
 app.get(
   "/users/delete/:id",
-  requireRole(["super_admin", "admin"]),
+  requireRole(["super_admin"]),
   (req, res) => res.status(405).send("Use POST /users/delete/:id")
 );
 app.post(
   "/users/delete/:id",
-  requireRole(["super_admin", "admin"]),
+  requireRole(["super_admin"]),
   deleteUserHandler
 );
 

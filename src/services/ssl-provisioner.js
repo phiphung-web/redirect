@@ -2,6 +2,7 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const db = require("../config/db");
 const { ssl } = require("../config/app");
+const { alertUser } = require("./telegram-alerts");
 
 const execFileAsync = promisify(execFile);
 const queued = new Set();
@@ -35,7 +36,7 @@ const provisionDomainSsl = async (domainId, { force = false } = {}) => {
   if (!ssl.enabled) return { queued: false, reason: "disabled" };
 
   const result = await db.query(
-    `SELECT id, domain_url, ssl_status, ssl_attempts
+    `SELECT id, domain_url, user_id, ssl_status, ssl_attempts
      FROM domains WHERE id=$1 LIMIT 1`,
     [domainId]
   );
@@ -74,6 +75,14 @@ const provisionDomainSsl = async (domainId, { force = false } = {}) => {
        WHERE id=$1`,
       [domainId, expiresAt]
     );
+    alertUser(domain.user_id, {
+      severity: "success",
+      title: "SSL đã sẵn sàng",
+      lines: [domain.domain_url, ...(expiresAt ? [`Hết hạn: ${expiresAt}`] : [])],
+      dedupeKey: `ssl-active:${domain.domain_url}:${expiresAt || "unknown"}`,
+    }).catch((alertError) =>
+      console.error("Telegram SSL success alert failed:", alertError.message)
+    );
     return { queued: true, status: "active", expiresAt };
   } catch (error) {
     const message = cleanError(error);
@@ -84,6 +93,15 @@ const provisionDomainSsl = async (domainId, { force = false } = {}) => {
       [domainId, message]
     );
     console.error(`SSL provisioning failed for ${domain.domain_url}: ${message}`);
+    alertUser(domain.user_id, {
+      severity: "error",
+      title: "Không thể cấp SSL cho domain",
+      lines: [domain.domain_url, `Lỗi: ${message}`],
+      dedupeKey: `ssl-error:${domain.domain_url}:${message}`,
+      cooldownMs: 30 * 60000,
+    }).catch((alertError) =>
+      console.error("Telegram SSL error alert failed:", alertError.message)
+    );
     return { queued: true, status: "error", error: message };
   }
 };

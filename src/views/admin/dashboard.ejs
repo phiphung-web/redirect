@@ -71,7 +71,7 @@
                     <form action="/domains/toggle/<%= d.id %>" method="POST" class="d-inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-secondary" title="Bật/tắt"><i class="fa-solid fa-power-off"></i></button></form>
                     <a href="https://<%= d.domain_url %>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary ms-1" title="Xem Safe Page"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                     <a href="/domains/<%= d.id %>" class="btn btn-sm btn-primary ms-1">Mở domain</a>
-                    <% if (user.role_name === 'super_admin') { %><form action="/domains/delete/<%= d.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa domain sẽ xóa toàn bộ chiến dịch và log liên quan. Tiếp tục?')"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Xóa"><i class="fa-solid fa-trash"></i></button></form><% } %>
+                    <form action="/domains/delete/<%= d.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa domain sẽ xóa toàn bộ chiến dịch và log liên quan. Tiếp tục?')"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Xóa"><i class="fa-solid fa-trash"></i></button></form>
                   </td>
                 </tr>
               <% }) %>

@@ -3,3 +3,6 @@
 
 # Daily traffic aggregation and raw-log retention at 03:10
 10 3 * * * cd /opt/linkpilot && /usr/bin/npm run cleanup:logs >> /var/log/linkpilot-maintenance.log 2>&1
+
+# Health, DNS, SSL, backup and configuration monitoring every 5 minutes
+*/5 * * * * cd /opt/linkpilot && /usr/bin/npm run monitor >> /var/log/linkpilot-monitor.log 2>&1

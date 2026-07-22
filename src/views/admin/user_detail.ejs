@@ -23,7 +23,7 @@
         </div>
         <div class="card shadow-sm mb-3">
             <div class="card-body">
-                <p><b>Role:</b> <span class="badge <%= target.role_name==='super_admin' ? 'bg-danger' : target.role_name==='admin' ? 'bg-primary' : 'bg-secondary' %>"><%= target.role_name %></span></p>
+                <p><b>Role:</b> <span class="badge <%= target.role_name==='super_admin' ? 'bg-danger' : 'bg-secondary' %>"><%= target.role_name %></span></p>
                 <p><b>Trạng thái:</b> <%= target.is_active ? 'Active' : 'Inactive' %></p>
                 <p><b>Tạo lúc:</b> <%= new Date(target.created_at).toLocaleString('vi-VN') %></p>
             </div>

@@ -13,6 +13,7 @@ const ejs = require("ejs");
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const root = path.join(__dirname, "..");
 
 const db = require("../src/config/db");
 const adsApp = require("../src/server-ads");
@@ -23,6 +24,8 @@ const {
   normalizeSafeTemplate,
   parseRules,
 } = require("../src/utils/validation");
+const { hashConnectCode, parseCommand } = require("../src/services/telegram-bot");
+const { inspectLinkConfiguration } = require("../scripts/monitor-system");
 
 const product = {
   name: "LinkPilot",
@@ -53,6 +56,44 @@ test("product exposes exactly the two fixed safe page templates", () => {
   assert.deepEqual(
     fs.readdirSync(path.join(__dirname, "../src/views/safepages")).sort(),
     ["age_gate.ejs", "clean.ejs"]
+  );
+});
+
+test("owner branch keeps two roles and private seven-day audit retention", () => {
+  const rolesMigration = fs.readFileSync(
+    path.join(root, "database/migrations/2026-07-22-two-user-roles.sql"),
+    "utf8"
+  );
+  const telegramMigration = fs.readFileSync(
+    path.join(root, "database/migrations/2026-07-22-user-telegram-links.sql"),
+    "utf8"
+  );
+  const auditService = fs.readFileSync(
+    path.join(root, "src/services/file-audit.js"),
+    "utf8"
+  );
+  assert.match(rolesMigration, /VALUES \('user'/);
+  assert.match(rolesMigration, /DELETE FROM public\.roles WHERE name='admin'/);
+  assert.match(telegramMigration, /telegram_chat_id/);
+  assert.match(auditService, /AUDIT_RETENTION_DAYS \|\| "7"/);
+  assert.doesNotMatch(auditService, /req\.body/);
+});
+
+test("Telegram codes and link configuration checks are deterministic", () => {
+  assert.deepEqual(parseCommand("/connect ABC-123"), {
+    command: "connect",
+    argument: "ABC-123",
+  });
+  assert.equal(hashConnectCode(" abc "), hashConnectCode("ABC"));
+  assert.deepEqual(
+    inspectLinkConfiguration(
+      { id: 7, target_url: "bad-url", rules: [] },
+      "Link điều kiện"
+    ),
+    [
+      "Link điều kiện #7: URL đích không hợp lệ",
+      "Link điều kiện #7: chưa có rule kiểm tra",
+    ]
   );
 });
 

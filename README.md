@@ -26,9 +26,9 @@ Confirmation totals can be lower when visitors leave before the delay ends, lose
 
 ## Meta Ads URL parameters
 
-The conditional-link builder opens with four editable rules: `utm_source`, `utm_medium`, `utm_campaign`, and `utm_content`. Their exact-match values are also used to build the query string shown below the rules.
+The conditional-link builder opens with a fixed `fbclid` existence rule plus four editable rules: `utm_source`, `utm_medium`, `utm_campaign`, and `utm_content`. Their exact-match values are also used to build the query string shown below the rules.
 
-Paste only the generated string into the ad-level **Tracking → URL parameters** field, without a leading `?`. The system always checks that `fbclid` exists, but keeps that internal rule out of both the form and copied string because Meta supplies it automatically. Never place email addresses, phone numbers or other personal data in UTM values.
+Paste only the generated string into the ad-level **Tracking → URL parameters** field, without a leading `?`. Meta supplies `fbclid` automatically, so it is visible only as an existence rule and is never included in the copied string. If the user deliberately removes that rule, the campaign no longer checks `fbclid`. Never place email addresses, phone numbers or other personal data in UTM values.
 
 Reference: [Meta Business Help — URL parameters](https://www.facebook.com/business/help/1016122818401732).
 
@@ -127,6 +127,29 @@ See [docs/VULTR_DEPLOY.md](docs/VULTR_DEPLOY.md) for the generic Ubuntu VPS, Pos
 npm run backup
 npm run cleanup:logs
 ```
+
+## Optional owner monitoring branch
+
+The `owner/telegram-monitoring` branch adds features intended for a separately
+managed installation:
+
+- exactly two roles: `super_admin` and `user`;
+- users can manage only their own domains and links;
+- one shared Telegram bot, with a private chat linked separately by each user;
+- per-user alerts for malformed link configuration, DNS and SSL problems;
+- server, database and backup alerts available only to `super_admin`;
+- a private JSONL request audit plus database audit retention limited to 7 days.
+
+Create a bot with BotFather, put its token and username in `.env`, enable
+`TELEGRAM_ALERTS_ENABLED`, then run migrations and restart the PM2 ecosystem.
+Each account can click its account name, generate a one-time code and send
+`/connect MÃ` to the bot. The five-minute monitor is installed from
+`deploy/crontab.example`; it can also be run manually with `npm run monitor`.
+
+The private audit path defaults to `/var/log/linkpilot/audit-YYYY-MM-DD.log` in
+production. It is not exposed in the admin UI and expired files are removed
+automatically. Run `npm run cleanup:logs` daily to apply the same 7-day limit to
+database admin-audit rows.
 
 Load test only a staging or dedicated test campaign:
 

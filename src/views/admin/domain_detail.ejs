@@ -232,14 +232,12 @@
                                             <a href="/campaigns/<%= l.id %>/report"
                                                 class="btn btn-sm btn-info text-white"><i
                                                     class="fas fa-chart-bar"></i></a>
-                                            <% if (user.role_name==='super_admin' ) { %>
-                                                <form action="/campaigns/delete/<%= l.id %>" method="POST" class="d-inline"
-                                                    onsubmit="return confirm('Cảnh báo: Xóa link sẽ xóa thống kê/log liên quan. Tiếp tục?')">
-                                                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                                                    <button type="submit" class="btn btn-sm btn-danger"><i
-                                                            class="fas fa-trash"></i></button>
-                                                </form>
-                                                <% } %>
+                                            <form action="/campaigns/delete/<%= l.id %>" method="POST" class="d-inline"
+                                                onsubmit="return confirm('Cảnh báo: Xóa link sẽ xóa thống kê/log liên quan. Tiếp tục?')">
+                                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                                <button type="submit" class="btn btn-sm btn-danger"><i
+                                                        class="fas fa-trash"></i></button>
+                                            </form>
                                         </td>
                                     </tr>
                                     <% }) %>
@@ -279,13 +277,11 @@
                                     </td>
                                     <td class="text-end text-nowrap">
                                         <a href="/short-links/<%= link.id %>/report" class="btn btn-sm btn-info text-white"><i class="fas fa-chart-line"></i></a>
-                                        <% if (user.role_name === 'super_admin') { %>
-                                            <form action="/short-links/delete/<%= link.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa link này?')">
-                                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                                                <input type="hidden" name="return_to_domain" value="1">
-                                                <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                            </form>
-                                        <% } %>
+                                        <form action="/short-links/delete/<%= link.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa link này?')">
+                                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                            <input type="hidden" name="return_to_domain" value="1">
+                                            <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                                        </form>
                                     </td>
                                 </tr>
                             <% }) %>

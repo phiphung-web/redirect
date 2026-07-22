@@ -1,6 +1,6 @@
 <%
   const currentMenu = typeof active === 'string' ? active : '';
-  const isAdmin = user && (user.role_name === 'super_admin' || user.role_name === 'admin');
+  const isAdmin = user && user.role_name === 'super_admin';
   const isSuper = user && user.role_name === 'super_admin';
   const initials = user?.username ? user.username.substring(0, 2).toUpperCase() : 'RP';
   const crumbList = Array.isArray(typeof breadcrumb !== 'undefined' ? breadcrumb : null) ? breadcrumb : [];
@@ -45,13 +45,13 @@
       <% if (user) { %>
         <div class="d-flex align-items-center gap-2 ms-lg-auto nav-account-wrap">
           <div class="live-pill"><span class="status-dot"></span>Online</div>
-          <div class="account-pill">
+          <a class="account-pill text-decoration-none" href="/account/telegram" title="Cài đặt thông báo Telegram">
             <div class="avatar"><%= initials %></div>
             <div class="small lh-sm">
               <div class="fw-bold text-white"><%= user.username %></div>
               <div class="text-white-50"><%= user.role_name %></div>
             </div>
-          </div>
+          </a>
           <form action="/logout" method="POST" class="d-inline">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <button type="submit" class="btn btn-sm btn-outline-light" aria-label="Đăng xuất" title="Đăng xuất">

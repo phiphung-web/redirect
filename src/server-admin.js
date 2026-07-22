@@ -309,7 +309,10 @@ app.get("/redirect", checkAuth, async (req, res) => {
              (SELECT COUNT(*) FROM campaigns c WHERE c.domain_id = d.id) +
              (SELECT COUNT(*) FROM short_links s WHERE s.domain_id = d.id) AS link_count,
              (SELECT COUNT(*) FROM campaigns c WHERE c.domain_id = d.id AND c.is_active) +
-             (SELECT COUNT(*) FROM short_links s WHERE s.domain_id = d.id AND s.is_active) AS link_active
+             (SELECT COUNT(*) FROM short_links s WHERE s.domain_id = d.id AND s.is_active) AS link_active,
+             (SELECT COUNT(*) FROM traffic_logs tl
+              WHERE tl.domain_id = d.id
+                AND tl.action IN ('redirect', 'short_redirect')) AS traffic_count
       FROM domains d
       LEFT JOIN users cu ON d.user_id = cu.id
       LEFT JOIN users uu ON d.updated_by = uu.id
@@ -320,7 +323,11 @@ app.get("/redirect", checkAuth, async (req, res) => {
         SELECT (SELECT COUNT(*) FROM domains) as total_domains,
                (SELECT COUNT(*) FROM campaigns) +
                (SELECT COUNT(*) FROM short_links) as total_links,
-               (SELECT COUNT(*) FROM traffic_logs) as total_traffic
+               (SELECT COUNT(*) FROM traffic_logs
+                WHERE action IN ('redirect', 'short_redirect')) as total_traffic,
+               (SELECT COUNT(*) FROM traffic_logs
+                WHERE action LIKE 'safe_page%') as total_safe_views,
+               (SELECT COUNT(*) FROM traffic_logs) as total_raw_requests
     `);
   res.render("admin/dashboard", {
     user: req.session.user,
@@ -578,6 +585,15 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
     `,
     [shortLinkId, prevStart, prevEnd]
   );
+  const lifetimeTotals = await db.query(
+    `
+      SELECT COUNT(*) FILTER (WHERE action='short_redirect') AS clicks,
+             COUNT(DISTINCT ip) AS unique_ips
+      FROM traffic_logs
+      WHERE short_link_id=$1
+    `,
+    [shortLinkId]
+  );
   const countryStats = await db.query(
     `
       SELECT country, COUNT(*) AS hits
@@ -623,6 +639,9 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
   const previous = prevTotals.rows[0] || { clicks: 0, unique_ips: 0 };
   previous.clicks = Number(previous.clicks || 0);
   previous.unique_ips = Number(previous.unique_ips || 0);
+  const lifetime = lifetimeTotals.rows[0] || { clicks: 0, unique_ips: 0 };
+  lifetime.clicks = Number(lifetime.clicks || 0);
+  lifetime.unique_ips = Number(lifetime.unique_ips || 0);
   const delta = {
     clicks: summary.clicks - previous.clicks,
     unique_ips: summary.unique_ips - previous.unique_ips,
@@ -635,6 +654,7 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
     logs: logs.rows.map(parseLogMeta),
     summary,
     previous,
+    lifetime,
     delta,
     countryStats: countryStats.rows,
     deviceStats: deviceStats.rows,
@@ -910,7 +930,9 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
 
   const rLinks = await db.query(
     `
-      SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name,
+             (SELECT COUNT(*) FROM traffic_logs tl
+              WHERE tl.campaign_id=c.id AND tl.action='redirect') AS log_redirects
       FROM campaigns c
       LEFT JOIN users cu ON c.user_id = cu.id
       LEFT JOIN users uu ON c.updated_by = uu.id
@@ -922,7 +944,9 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
 
   const rShortLinks = await db.query(
     `
-      SELECT s.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      SELECT s.*, cu.username AS created_by_name, uu.username AS updated_by_name,
+             (SELECT COUNT(*) FROM traffic_logs tl
+              WHERE tl.short_link_id=s.id AND tl.action='short_redirect') AS log_clicks
       FROM short_links s
       LEFT JOIN users cu ON s.user_id = cu.id
       LEFT JOIN users uu ON s.updated_by = uu.id
@@ -939,6 +963,22 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
         (SELECT COUNT(*) FROM short_links WHERE domain_id=$1) AS total,
         (SELECT COUNT(*) FROM campaigns WHERE domain_id=$1 AND is_active) +
         (SELECT COUNT(*) FROM short_links WHERE domain_id=$1 AND is_active) AS active
+    `,
+    [domainId]
+  );
+
+  const domainTrafficStats = await db.query(
+    `
+      SELECT
+        COUNT(*) FILTER (
+          WHERE action IN ('redirect', 'short_redirect')
+        ) AS link_traffic,
+        COUNT(*) FILTER (WHERE action LIKE 'safe_page%') AS safe_page_views,
+        COUNT(*) FILTER (
+          WHERE campaign_id IS NULL AND short_link_id IS NULL
+        ) AS direct_or_unmatched
+      FROM traffic_logs
+      WHERE domain_id=$1
     `,
     [domainId]
   );
@@ -985,6 +1025,7 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     links,
     shortLinks,
     linkStats: linkStats.rows[0],
+    domainTrafficStats: domainTrafficStats.rows[0],
   });
 });
 

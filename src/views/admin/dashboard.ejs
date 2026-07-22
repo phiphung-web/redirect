@@ -31,7 +31,7 @@
       </div>
       <div class="metric-card">
         <div class="metric-icon green"><i class="fa-solid fa-arrow-trend-up"></i></div>
-        <div><span>Traffic</span><strong><%= Number(stats.total_traffic || 0).toLocaleString('vi-VN') %></strong><small>Lượt đã ghi nhận</small></div>
+        <div><span>Lượt qua link</span><strong><%= Number(stats.total_traffic || 0).toLocaleString('vi-VN') %></strong><small data-help="Chỉ đếm redirect thành công của link. Truy cập thẳng domain, Safe Page và probe không làm tăng số này.">Không tính Safe Page/probe</small></div>
       </div>
     </section>
 
@@ -50,7 +50,7 @@
       <% } else { %>
         <div class="table-responsive">
           <table class="table align-middle mb-0">
-            <thead><tr><th class="ps-4">Domain</th><th>Giao diện</th><th>SSL</th><th>Trạng thái</th><th>Tổng link</th><th class="text-end pe-4">Thao tác</th></tr></thead>
+            <thead><tr><th class="ps-4">Domain</th><th>Giao diện</th><th>SSL</th><th>Trạng thái</th><th>Tổng link</th><th>Lượt qua link</th><th class="text-end pe-4">Thao tác</th></tr></thead>
             <tbody>
               <% domains.forEach(d => { %>
                 <tr>
@@ -66,6 +66,7 @@
                   </td>
                   <td><span class="status-badge <%= d.status === 'active' ? 'active' : 'inactive' %>"><span class="status-dot"></span><%= d.status === 'active' ? 'Hoạt động' : 'Đã tắt' %></span></td>
                   <td><div class="campaign-count"><strong><%= d.link_active || 0 %></strong> hoạt động <span>/ <%= d.link_count || 0 %> tổng</span></div></td>
+                  <td><strong class="text-success"><%= Number(d.traffic_count || 0).toLocaleString('vi-VN') %></strong><div class="text-muted small">redirect thành công</div></td>
                   <td class="text-end pe-4 text-nowrap">
                     <form action="/domains/toggle/<%= d.id %>" method="POST" class="d-inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-secondary" title="Bật/tắt"><i class="fa-solid fa-power-off"></i></button></form>
                     <a href="https://<%= d.domain_url %>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary ms-1" title="Xem Safe Page"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>

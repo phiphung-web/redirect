@@ -80,9 +80,9 @@
       <div class="col-md-4">
         <div class="card shadow-sm h-100">
           <div class="card-body">
-            <div class="text-muted small">Tổng click lưu trên link</div>
-            <div class="display-6 fw-bold"><%= link.clicks || 0 %></div>
-            <div class="text-muted small">Counter nhanh từ bảng short_links</div>
+            <div class="text-muted small" data-help="Tính trực tiếp từ log short_redirect, cùng nguồn với bảng log chi tiết.">Tổng lượt qua link (toàn thời gian)</div>
+            <div class="display-6 fw-bold"><%= lifetime.clicks || 0 %></div>
+            <div class="text-muted small"><%= lifetime.unique_ips || 0 %> IP duy nhất</div>
           </div>
         </div>
       </div>

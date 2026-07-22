@@ -130,6 +130,11 @@ test("product login, welcome and dashboard views render", async () => {
       links: [],
       shortLinks: [],
       linkStats: { total: 0, active: 0 },
+      domainTrafficStats: {
+        link_traffic: 0,
+        safe_page_views: 0,
+        direct_or_unmatched: 0,
+      },
       sslAutomationEnabled: false,
     }
   );
@@ -170,6 +175,29 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
   const inlineScripts = [...source.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.ok(inlineScripts.length > 0);
   inlineScripts.forEach((match) => assert.doesNotThrow(() => new vm.Script(match[1])));
+});
+
+test("admin analytics separate successful link traffic from raw safe-page requests", () => {
+  const serverSource = fs.readFileSync(
+    path.join(__dirname, "../src/server-admin.js"),
+    "utf8"
+  );
+  const dashboardSource = fs.readFileSync(
+    path.join(__dirname, "../src/views/admin/dashboard.ejs"),
+    "utf8"
+  );
+  const domainSource = fs.readFileSync(
+    path.join(__dirname, "../src/views/admin/domain_detail.ejs"),
+    "utf8"
+  );
+
+  assert.match(serverSource, /action IN \('redirect', 'short_redirect'\)/);
+  assert.match(serverSource, /action LIKE 'safe_page%'/);
+  assert.match(dashboardSource, /Lượt qua link/);
+  assert.match(dashboardSource, /Không tính Safe Page\/probe/);
+  assert.match(domainSource, /direct_or_unmatched/);
+  assert.match(domainSource, /log_redirects/);
+  assert.match(domainSource, /log_clicks/);
 });
 
 test("contextual help is available across the admin product", () => {

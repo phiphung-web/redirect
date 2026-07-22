@@ -677,10 +677,10 @@
             const RULE_TEMPLATES = {
                 fb: [
                     { key: 'fbclid', operator: 'exists', value: '' },
-                    { key: 'utm_source', operator: 'equals', value: 'facebook' },
-                    { key: 'utm_medium', operator: 'equals', value: 'kalite' },
-                    { key: 'utm_campaign', operator: 'equals', value: 'sds' },
-                    { key: 'utm_content', operator: 'equals', value: 'dsd' }
+                    { key: 'utm_source', operator: 'equals', value: '' },
+                    { key: 'utm_medium', operator: 'equals', value: '' },
+                    { key: 'utm_campaign', operator: 'equals', value: '' },
+                    { key: 'utm_content', operator: 'equals', value: '' }
                 ],
                 gg: [
                     { key: 'utm_source', operator: 'equals', value: 'google' },
@@ -721,6 +721,7 @@
                 valueInput.placeholder = 'Giá trị';
                 valueInput.value = String(val || '');
                 valueInput.disabled = operator.value === 'exists';
+                valueInput.required = operator.value === 'equals';
 
                 const remove = document.createElement('button');
                 remove.type = 'button';
@@ -741,6 +742,7 @@
                 valueInput.addEventListener('input', updateRulesQueryString);
                 operator.addEventListener('change', () => {
                     valueInput.disabled = operator.value === 'exists';
+                    valueInput.required = operator.value === 'equals';
                     if (valueInput.disabled) valueInput.value = '';
                     updateRulesQueryString();
                 });

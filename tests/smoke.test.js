@@ -166,10 +166,12 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
     "utf8"
   );
   assert.match(source, /key: 'fbclid', operator: 'exists', value: ''/);
-  assert.match(source, /key: 'utm_source', operator: 'equals', value: 'facebook'/);
-  assert.match(source, /key: 'utm_medium', operator: 'equals', value: 'kalite'/);
-  assert.match(source, /key: 'utm_campaign', operator: 'equals', value: 'sds'/);
-  assert.match(source, /key: 'utm_content', operator: 'equals', value: 'dsd'/);
+  assert.match(source, /key: 'utm_source', operator: 'equals', value: ''/);
+  assert.match(source, /key: 'utm_medium', operator: 'equals', value: ''/);
+  assert.match(source, /key: 'utm_campaign', operator: 'equals', value: ''/);
+  assert.match(source, /key: 'utm_content', operator: 'equals', value: ''/);
+  assert.doesNotMatch(source, /value: '(?:kalite|sds|dsd)'/);
+  assert.match(source, /valueInput\.required = operator\.value === 'equals'/);
   assert.match(source, /COPY_EXCLUDED_RULE_KEYS = new Set\(\['fbclid', 'fbcid'\]\)/);
   assert.match(source, /COPY_EXCLUDED_RULE_KEYS\.has\(key\.toLowerCase\(\)\)/);
   assert.doesNotMatch(source, /campaign_id=xxx|: 'xxx'/);

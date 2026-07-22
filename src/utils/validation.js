@@ -84,7 +84,14 @@ const parseRules = (rulesInput) => {
       throw new Error("Rule equals can gia tri");
     }
     if (value.length > 500) throw new Error("Rule value qua dai");
-    return { key, operator, value };
+    const copyValue = String(rule?.copyValue || "").trim();
+    if (copyValue.length > 500) throw new Error("Gia tri URL parameter qua dai");
+    return {
+      key,
+      operator,
+      value,
+      ...(copyValue ? { copyValue } : {}),
+    };
   });
 };
 

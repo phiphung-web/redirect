@@ -378,21 +378,25 @@
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">Mẫu nhanh</button>
                                         <ul class="dropdown-menu">
-                                            <li><button class="dropdown-item" type="button" data-rule-template="fb">Facebook Ads</button></li>
+                                            <li><button class="dropdown-item" type="button" data-rule-template="fb">Meta Ads · URL động chuẩn</button></li>
+                                            <li><button class="dropdown-item" type="button" data-rule-template="fb_custom">Facebook · 5 rule tùy chỉnh</button></li>
+                                            <li><hr class="dropdown-divider"></li>
                                             <li><button class="dropdown-item" type="button" data-rule-template="gg">Google Ads</button></li>
                                             <li><button class="dropdown-item" type="button" data-rule-template="tiktok">TikTok Ads</button></li>
                                         </ul>
                                     </div>
                                 </div>
+                                <div class="row g-2 px-2 mb-1 d-none d-md-flex small text-muted fw-semibold"><div class="col-3">Tên tham số</div><div class="col-2">Kiểm tra</div><div class="col-3">Giá trị cần khớp</div><div class="col-3">Giá trị URL Ads</div><div class="col-1"></div></div>
                                 <div id="rules-wrapper" class="border rounded p-2 mb-2 bg-light"></div>
                                 <button type="button" class="btn btn-sm btn-secondary w-100" id="addRuleButton">+ Thêm điều kiện</button>
                                 <div class="mt-3">
-                                    <label class="fw-bold" data-help="Bằng (=) yêu cầu đúng giá trị. Tồn tại chỉ yêu cầu có tên tham số; chuỗi copy dùng macro của nền tảng hoặc chỉ tên key, không gán giá trị xxx.">Chuỗi tham số để copy</label>
+                                    <label class="fw-bold" data-help="Dán nguyên chuỗi, không kèm dấu ?, vào Meta Ads Manager → cấp Quảng cáo → Theo dõi → Thông số URL. Macro {{...}} phải được giữ nguyên để Meta thay bằng dữ liệu thật.">Chuỗi tham số để copy</label>
                                     <div class="input-group input-group-sm">
                                         <input type="text" class="form-control bg-white" id="rulesQueryString" readonly>
                                         <button type="button" class="btn btn-outline-primary" onclick="copyGeneratedParams()"><i class="fas fa-copy"></i></button>
                                     </div>
-                                    <div class="form-text"><strong>Tồn tại</strong>: chỉ kiểm tra có key, không so sánh giá trị. <strong>Bằng</strong>: phải khớp chính xác giá trị đã nhập. Rule <code>fbclid</code> chỉ dùng để kiểm tra và được bỏ khỏi chuỗi copy.</div>
+                                    <div class="form-text"><strong>Bằng</strong>: giá trị URL Ads tự đồng bộ với giá trị cần khớp. <strong>Tồn tại</strong>: nhập giá trị tĩnh hoặc macro của nền tảng ở cột “Giá trị URL Ads”. <code>fbclid</code> do Meta tự gắn nên chỉ kiểm tra và không đưa vào chuỗi copy.</div>
+                                    <div class="alert alert-light border py-2 px-3 mt-2 mb-0 small"><strong>Meta hỗ trợ:</strong> <code>{{campaign.id}}</code>, <code>{{campaign.name}}</code>, <code>{{adset.id}}</code>, <code>{{adset.name}}</code>, <code>{{ad.id}}</code>, <code>{{ad.name}}</code>, <code>{{placement}}</code>, <code>{{site_source_name}}</code>. Nên ưu tiên ID khi cần đối soát ổn định.</div>
                                 </div>
                                 <input type="hidden" name="rules_json" id="rules_json" data-flow-field="conditional">
                             </section>
@@ -677,6 +681,20 @@
             const RULE_TEMPLATES = {
                 fb: [
                     { key: 'fbclid', operator: 'exists', value: '' },
+                    { key: 'utm_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}' },
+                    { key: 'utm_source', operator: 'exists', value: '', copyValue: '{{site_source_name}}' },
+                    { key: 'utm_medium', operator: 'exists', value: '', copyValue: 'paid_social' },
+                    { key: 'utm_campaign', operator: 'exists', value: '', copyValue: '{{campaign.name}}' },
+                    { key: 'utm_source_platform', operator: 'exists', value: '', copyValue: 'meta' },
+                    { key: 'utm_content', operator: 'exists', value: '', copyValue: '{{ad.name}}' },
+                    { key: 'utm_term', operator: 'exists', value: '', copyValue: '{{adset.name}}' },
+                    { key: 'campaign_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}' },
+                    { key: 'adset_id', operator: 'exists', value: '', copyValue: '{{adset.id}}' },
+                    { key: 'ad_id', operator: 'exists', value: '', copyValue: '{{ad.id}}' },
+                    { key: 'placement', operator: 'exists', value: '', copyValue: '{{placement}}' }
+                ],
+                fb_custom: [
+                    { key: 'fbclid', operator: 'exists', value: '' },
                     { key: 'utm_source', operator: 'equals', value: '' },
                     { key: 'utm_medium', operator: 'equals', value: '' },
                     { key: 'utm_campaign', operator: 'equals', value: '' },
@@ -685,9 +703,9 @@
                 gg: [
                     { key: 'utm_source', operator: 'equals', value: 'google' },
                     { key: 'gclid', operator: 'exists', value: '' },
-                    { key: 'campaignid', operator: 'exists', value: '', sampleValue: '{campaignid}' },
-                    { key: 'adgroupid', operator: 'exists', value: '', sampleValue: '{adgroupid}' },
-                    { key: 'keyword', operator: 'exists', value: '', sampleValue: '{keyword}' }
+                    { key: 'campaignid', operator: 'exists', value: '', copyValue: '{campaignid}' },
+                    { key: 'adgroupid', operator: 'exists', value: '', copyValue: '{adgroupid}' },
+                    { key: 'keyword', operator: 'exists', value: '', copyValue: '{keyword}' }
                 ],
                 tiktok: [
                     { key: 'utm_source', operator: 'equals', value: 'tiktok' },
@@ -696,13 +714,11 @@
             };
             const COPY_EXCLUDED_RULE_KEYS = new Set(['fbclid', 'fbcid']);
 
-            function addNewRule(key = '', op = 'exists', val = '', sampleValue = '') {
+            function addNewRule(key = '', op = 'exists', val = '', copyValue = '') {
                 const wrapper = document.getElementById('rules-wrapper');
                 const row = document.createElement('div');
                 row.className = 'row g-2 mb-2 rule-row align-items-center';
-                row.dataset.templateKey = String(key || '');
-                row.dataset.sampleValue = String(sampleValue || '');
-                row.innerHTML = '<div class="col-4"></div><div class="col-3"></div><div class="col-4"></div><div class="col-1"></div>';
+                row.innerHTML = '<div class="col-md-3"></div><div class="col-md-2"></div><div class="col-md-3"></div><div class="col-md-3"></div><div class="col-md-1"></div>';
 
                 const keyInput = document.createElement('input');
                 keyInput.type = 'text';
@@ -723,6 +739,12 @@
                 valueInput.disabled = operator.value === 'exists';
                 valueInput.required = operator.value === 'equals';
 
+                const copyValueInput = document.createElement('input');
+                copyValueInput.type = 'text';
+                copyValueInput.className = 'form-control form-control-sm rule-copy-val';
+                copyValueInput.placeholder = 'Tĩnh hoặc {{macro}}';
+                copyValueInput.value = String(copyValue || '');
+
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'btn btn-sm text-danger';
@@ -732,31 +754,44 @@
                 row.children[0].appendChild(keyInput);
                 row.children[1].appendChild(operator);
                 row.children[2].appendChild(valueInput);
-                row.children[3].appendChild(remove);
+                row.children[3].appendChild(copyValueInput);
+                row.children[4].appendChild(remove);
                 wrapper.appendChild(row);
 
+                const refreshRow = () => {
+                    const isEquals = operator.value === 'equals';
+                    const isExcluded = COPY_EXCLUDED_RULE_KEYS.has(keyInput.value.trim().toLowerCase());
+                    valueInput.disabled = !isEquals;
+                    valueInput.required = isEquals;
+                    copyValueInput.disabled = isEquals || isExcluded;
+                    if (isEquals) copyValueInput.value = valueInput.value;
+                    if (isExcluded) copyValueInput.value = '';
+                    updateRulesQueryString();
+                };
+
                 keyInput.addEventListener('input', () => {
-                    if (keyInput.value.trim() !== row.dataset.templateKey) row.dataset.sampleValue = '';
+                    refreshRow();
+                });
+                valueInput.addEventListener('input', () => {
+                    if (operator.value === 'equals') copyValueInput.value = valueInput.value;
                     updateRulesQueryString();
                 });
-                valueInput.addEventListener('input', updateRulesQueryString);
                 operator.addEventListener('change', () => {
-                    valueInput.disabled = operator.value === 'exists';
-                    valueInput.required = operator.value === 'equals';
-                    if (valueInput.disabled) valueInput.value = '';
-                    updateRulesQueryString();
+                    if (operator.value === 'exists') valueInput.value = '';
+                    refreshRow();
                 });
+                copyValueInput.addEventListener('input', updateRulesQueryString);
                 remove.addEventListener('click', () => {
                     row.remove();
                     updateRulesQueryString();
                 });
-                updateRulesQueryString();
+                refreshRow();
             }
 
             function addTemplate(type) {
                 const wrapper = document.getElementById('rules-wrapper');
                 wrapper.replaceChildren();
-                (RULE_TEMPLATES[type] || []).forEach((rule) => addNewRule(rule.key, rule.operator, rule.value, rule.sampleValue));
+                (RULE_TEMPLATES[type] || []).forEach((rule) => addNewRule(rule.key, rule.operator, rule.value, rule.copyValue));
                 updateRulesQueryString();
             }
 
@@ -764,15 +799,20 @@
                 return Array.from(document.querySelectorAll('#rules-wrapper .rule-row')).flatMap((row) => {
                     const key = row.querySelector('.rule-key').value.trim();
                     if (!key) return [];
+                    const operator = row.querySelector('.rule-op').value;
+                    const copyValue = operator === 'exists'
+                        ? row.querySelector('.rule-copy-val').value.trim()
+                        : '';
                     return [{
                         key,
-                        operator: row.querySelector('.rule-op').value,
-                        value: row.querySelector('.rule-val').value.trim()
+                        operator,
+                        value: row.querySelector('.rule-val').value.trim(),
+                        ...(copyValue ? { copyValue } : {})
                     }];
                 });
             }
 
-            function encodeSampleValue(value) {
+            function encodeUrlParameterValue(value) {
                 return encodeURIComponent(value).replaceAll('%7B', '{').replaceAll('%7D', '}');
             }
 
@@ -782,14 +822,11 @@
                     if (!key) return [];
                     if (COPY_EXCLUDED_RULE_KEYS.has(key.toLowerCase())) return [];
                     const operator = row.querySelector('.rule-op').value;
-                    if (operator === 'equals') {
-                        const value = row.querySelector('.rule-val').value.trim();
-                        return [`${encodeURIComponent(key)}=${encodeURIComponent(value)}`];
-                    }
-                    const sampleValue = row.dataset.sampleValue || '';
-                    return [sampleValue
-                        ? `${encodeURIComponent(key)}=${encodeSampleValue(sampleValue)}`
-                        : encodeURIComponent(key)];
+                    const value = operator === 'equals'
+                        ? row.querySelector('.rule-val').value.trim()
+                        : row.querySelector('.rule-copy-val').value.trim();
+                    if (!value) return [];
+                    return [`${encodeURIComponent(key)}=${encodeUrlParameterValue(value)}`];
                 }).join('&');
             }
 
@@ -864,7 +901,7 @@
                     const countries = (cfg.filters && cfg.filters.countries && cfg.filters.countries.length) ? cfg.filters.countries.join(', ') : 'All';
                     document.getElementById('configPreview').innerText = `Rules: ${rules || 'Mặc định'} | Countries: ${countries}`;
                     document.getElementById('rules-wrapper').replaceChildren();
-                    (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value));
+                    (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value, r.copyValue));
                     const selectedCountries = cfg.filters?.countries || [];
                     const countrySelect = document.getElementById('countrySelect');
                     Array.from(countrySelect.options).forEach((option) => {

@@ -21,6 +21,7 @@ const ecosystem = require("../ecosystem.config.cjs");
 const {
   SAFE_TEMPLATES,
   normalizeSafeTemplate,
+  parseRules,
 } = require("../src/utils/validation");
 
 const product = {
@@ -166,6 +167,15 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
     "utf8"
   );
   assert.match(source, /key: 'fbclid', operator: 'exists', value: ''/);
+  assert.match(source, /data-rule-template="fb_custom"/);
+  assert.match(source, /key: 'utm_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}'/);
+  assert.match(source, /key: 'utm_source', operator: 'exists', value: '', copyValue: '{{site_source_name}}'/);
+  assert.match(source, /key: 'utm_source_platform', operator: 'exists', value: '', copyValue: 'meta'/);
+  assert.match(source, /key: 'utm_campaign', operator: 'exists', value: '', copyValue: '{{campaign.name}}'/);
+  assert.match(source, /key: 'campaign_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}'/);
+  assert.match(source, /key: 'adset_id', operator: 'exists', value: '', copyValue: '{{adset.id}}'/);
+  assert.match(source, /key: 'ad_id', operator: 'exists', value: '', copyValue: '{{ad.id}}'/);
+  assert.match(source, /key: 'placement', operator: 'exists', value: '', copyValue: '{{placement}}'/);
   assert.match(source, /key: 'utm_source', operator: 'equals', value: ''/);
   assert.match(source, /key: 'utm_medium', operator: 'equals', value: ''/);
   assert.match(source, /key: 'utm_campaign', operator: 'equals', value: ''/);
@@ -174,6 +184,8 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
   assert.match(source, /valueInput\.required = operator\.value === 'equals'/);
   assert.match(source, /COPY_EXCLUDED_RULE_KEYS = new Set\(\['fbclid', 'fbcid'\]\)/);
   assert.match(source, /COPY_EXCLUDED_RULE_KEYS\.has\(key\.toLowerCase\(\)\)/);
+  assert.match(source, /replaceAll\('%7B', '{'\)\.replaceAll\('%7D', '}'\)/);
+  assert.match(source, /if \(!value\) return \[\]/);
   assert.doesNotMatch(source, /campaign_id=xxx|: 'xxx'/);
   assert.match(source, /data-link-type="conditional"/);
   assert.match(source, /data-link-type="delayed"/);
@@ -182,6 +194,15 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
   const inlineScripts = [...source.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.ok(inlineScripts.length > 0);
   inlineScripts.forEach((match) => assert.doesNotThrow(() => new vm.Script(match[1])));
+
+  assert.deepEqual(
+    parseRules([
+      { key: "campaign_id", operator: "exists", value: "", copyValue: "{{campaign.id}}" },
+    ]),
+    [
+      { key: "campaign_id", operator: "exists", value: "", copyValue: "{{campaign.id}}" },
+    ]
+  );
 });
 
 test("admin analytics separate successful link traffic from raw safe-page requests", () => {
@@ -1004,7 +1025,7 @@ test("admin creates a conditional link with submitted quick-template rules", asy
   const formCsrf = extractCsrf(welcome.text);
   const rules = [
     { key: "utm_source", operator: "equals", value: "facebook" },
-    { key: "campaign_id", operator: "exists", value: "" },
+    { key: "campaign_id", operator: "exists", value: "", copyValue: "{{campaign.id}}" },
   ];
   const createRes = await agent
     .post("/campaigns/create")

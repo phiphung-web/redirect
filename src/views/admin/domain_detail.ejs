@@ -392,7 +392,7 @@
                                         <input type="text" class="form-control bg-white" id="rulesQueryString" readonly>
                                         <button type="button" class="btn btn-outline-primary" onclick="copyGeneratedParams()"><i class="fas fa-copy"></i></button>
                                     </div>
-                                    <div class="form-text"><strong>Tồn tại</strong>: chỉ kiểm tra có key, không so sánh giá trị. <strong>Bằng</strong>: phải khớp chính xác giá trị đã nhập.</div>
+                                    <div class="form-text"><strong>Tồn tại</strong>: chỉ kiểm tra có key, không so sánh giá trị. <strong>Bằng</strong>: phải khớp chính xác giá trị đã nhập. Rule <code>fbclid</code> chỉ dùng để kiểm tra và được bỏ khỏi chuỗi copy.</div>
                                 </div>
                                 <input type="hidden" name="rules_json" id="rules_json" data-flow-field="conditional">
                             </section>
@@ -676,11 +676,11 @@
 
             const RULE_TEMPLATES = {
                 fb: [
+                    { key: 'fbclid', operator: 'exists', value: '' },
                     { key: 'utm_source', operator: 'equals', value: 'facebook' },
-                    { key: 'campaign_id', operator: 'exists', value: '', sampleValue: '{{campaign.id}}' },
-                    { key: 'adset_id', operator: 'exists', value: '', sampleValue: '{{adset.id}}' },
-                    { key: 'ad_id', operator: 'exists', value: '', sampleValue: '{{ad.id}}' },
-                    { key: 'placement', operator: 'exists', value: '', sampleValue: '{{placement}}' }
+                    { key: 'utm_medium', operator: 'equals', value: 'kalite' },
+                    { key: 'utm_campaign', operator: 'equals', value: 'sds' },
+                    { key: 'utm_content', operator: 'equals', value: 'dsd' }
                 ],
                 gg: [
                     { key: 'utm_source', operator: 'equals', value: 'google' },
@@ -694,6 +694,7 @@
                     { key: 'ttclid', operator: 'exists', value: '' }
                 ]
             };
+            const COPY_EXCLUDED_RULE_KEYS = new Set(['fbclid', 'fbcid']);
 
             function addNewRule(key = '', op = 'exists', val = '', sampleValue = '') {
                 const wrapper = document.getElementById('rules-wrapper');
@@ -777,6 +778,7 @@
                 return Array.from(document.querySelectorAll('#rules-wrapper .rule-row')).flatMap((row) => {
                     const key = row.querySelector('.rule-key').value.trim();
                     if (!key) return [];
+                    if (COPY_EXCLUDED_RULE_KEYS.has(key.toLowerCase())) return [];
                     const operator = row.querySelector('.rule-op').value;
                     if (operator === 'equals') {
                         const value = row.querySelector('.rule-val').value.trim();

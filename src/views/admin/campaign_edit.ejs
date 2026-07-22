@@ -351,11 +351,14 @@
                     select.append(new Option(`${name} (${code})`, code));
                 }
                 select.select2().val(oldCountryFilter).trigger('change');
-                if (oldRules.length > 0) oldRules.forEach(r => addNewRule(r.key, r.operator, r.value, r.copyValue));
+                addNewRule('fbclid', 'exists', '', '');
+                oldRules
+                    .filter(r => !SYSTEM_RULE_KEYS.has(String(r.key || '').trim().toLowerCase()))
+                    .forEach(r => addNewRule(r.key, r.operator, r.value, r.copyValue));
             });
 
             function addNewRule(key = '', op = 'exists', val = '', copyValue = '') {
-                if (SYSTEM_RULE_KEYS.has(String(key).trim().toLowerCase())) return;
+                const isSystemRule = SYSTEM_RULE_KEYS.has(String(key).trim().toLowerCase());
                 const row = $(`
                 <div class="row g-2 mb-2 rule-row align-items-center">
                     <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key"></div>
@@ -368,6 +371,14 @@
                 row.find('.rule-op').val(op === 'equals' ? 'equals' : 'exists');
                 row.find('.rule-val').val(val);
                 row.find('.rule-copy-val').val(copyValue);
+                if (isSystemRule) {
+                    row.attr('data-system-rule', 'true');
+                    row.find('.rule-key').prop('readonly', true);
+                    row.find('.rule-op').val('exists').prop('disabled', true);
+                    row.find('.rule-val').val('').prop('disabled', true).prop('required', false).attr('placeholder', 'Không cần giá trị');
+                    row.find('.rule-copy-val').val('').prop('disabled', true);
+                    row.find('button').prop('disabled', true).attr('title', 'Rule hệ thống cố định').html('<i class="fas fa-lock"></i>');
+                }
                 $('#rules-wrapper').append(row);
                 toggleVal(row.find('.rule-op')[0]);
             }
@@ -375,6 +386,16 @@
             function toggleVal(sel) {
                 const inp = sel.closest('.rule-row').querySelector('.rule-val');
                 const copyInp = sel.closest('.rule-row').querySelector('.rule-copy-val');
+                const isSystemRule = sel.closest('.rule-row').dataset.systemRule === 'true';
+                if (isSystemRule) {
+                    sel.value = 'exists';
+                    inp.value = '';
+                    inp.disabled = true;
+                    inp.required = false;
+                    copyInp.value = '';
+                    copyInp.disabled = true;
+                    return;
+                }
                 inp.disabled = (sel.value === 'exists');
                 inp.required = (sel.value === 'equals');
                 copyInp.disabled = (sel.value === 'equals');

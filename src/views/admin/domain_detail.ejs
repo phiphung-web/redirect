@@ -651,6 +651,7 @@
 
             const RULE_TEMPLATES = {
                 fb_custom: [
+                    { key: 'fbclid', operator: 'exists', value: '' },
                     { key: 'utm_source', operator: 'equals', value: '' },
                     { key: 'utm_medium', operator: 'equals', value: '' },
                     { key: 'utm_campaign', operator: 'equals', value: '' },
@@ -662,7 +663,9 @@
             function addNewRule(key = '', op = 'exists', val = '', copyValue = '') {
                 const wrapper = document.getElementById('rules-wrapper');
                 const row = document.createElement('div');
+                const isSystemRule = COPY_EXCLUDED_RULE_KEYS.has(String(key).trim().toLowerCase());
                 row.className = 'row g-2 mb-2 rule-row align-items-center';
+                row.dataset.systemRule = isSystemRule ? 'true' : 'false';
                 row.innerHTML = '<div class="col-md-4"></div><div class="col-md-3"></div><div class="col-md-4"></div><div class="col-md-1"></div>';
 
                 const keyInput = document.createElement('input');
@@ -695,6 +698,23 @@
                 remove.setAttribute('aria-label', 'Xóa rule');
                 remove.textContent = '×';
 
+                if (isSystemRule) {
+                    keyInput.readOnly = true;
+                    operator.value = 'exists';
+                    operator.disabled = true;
+                    valueInput.value = '';
+                    valueInput.disabled = true;
+                    valueInput.required = false;
+                    valueInput.placeholder = 'Không cần giá trị';
+                    copyValueInput.value = '';
+                    copyValueInput.disabled = true;
+                    remove.className = 'btn btn-sm text-muted';
+                    remove.disabled = true;
+                    remove.innerHTML = '<i class="fas fa-lock"></i>';
+                    remove.setAttribute('aria-label', 'Rule hệ thống cố định');
+                    remove.title = 'Rule hệ thống cố định';
+                }
+
                 row.children[0].appendChild(keyInput);
                 row.children[1].appendChild(operator);
                 row.children[2].appendChild(valueInput);
@@ -704,13 +724,17 @@
 
                 const refreshRow = () => {
                     const isEquals = operator.value === 'equals';
-                    const isExcluded = COPY_EXCLUDED_RULE_KEYS.has(keyInput.value.trim().toLowerCase());
-                    row.classList.toggle('d-none', isExcluded);
+                    const isExcluded = row.dataset.systemRule === 'true';
+                    if (isExcluded) operator.value = 'exists';
                     valueInput.disabled = !isEquals;
-                    valueInput.required = isEquals;
+                    valueInput.required = isEquals && !isExcluded;
                     copyValueInput.disabled = isEquals || isExcluded;
                     if (isEquals) copyValueInput.value = valueInput.value;
-                    if (isExcluded) copyValueInput.value = '';
+                    if (isExcluded) {
+                        valueInput.value = '';
+                        valueInput.disabled = true;
+                        copyValueInput.value = '';
+                    }
                     updateRulesQueryString();
                 };
 

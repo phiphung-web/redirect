@@ -22,18 +22,15 @@ Delayed links keep separate lifecycle metrics:
 - `short_redirect_confirmed`: the browser stayed until the configured delay and sent a signed, one-time confirmation immediately before navigation;
 - an open that remains unconfirmed is reported separately and is not counted as a redirect.
 
-The confirmation proves that navigation was initiated, not that a cross-origin destination finished loading. End-to-end destination confirmation requires a pixel or callback installed on the destination site. Historical `short_redirect` rows predate this protocol and are displayed as unverified legacy data.
+Confirmation totals can be lower when visitors leave before the delay ends, lose connectivity, disable JavaScript or use a browser that blocks the confirmation request. Historical `short_redirect` rows predate this protocol and are displayed as unverified legacy data.
 
 ## Meta Ads URL parameters
 
-The conditional-link builder includes two Facebook/Meta presets:
+The conditional-link builder opens with four editable rules: `utm_source`, `utm_medium`, `utm_campaign`, and `utm_content`. Their exact-match values are also used to build the query string shown below the rules.
 
-- **Meta Ads · standard dynamic URL** uses Meta placeholders and produces a query string ready for the ad-level **Tracking → URL parameters** field;
-- **Facebook · five custom rules** creates the empty rule layout for a manually defined setup.
+Paste only the generated string into the ad-level **Tracking → URL parameters** field, without a leading `?`. The system always checks that `fbclid` exists, but keeps that internal rule out of both the form and copied string because Meta supplies it automatically. Never place email addresses, phone numbers or other personal data in UTM values.
 
-Paste only the generated query string into Ads Manager, without a leading `?`. `fbclid` is checked when it arrives but is deliberately excluded from the copied string because it is supplied by Meta. The standard preset includes GA4's source, medium, campaign, campaign ID and source-platform fields, followed by readable ad/ad-set values and stable Meta IDs. Supported Meta placeholders exposed by the builder are `{{campaign.id}}`, `{{campaign.name}}`, `{{adset.id}}`, `{{adset.name}}`, `{{ad.id}}`, `{{ad.name}}`, `{{placement}}`, and `{{site_source_name}}`. The builder preserves braces instead of percent-encoding them and omits parameters that do not yet have a URL value. Never place email addresses, phone numbers or other personal data in UTM values.
-
-Reference: [Meta Business Help — URL parameters](https://www.facebook.com/business/help/1016122818401732). Prefer ID placeholders for durable reconciliation; name placeholders are easier to read but depend on disciplined campaign naming.
+Reference: [Meta Business Help — URL parameters](https://www.facebook.com/business/help/1016122818401732).
 
 ## Automatic domain SSL
 

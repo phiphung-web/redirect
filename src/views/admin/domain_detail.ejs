@@ -64,31 +64,6 @@
 
         .link-configuration[hidden] { display: none !important; }
 
-        .tracking-setup-card {
-            border: 1px solid #bcd2ff;
-            border-radius: 14px;
-            background: linear-gradient(145deg, #f4f8ff 0%, #fff 72%);
-            overflow: hidden;
-        }
-
-        .tracking-setup-card .tracking-check {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            color: #435168;
-        }
-
-        .tracking-setup-card .tracking-check i {
-            margin-top: 3px;
-            color: #198754;
-        }
-
-        .advanced-settings-card {
-            border: 1px dashed #cbd3df;
-            border-radius: 12px;
-            background: #fbfcfe;
-        }
-
         .meta-parameter-guide {
             padding: 12px;
             border: 1px solid #dbe3ef;
@@ -108,9 +83,6 @@
 
         @media (max-width: 767px) {
             .link-type-grid { grid-template-columns: 1fr; }
-            .tracking-copy-group { flex-direction: column; }
-            .tracking-copy-group > .form-control,
-            .tracking-copy-group > .btn { width: 100%; border-radius: .375rem !important; }
         }
     </style>
 </head>
@@ -367,92 +339,34 @@
                             <section id="conditionalFields" data-flow="conditional" hidden>
                                 <div class="alert alert-primary py-2 small"><i class="fas fa-filter me-1"></i>Hệ thống tự sinh link nhận diện dạng <strong>?q=AbC123</strong>.</div>
                                 <input type="hidden" name="copy_from_id" id="copy_from_id" data-flow-field="conditional">
-                                <div class="tracking-setup-card mb-3">
-                                    <div class="p-3 p-md-4">
-                                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-                                            <div>
-                                                <span class="badge bg-success mb-2" id="trackingPresetBadge">Mẫu khách hàng · đang áp dụng</span>
-                                                <h6 class="mb-1" id="trackingPresetTitle">Facebook Ads — 4 tham số</h6>
-                                                <div class="small text-muted" id="trackingPresetDescription">Nhập đúng giá trị muốn kiểm tra. Hệ thống tự xử lý điều kiện bắt buộc của Facebook.</div>
-                                            </div>
-                                            <button type="button" class="btn btn-sm btn-outline-primary" data-rule-template="fb_custom">
-                                                <i class="fas fa-rotate-left me-1"></i>Đặt lại mẫu
-                                            </button>
-                                        </div>
-                                        <div class="row g-3 mb-3" id="simpleMetaParameters">
-                                            <div class="col-md-6">
-                                                <label class="form-label small fw-semibold">Nguồn <code>utm_source</code></label>
-                                                <input type="text" class="form-control simple-meta-param" data-simple-param="utm_source" data-flow-field="conditional" placeholder="Nhập giá trị cần kiểm tra" required>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small fw-semibold">Loại traffic <code>utm_medium</code></label>
-                                                <input type="text" class="form-control simple-meta-param" data-simple-param="utm_medium" data-flow-field="conditional" placeholder="Nhập giá trị cần kiểm tra" required>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small fw-semibold">Chiến dịch <code>utm_campaign</code></label>
-                                                <input type="text" class="form-control simple-meta-param" data-simple-param="utm_campaign" data-flow-field="conditional" placeholder="Nhập giá trị cần kiểm tra" required>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small fw-semibold">Nội dung <code>utm_content</code></label>
-                                                <input type="text" class="form-control simple-meta-param" data-simple-param="utm_content" data-flow-field="conditional" placeholder="Nhập giá trị cần kiểm tra" required>
-                                            </div>
-                                        </div>
-                                        <label class="fw-bold mb-1" data-help="Dán nguyên chuỗi, không kèm dấu ?, vào Meta Ads Manager → cấp Quảng cáo → Theo dõi → Thông số URL.">Chuỗi tham số để dán vào quảng cáo</label>
-                                        <div class="input-group tracking-copy-group">
-                                            <input type="text" class="form-control bg-white font-monospace small" id="rulesQueryString" readonly aria-label="Thông số URL được tạo tự động">
-                                            <button type="button" class="btn btn-primary px-3" id="copyGeneratedParamsButton" onclick="copyGeneratedParams()"><i class="fas fa-copy me-1"></i>Sao chép</button>
-                                        </div>
-                                        <div class="d-flex flex-wrap justify-content-between gap-2 mt-2 small">
-                                            <span class="text-muted">Chuỗi được tạo trực tiếp từ 4 giá trị phía trên.</span>
-                                            <span id="copyGeneratedParamsStatus" role="status" aria-live="polite"></span>
-                                        </div>
-                                        <div class="meta-parameter-guide mt-3">
-                                            <div class="small fw-bold"><i class="fas fa-location-dot text-primary me-1"></i>Dán chuỗi ở đâu?</div>
-                                            <div class="small text-muted mt-1">Trong Meta Ads, mở <strong>cấp Quảng cáo</strong> → <strong>Theo dõi</strong> → dán vào ô <strong>Thông số URL</strong>. Không thêm dấu <code>?</code> ở đầu.</div>
-                                            <img src="/images/meta-url-parameters-guide.svg" alt="Minh họa ô Thông số URL trong Meta Ads" loading="lazy">
-                                        </div>
+                                <div class="mb-3">
+                                    <label class="fw-bold" data-help="Để trống để chấp nhận mọi quốc gia. Nếu chọn, người ngoài danh sách sẽ thấy Safe Page.">Quốc gia cho phép</label>
+                                    <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple" id="countrySelect" data-flow-field="conditional"></select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="fw-bold">Sao chép rules từ link có sẵn</label>
+                                    <select class="form-control" id="copyFromSelect" onchange="onCopySelect()" data-flow-field="conditional">
+                                        <option value="">-- Không sao chép --</option>
+                                        <% links.forEach((link) => { %><option value="<%= link.id %>"><%= link.name %></option><% }) %>
+                                    </select>
+                                    <div class="border rounded mt-2 p-2 bg-light small" id="configPreview">Chọn link để xem cấu hình.</div>
+                                </div>
+                                <label class="fw-bold mb-2" data-help="Tất cả rule hiển thị phải đạt thì link mới chuyển tới URL đích. Hệ thống tự kiểm tra lượt nhấp Facebook.">Rules kiểm tra</label>
+                                <div class="row g-2 px-2 mb-1 d-none d-md-flex small text-muted fw-semibold"><div class="col-4">Tên tham số</div><div class="col-3">Kiểm tra</div><div class="col-4">Giá trị cần khớp</div><div class="col-1"></div></div>
+                                <div id="rules-wrapper" class="border rounded p-2 mb-2 bg-light"></div>
+                                <button type="button" class="btn btn-sm btn-secondary w-100" id="addRuleButton">+ Thêm điều kiện</button>
+                                <div class="form-text mt-2"><strong>Bằng</strong>: phải khớp đúng giá trị. <strong>Tồn tại</strong>: chỉ cần URL có tên tham số đó.</div>
+                                <div class="mt-3">
+                                    <label class="fw-bold mb-1" data-help="Dán nguyên chuỗi, không kèm dấu ?, vào Meta Ads Manager → cấp Quảng cáo → Theo dõi → Thông số URL.">Chuỗi tham số để copy</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control bg-white font-monospace" id="rulesQueryString" readonly aria-label="Thông số URL được tạo tự động">
+                                        <button type="button" class="btn btn-outline-primary" id="copyGeneratedParamsButton" onclick="copyGeneratedParams()"><i class="fas fa-copy me-1"></i>Copy</button>
                                     </div>
-                                </div>
-
-                                <div class="text-center mb-3">
-                                    <button class="btn btn-sm btn-link text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#advancedConditionalSettings" aria-expanded="false" aria-controls="advancedConditionalSettings">
-                                        <i class="fas fa-sliders me-1"></i>Cài đặt nâng cao <span class="text-muted">(không bắt buộc)</span>
-                                    </button>
-                                </div>
-
-                                <div class="collapse" id="advancedConditionalSettings">
-                                    <div class="advanced-settings-card p-3">
-                                        <div class="alert alert-warning py-2 small"><i class="fas fa-triangle-exclamation me-1"></i>Chỉ thay đổi phần này khi bạn hiểu rule và thông số tracking. Cấu hình sai có thể làm link không chuyển hướng.</div>
-                                        <div class="mb-3">
-                                            <label class="fw-bold" data-help="Để trống để chấp nhận mọi quốc gia. Nếu chọn, người ngoài danh sách sẽ thấy Safe Page.">Quốc gia cho phép</label>
-                                            <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple" id="countrySelect" data-flow-field="conditional"></select>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="fw-bold">Sao chép rules từ link có sẵn</label>
-                                            <select class="form-control" id="copyFromSelect" onchange="onCopySelect()" data-flow-field="conditional">
-                                                <option value="">-- Không sao chép --</option>
-                                                <% links.forEach((link) => { %><option value="<%= link.id %>"><%= link.name %></option><% }) %>
-                                            </select>
-                                            <div class="border rounded mt-2 p-2 bg-white small" id="configPreview">Chọn link để xem cấu hình.</div>
-                                        </div>
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <label class="fw-bold" data-help="Tất cả rule phải đạt thì link mới chuyển tới URL đích.">Rules kiểm tra</label>
-                                            <div class="dropdown">
-                                                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">Chọn mẫu khác</button>
-                                                <ul class="dropdown-menu">
-                                                    <li><button class="dropdown-item" type="button" data-rule-template="fb_custom">Facebook Ads · mẫu khách hàng</button></li>
-                                                    <li><button class="dropdown-item" type="button" data-rule-template="fb">Meta Ads · URL động đầy đủ</button></li>
-                                                    <li><hr class="dropdown-divider"></li>
-                                                    <li><button class="dropdown-item" type="button" data-rule-template="gg">Google Ads</button></li>
-                                                    <li><button class="dropdown-item" type="button" data-rule-template="tiktok">TikTok Ads</button></li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                        <div class="row g-2 px-2 mb-1 d-none d-md-flex small text-muted fw-semibold"><div class="col-3">Tên tham số</div><div class="col-2">Kiểm tra</div><div class="col-3">Giá trị cần khớp</div><div class="col-3">Giá trị URL Ads</div><div class="col-1"></div></div>
-                                        <div id="rules-wrapper" class="border rounded p-2 mb-2 bg-white"></div>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="addRuleButton">+ Thêm điều kiện</button>
-                                        <div class="form-text mt-2"><strong>Bằng</strong>: giá trị URL Ads tự đồng bộ với giá trị cần khớp. <strong>Tồn tại</strong>: nhập giá trị tĩnh hoặc macro ở cột “Giá trị URL Ads”.</div>
-                                        <div class="alert alert-light border py-2 px-3 mt-2 mb-0 small"><strong>Meta hỗ trợ:</strong> <code>{{campaign.id}}</code>, <code>{{campaign.name}}</code>, <code>{{adset.id}}</code>, <code>{{adset.name}}</code>, <code>{{ad.id}}</code>, <code>{{ad.name}}</code>, <code>{{placement}}</code>, <code>{{site_source_name}}</code>.</div>
+                                    <div class="small mt-1" id="copyGeneratedParamsStatus" role="status" aria-live="polite"></div>
+                                    <div class="meta-parameter-guide mt-3">
+                                        <div class="small fw-bold"><i class="fas fa-location-dot text-primary me-1"></i>Dán chuỗi ở đâu?</div>
+                                        <div class="small text-muted mt-1">Trong Meta Ads, mở <strong>cấp Quảng cáo</strong> → <strong>Theo dõi</strong> → dán vào ô <strong>Thông số URL</strong>. Không thêm dấu <code>?</code> ở đầu.</div>
+                                        <img src="/images/meta-url-parameters-guide.svg" alt="Minh họa ô Thông số URL trong Meta Ads" loading="lazy">
                                     </div>
                                 </div>
                                 <input type="hidden" name="rules_json" id="rules_json" data-flow-field="conditional">
@@ -736,128 +650,20 @@
 
 
             const RULE_TEMPLATES = {
-                fb: [
-                    { key: 'utm_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}' },
-                    { key: 'utm_source', operator: 'exists', value: '', copyValue: '{{site_source_name}}' },
-                    { key: 'utm_medium', operator: 'exists', value: '', copyValue: 'paid_social' },
-                    { key: 'utm_campaign', operator: 'exists', value: '', copyValue: '{{campaign.name}}' },
-                    { key: 'utm_source_platform', operator: 'exists', value: '', copyValue: 'meta' },
-                    { key: 'utm_content', operator: 'exists', value: '', copyValue: '{{ad.name}}' },
-                    { key: 'utm_term', operator: 'exists', value: '', copyValue: '{{adset.name}}' },
-                    { key: 'campaign_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}' },
-                    { key: 'adset_id', operator: 'exists', value: '', copyValue: '{{adset.id}}' },
-                    { key: 'ad_id', operator: 'exists', value: '', copyValue: '{{ad.id}}' },
-                    { key: 'placement', operator: 'exists', value: '', copyValue: '{{placement}}' }
-                ],
                 fb_custom: [
                     { key: 'utm_source', operator: 'equals', value: '' },
                     { key: 'utm_medium', operator: 'equals', value: '' },
                     { key: 'utm_campaign', operator: 'equals', value: '' },
                     { key: 'utm_content', operator: 'equals', value: '' }
-                ],
-                gg: [
-                    { key: 'utm_source', operator: 'equals', value: 'google' },
-                    { key: 'gclid', operator: 'exists', value: '' },
-                    { key: 'campaignid', operator: 'exists', value: '', copyValue: '{campaignid}' },
-                    { key: 'adgroupid', operator: 'exists', value: '', copyValue: '{adgroupid}' },
-                    { key: 'keyword', operator: 'exists', value: '', copyValue: '{keyword}' }
-                ],
-                tiktok: [
-                    { key: 'utm_source', operator: 'equals', value: 'tiktok' },
-                    { key: 'ttclid', operator: 'exists', value: '' }
                 ]
             };
             const COPY_EXCLUDED_RULE_KEYS = new Set(['fbclid', 'fbcid']);
-            const TRACKING_PRESET_CONTENT = {
-                fb: {
-                    badge: 'Mẫu nâng cao',
-                    badgeClass: 'badge bg-primary mb-2',
-                    title: 'Meta Ads — URL động đầy đủ',
-                    description: 'Meta sẽ thay các macro động bằng dữ liệu chiến dịch khi quảng cáo được nhấp.'
-                },
-                fb_custom: {
-                    badge: 'Mẫu khách hàng · đang áp dụng',
-                    badgeClass: 'badge bg-success mb-2',
-                    title: 'Facebook Ads — 4 tham số',
-                    description: 'Nhập đúng giá trị muốn kiểm tra. Hệ thống tự xử lý điều kiện bắt buộc của Facebook.'
-                },
-                gg: {
-                    badge: 'Mẫu Google Ads',
-                    badgeClass: 'badge bg-primary mb-2',
-                    title: 'Google Ads — thông số động',
-                    description: 'Chuỗi URL đã chuyển sang macro dành cho Google Ads.'
-                },
-                tiktok: {
-                    badge: 'Mẫu TikTok Ads',
-                    badgeClass: 'badge bg-dark mb-2',
-                    title: 'TikTok Ads — cấu hình cơ bản',
-                    description: 'Kiểm tra và bổ sung thông số chiến dịch nếu tài khoản yêu cầu.'
-                },
-                custom: {
-                    badge: 'Đã chỉnh thủ công',
-                    badgeClass: 'badge bg-warning text-dark mb-2',
-                    title: 'Cấu hình nâng cao',
-                    description: 'Rules đã được chỉnh. Hãy kiểm tra chuỗi URL trước khi tạo link.'
-                }
-            };
-
-            function setTrackingPresetPresentation(type) {
-                const content = TRACKING_PRESET_CONTENT[type] || TRACKING_PRESET_CONTENT.custom;
-                const badge = document.getElementById('trackingPresetBadge');
-                const title = document.getElementById('trackingPresetTitle');
-                const description = document.getElementById('trackingPresetDescription');
-                const simpleParameters = document.getElementById('simpleMetaParameters');
-                if (badge) {
-                    badge.className = content.badgeClass;
-                    badge.textContent = content.badge;
-                }
-                if (title) title.textContent = content.title;
-                if (description) description.textContent = content.description;
-                if (simpleParameters) {
-                    const useSimpleParameters = type === 'fb_custom';
-                    simpleParameters.hidden = !useSimpleParameters;
-                    simpleParameters.querySelectorAll('[data-simple-param]').forEach((input) => {
-                        input.required = useSimpleParameters;
-                    });
-                }
-                updateRulesQueryString();
-            }
-
-            function getRuleRow(key) {
-                return Array.from(document.querySelectorAll('#rules-wrapper .rule-row')).find((row) => (
-                    row.querySelector('.rule-key').value.trim().toLowerCase() === key.toLowerCase()
-                ));
-            }
-
-            function syncSimpleParametersFromRules() {
-                document.querySelectorAll('[data-simple-param]').forEach((input) => {
-                    const row = getRuleRow(input.dataset.simpleParam);
-                    input.value = row && row.querySelector('.rule-op').value === 'equals'
-                        ? row.querySelector('.rule-val').value
-                        : '';
-                });
-            }
-
-            function syncSimpleParameterToRule(input) {
-                const row = getRuleRow(input.dataset.simpleParam);
-                if (!row) return;
-                const valueInput = row.querySelector('.rule-val');
-                const copyValueInput = row.querySelector('.rule-copy-val');
-                const status = document.getElementById('copyGeneratedParamsStatus');
-                if (status) {
-                    status.className = '';
-                    status.textContent = '';
-                }
-                valueInput.value = input.value;
-                copyValueInput.value = input.value;
-                updateRulesQueryString();
-            }
 
             function addNewRule(key = '', op = 'exists', val = '', copyValue = '') {
                 const wrapper = document.getElementById('rules-wrapper');
                 const row = document.createElement('div');
                 row.className = 'row g-2 mb-2 rule-row align-items-center';
-                row.innerHTML = '<div class="col-md-3"></div><div class="col-md-2"></div><div class="col-md-3"></div><div class="col-md-3"></div><div class="col-md-1"></div>';
+                row.innerHTML = '<div class="col-md-4"></div><div class="col-md-3"></div><div class="col-md-4"></div><div class="col-md-1"></div>';
 
                 const keyInput = document.createElement('input');
                 keyInput.type = 'text';
@@ -879,9 +685,8 @@
                 valueInput.required = operator.value === 'equals';
 
                 const copyValueInput = document.createElement('input');
-                copyValueInput.type = 'text';
-                copyValueInput.className = 'form-control form-control-sm rule-copy-val';
-                copyValueInput.placeholder = 'Tĩnh hoặc {{macro}}';
+                copyValueInput.type = 'hidden';
+                copyValueInput.className = 'rule-copy-val';
                 copyValueInput.value = String(copyValue || '');
 
                 const remove = document.createElement('button');
@@ -893,8 +698,8 @@
                 row.children[0].appendChild(keyInput);
                 row.children[1].appendChild(operator);
                 row.children[2].appendChild(valueInput);
-                row.children[3].appendChild(copyValueInput);
-                row.children[4].appendChild(remove);
+                row.children[3].appendChild(remove);
+                row.appendChild(copyValueInput);
                 wrapper.appendChild(row);
 
                 const refreshRow = () => {
@@ -911,28 +716,21 @@
 
                 keyInput.addEventListener('input', () => {
                     refreshRow();
-                    setTrackingPresetPresentation('custom');
                 });
                 valueInput.addEventListener('input', () => {
                     if (operator.value === 'equals') copyValueInput.value = valueInput.value;
-                    const simpleInput = Array.from(document.querySelectorAll('[data-simple-param]')).find((input) => input.dataset.simpleParam === keyInput.value.trim());
-                    if (simpleInput) simpleInput.value = valueInput.value;
                     updateRulesQueryString();
-                    setTrackingPresetPresentation('custom');
                 });
                 operator.addEventListener('change', () => {
                     if (operator.value === 'exists') valueInput.value = '';
                     refreshRow();
-                    setTrackingPresetPresentation('custom');
                 });
                 copyValueInput.addEventListener('input', () => {
                     updateRulesQueryString();
-                    setTrackingPresetPresentation('custom');
                 });
                 remove.addEventListener('click', () => {
                     row.remove();
                     updateRulesQueryString();
-                    setTrackingPresetPresentation('custom');
                 });
                 refreshRow();
             }
@@ -941,9 +739,7 @@
                 const wrapper = document.getElementById('rules-wrapper');
                 wrapper.replaceChildren();
                 (RULE_TEMPLATES[type] || []).forEach((rule) => addNewRule(rule.key, rule.operator, rule.value, rule.copyValue));
-                syncSimpleParametersFromRules();
                 updateRulesQueryString();
-                setTrackingPresetPresentation(type);
             }
 
             function collectRules() {
@@ -987,15 +783,9 @@
                 const input = document.getElementById('rulesQueryString');
                 const button = document.getElementById('copyGeneratedParamsButton');
                 const status = document.getElementById('copyGeneratedParamsStatus');
-                const simpleParameters = document.getElementById('simpleMetaParameters');
-                const missingSimpleValue = simpleParameters && !simpleParameters.hidden
-                    && Array.from(simpleParameters.querySelectorAll('[data-simple-param]')).some((field) => !field.value.trim());
                 if (input) input.value = buildRulesQueryString();
-                if (button) button.disabled = !input?.value || missingSimpleValue;
-                if (status && missingSimpleValue) {
-                    status.className = 'text-muted';
-                    status.textContent = 'Điền đủ 4 giá trị để sao chép.';
-                } else if (status && !status.classList.contains('text-success')) {
+                if (button) button.disabled = !input?.value;
+                if (status && !status.classList.contains('text-success')) {
                     status.textContent = '';
                 }
             }
@@ -1091,7 +881,6 @@
                     document.getElementById('configPreview').innerText = `Rules: ${rules || 'Mặc định'} | Countries: ${countries}`;
                     document.getElementById('rules-wrapper').replaceChildren();
                     (cfg.rules || []).forEach(r => addNewRule(r.key, r.operator, r.value, r.copyValue));
-                    syncSimpleParametersFromRules();
                     const selectedCountries = cfg.filters?.countries || [];
                     const countrySelect = document.getElementById('countrySelect');
                     Array.from(countrySelect.options).forEach((option) => {
@@ -1099,7 +888,6 @@
                     });
                     if (window.jQuery && jQuery.fn.select2) jQuery(countrySelect).trigger('change');
                     updateRulesQueryString();
-                    setTrackingPresetPresentation('custom');
                 }).catch(() => document.getElementById('configPreview').innerText = 'Không tải được cấu hình');
             }
 
@@ -1121,13 +909,7 @@
                 document.querySelectorAll('[data-rule-template]').forEach((button) => {
                     button.addEventListener('click', () => addTemplate(button.dataset.ruleTemplate));
                 });
-                document.querySelectorAll('[data-simple-param]').forEach((input) => {
-                    input.addEventListener('input', () => syncSimpleParameterToRule(input));
-                });
-                document.getElementById('addRuleButton').addEventListener('click', () => {
-                    addNewRule();
-                    setTrackingPresetPresentation('custom');
-                });
+                document.getElementById('addRuleButton').addEventListener('click', () => addNewRule());
                 document.getElementById('createForm').addEventListener('submit', function (event) {
                     const type = document.getElementById('linkType').value;
                     if (!type) {

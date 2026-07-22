@@ -116,7 +116,7 @@
         </div>
       </div>
       <div class="col-lg-4">
-        <div class="card shadow-sm h-100">
+        <div class="card shadow-sm mb-3">
           <div class="card-header bg-white"><b data-help="Quốc gia được suy ra từ IP truy cập; kết quả có thể sai lệch với VPN hoặc proxy.">Top quốc gia</b></div>
           <div class="card-body p-0">
             <table class="table table-sm mb-0">
@@ -131,6 +131,19 @@
                     <td class="text-end"><%= c.hits %></td>
                     <td class="text-end"><%= c.redirects %></td>
                   </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card shadow-sm">
+          <div class="card-header bg-white"><b data-help="Thiết bị của các lượt đã chuyển hướng thành công, được suy ra từ User-Agent.">Thiết bị</b></div>
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <tbody>
+                <% if (!deviceStats || !deviceStats.length) { %><tr><td class="text-center text-muted py-3">Chưa có dữ liệu</td></tr><% } %>
+                <% deviceStats && deviceStats.forEach(row => { %>
+                  <tr><td><%= row.device_type || 'pc' %></td><td class="text-end fw-bold"><%= row.hits %></td></tr>
                 <% }) %>
               </tbody>
             </table>

@@ -1445,6 +1445,22 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
     [campId, start, end]
   );
 
+  const deviceStats = await db.query(
+    `
+        SELECT COALESCE(device_type, 'pc') AS device_type,
+               COUNT(*) AS hits
+        FROM traffic_logs
+        WHERE campaign_id=$1
+          AND created_at >= $2
+          AND created_at < $3
+          AND action='redirect'
+        GROUP BY COALESCE(device_type, 'pc')
+        ORDER BY hits DESC
+        LIMIT 10
+    `,
+    [campId, start, end]
+  );
+
   const logs = await db.query(
     `SELECT * FROM traffic_logs WHERE campaign_id=$1 AND created_at >= $2 AND created_at < $3 ORDER BY id DESC LIMIT 50`,
     [campId, start, end]
@@ -1499,6 +1515,7 @@ app.get("/campaigns/:id/report/v2", checkAuth, async (req, res) => {
     delta,
     growth,
     countryStats: countryStats.rows,
+    deviceStats: deviceStats.rows,
     preset,
     presetLabel: presetLabels[preset] || "Tùy chọn",
     bucketType,

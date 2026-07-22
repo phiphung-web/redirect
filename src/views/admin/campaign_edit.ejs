@@ -76,7 +76,7 @@
                 </div>
 
                 <label class="fw-bold mb-2" data-help="Mỗi rule kiểm tra một query parameter. Tồn tại chỉ yêu cầu có key; Bằng yêu cầu đúng cả key và giá trị.">Quy tắc Tham số (Rules)</label>
-                <div class="row g-2 px-3 mb-1 d-none d-md-flex small text-muted fw-semibold"><div class="col-md-3">Tên tham số</div><div class="col-md-2">Kiểm tra</div><div class="col-md-3">Giá trị cần khớp</div><div class="col-md-3">Giá trị URL Ads</div><div class="col-md-1"></div></div>
+                <div class="row g-2 px-3 mb-1 d-none d-md-flex small text-muted fw-semibold"><div class="col-md-4">Tên tham số</div><div class="col-md-3">Kiểm tra</div><div class="col-md-4">Giá trị cần khớp</div><div class="col-md-1"></div></div>
                 <div id="rules-wrapper" class="bg-light p-3 rounded border mb-3"></div>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="addNewRule()">+ Thêm điều kiện</button>
 
@@ -358,11 +358,11 @@
                 if (SYSTEM_RULE_KEYS.has(String(key).trim().toLowerCase())) return;
                 const row = $(`
                 <div class="row g-2 mb-2 rule-row align-items-center">
-                    <div class="col-md-3"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key"></div>
-                    <div class="col-md-2"><select class="form-select form-select-sm rule-op" onchange="toggleVal(this)"><option value="exists">Tồn tại</option><option value="equals">Bằng (=)</option></select></div>
-                    <div class="col-md-3"><input type="text" class="form-control form-control-sm rule-val" placeholder="Giá trị cần khớp"></div>
-                    <div class="col-md-3"><input type="text" class="form-control form-control-sm rule-copy-val" placeholder="Giá trị URL Ads"></div>
+                    <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key"></div>
+                    <div class="col-md-3"><select class="form-select form-select-sm rule-op" onchange="toggleVal(this)"><option value="exists">Tồn tại</option><option value="equals">Bằng (=)</option></select></div>
+                    <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-val" placeholder="Giá trị cần khớp"></div>
                     <div class="col-md-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove()">x</button></div>
+                    <input type="hidden" class="rule-copy-val">
                 </div>`);
                 row.find('.rule-key').val(key);
                 row.find('.rule-op').val(op === 'equals' ? 'equals' : 'exists');

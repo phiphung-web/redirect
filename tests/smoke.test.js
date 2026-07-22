@@ -167,19 +167,12 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
     path.join(__dirname, "../src/views/admin/domain_detail.ejs"),
     "utf8"
   );
-  assert.match(source, /data-rule-template="fb_custom"/);
-  assert.match(source, /key: 'utm_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}'/);
-  assert.match(source, /key: 'utm_source', operator: 'exists', value: '', copyValue: '{{site_source_name}}'/);
-  assert.match(source, /key: 'utm_source_platform', operator: 'exists', value: '', copyValue: 'meta'/);
-  assert.match(source, /key: 'utm_campaign', operator: 'exists', value: '', copyValue: '{{campaign.name}}'/);
-  assert.match(source, /key: 'campaign_id', operator: 'exists', value: '', copyValue: '{{campaign.id}}'/);
-  assert.match(source, /key: 'adset_id', operator: 'exists', value: '', copyValue: '{{adset.id}}'/);
-  assert.match(source, /key: 'ad_id', operator: 'exists', value: '', copyValue: '{{ad.id}}'/);
-  assert.match(source, /key: 'placement', operator: 'exists', value: '', copyValue: '{{placement}}'/);
+  assert.doesNotMatch(source, /data-rule-template=/);
   assert.match(source, /key: 'utm_source', operator: 'equals', value: ''/);
   assert.match(source, /key: 'utm_medium', operator: 'equals', value: ''/);
   assert.match(source, /key: 'utm_campaign', operator: 'equals', value: ''/);
   assert.match(source, /key: 'utm_content', operator: 'equals', value: ''/);
+  assert.doesNotMatch(source, /key: 'utm_id'|key: 'campaign_id'|key: 'gclid'|key: 'ttclid'/);
   assert.doesNotMatch(source, /value: '(?:kalite|sds|dsd)'/);
   assert.match(source, /valueInput\.required = operator\.value === 'equals'/);
   assert.match(source, /COPY_EXCLUDED_RULE_KEYS = new Set\(\['fbclid', 'fbcid'\]\)/);
@@ -190,17 +183,13 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
   assert.match(source, /data-link-type="conditional"/);
   assert.match(source, /data-link-type="delayed"/);
   assert.match(source, /form\.action = isConditional \? '\/campaigns\/create' : '\/short-links\/create'/);
-  assert.match(source, /Facebook Ads — 4 tham số/);
-  assert.match(source, /data-simple-param="utm_source"/);
-  assert.match(source, /data-simple-param="utm_medium"/);
-  assert.match(source, /data-simple-param="utm_campaign"/);
-  assert.match(source, /data-simple-param="utm_content"/);
-  assert.match(source, /Cài đặt nâng cao/);
-  assert.match(source, /class="collapse" id="advancedConditionalSettings"/);
+  assert.doesNotMatch(source, /data-simple-param|advancedConditionalSettings/);
   assert.match(source, /if \(isConditional && !document\.querySelector\('#rules-wrapper \.rule-row'\)\) \{\s*addTemplate\('fb_custom'\)/);
   assert.match(source, /return \[\{ key: 'fbclid', operator: 'exists', value: '' \}, \.\.\.configurableRules\]/);
   assert.match(source, /row\.classList\.toggle\('d-none', isExcluded\)/);
   assert.doesNotMatch(source, /fb_custom: \[\s*\{ key: 'fbclid'/);
+  assert.match(source, /copyValueInput\.type = 'hidden'/);
+  assert.doesNotMatch(source, /copyValueInput\.placeholder|Giá trị URL Ads/);
   assert.match(source, /id="copyGeneratedParamsButton"/);
   assert.match(source, /id="copyGeneratedParamsStatus"/);
   assert.match(source, /Đã sao chép — dán vào mục Thông số URL của quảng cáo/);
@@ -226,6 +215,8 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
   assert.match(editSource, /SYSTEM_RULE_KEYS = new Set\(\['fbclid', 'fbcid'\]\)/);
   assert.match(editSource, /if \(SYSTEM_RULE_KEYS\.has\(String\(key\)\.trim\(\)\.toLowerCase\(\)\)\) return/);
   assert.match(editSource, /const rules = \[\{ key: 'fbclid', operator: 'exists', value: '' \}\]/);
+  assert.match(editSource, /type="hidden" class="rule-copy-val"/);
+  assert.doesNotMatch(editSource, /Giá trị URL Ads/);
   assert.match(source, /\/images\/meta-url-parameters-guide\.svg/);
   assert.match(source, /Dán chuỗi ở đâu\?/);
 });
@@ -252,6 +243,10 @@ test("admin analytics separate successful link traffic from raw safe-page reques
     path.join(__dirname, "../src/views/admin/domain_detail.ejs"),
     "utf8"
   );
+  const campaignReportSource = fs.readFileSync(
+    path.join(__dirname, "../src/views/admin/report_v2.ejs"),
+    "utf8"
+  );
 
   assert.match(serverSource, /action IN \('redirect', 'short_redirect_confirmed'\)/);
   assert.match(serverSource, /action LIKE 'safe_page%'/);
@@ -261,6 +256,9 @@ test("admin analytics separate successful link traffic from raw safe-page reques
   assert.match(domainSource, /log_redirects/);
   assert.match(domainSource, /confirmed_redirects/);
   assert.match(domainSource, /opened_count/);
+  assert.match(serverSource, /SELECT COALESCE\(device_type, 'pc'\) AS device_type,[\s\S]*AND action='redirect'/);
+  assert.match(serverSource, /deviceStats: deviceStats\.rows/);
+  assert.match(campaignReportSource, /deviceStats && deviceStats\.forEach/);
 });
 
 test("contextual help is available across the admin product", () => {

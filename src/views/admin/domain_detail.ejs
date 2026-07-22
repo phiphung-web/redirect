@@ -708,11 +708,8 @@
                     valueInput.placeholder = 'Không cần giá trị';
                     copyValueInput.value = '';
                     copyValueInput.disabled = true;
-                    remove.className = 'btn btn-sm text-muted';
-                    remove.disabled = true;
-                    remove.innerHTML = '<i class="fas fa-lock"></i>';
-                    remove.setAttribute('aria-label', 'Rule hệ thống cố định');
-                    remove.title = 'Rule hệ thống cố định';
+                    remove.setAttribute('aria-label', 'Xóa rule fbclid');
+                    remove.title = 'Xóa kiểm tra fbclid';
                 }
 
                 row.children[0].appendChild(keyInput);
@@ -770,7 +767,10 @@
                 const configurableRules = Array.from(document.querySelectorAll('#rules-wrapper .rule-row')).flatMap((row) => {
                     const key = row.querySelector('.rule-key').value.trim();
                     if (!key) return [];
-                    if (COPY_EXCLUDED_RULE_KEYS.has(key.toLowerCase())) return [];
+                    if (key.toLowerCase() === 'fbclid') {
+                        return [{ key: 'fbclid', operator: 'exists', value: '' }];
+                    }
+                    if (key.toLowerCase() === 'fbcid') return [];
                     const operator = row.querySelector('.rule-op').value;
                     const copyValue = operator === 'exists'
                         ? row.querySelector('.rule-copy-val').value.trim()
@@ -782,7 +782,7 @@
                         ...(copyValue ? { copyValue } : {})
                     }];
                 });
-                return [{ key: 'fbclid', operator: 'exists', value: '' }, ...configurableRules];
+                return configurableRules;
             }
 
             function encodeUrlParameterValue(value) {

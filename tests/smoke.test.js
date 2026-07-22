@@ -185,12 +185,14 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
   assert.match(source, /form\.action = isConditional \? '\/campaigns\/create' : '\/short-links\/create'/);
   assert.doesNotMatch(source, /data-simple-param|advancedConditionalSettings/);
   assert.match(source, /if \(isConditional && !document\.querySelector\('#rules-wrapper \.rule-row'\)\) \{\s*addTemplate\('fb_custom'\)/);
-  assert.match(source, /return \[\{ key: 'fbclid', operator: 'exists', value: '' \}, \.\.\.configurableRules\]/);
+  assert.match(source, /if \(key\.toLowerCase\(\) === 'fbclid'\) \{\s*return \[\{ key: 'fbclid', operator: 'exists', value: '' \}\]/);
+  assert.match(source, /return configurableRules/);
   assert.match(source, /fb_custom: \[\s*\{ key: 'fbclid', operator: 'exists', value: '' \}/);
   assert.match(source, /row\.dataset\.systemRule = isSystemRule \? 'true' : 'false'/);
   assert.match(source, /keyInput\.readOnly = true/);
   assert.match(source, /operator\.disabled = true/);
-  assert.match(source, /remove\.disabled = true/);
+  assert.match(source, /remove\.title = 'Xóa kiểm tra fbclid'/);
+  assert.doesNotMatch(source, /remove\.disabled = true/);
   assert.doesNotMatch(source, /row\.classList\.toggle\('d-none'/);
   assert.match(source, /copyValueInput\.type = 'hidden'/);
   assert.doesNotMatch(source, /copyValueInput\.placeholder|Giá trị URL Ads/);
@@ -217,13 +219,13 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
     "utf8"
   );
   assert.match(editSource, /SYSTEM_RULE_KEYS = new Set\(\['fbclid', 'fbcid'\]\)/);
-  assert.match(editSource, /addNewRule\('fbclid', 'exists', '', ''\)/);
-  assert.match(editSource, /\.filter\(r => !SYSTEM_RULE_KEYS\.has\(String\(r\.key \|\| ''\)\.trim\(\)\.toLowerCase\(\)\)\)/);
+  assert.match(editSource, /oldRules\.forEach\(r => addNewRule\(r\.key, r\.operator, r\.value, r\.copyValue\)\)/);
   assert.match(editSource, /row\.attr\('data-system-rule', 'true'\)/);
   assert.match(editSource, /\.prop\('readonly', true\)/);
   assert.match(editSource, /\.val\('exists'\)\.prop\('disabled', true\)/);
-  assert.match(editSource, /Rule hệ thống cố định/);
-  assert.match(editSource, /const rules = \[\{ key: 'fbclid', operator: 'exists', value: '' \}\]/);
+  assert.match(editSource, /Xóa kiểm tra fbclid/);
+  assert.match(editSource, /const rules = \[\]/);
+  assert.match(editSource, /if \(normalizedKey === 'fbclid'\) \{\s*rules\.push\(\{ key: 'fbclid', operator: 'exists', value: '' \}\)/);
   assert.match(editSource, /type="hidden" class="rule-copy-val"/);
   assert.doesNotMatch(editSource, /Giá trị URL Ads/);
   assert.match(source, /\/images\/meta-url-parameters-guide\.svg/);

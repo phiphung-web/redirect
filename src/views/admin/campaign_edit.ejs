@@ -351,10 +351,7 @@
                     select.append(new Option(`${name} (${code})`, code));
                 }
                 select.select2().val(oldCountryFilter).trigger('change');
-                addNewRule('fbclid', 'exists', '', '');
-                oldRules
-                    .filter(r => !SYSTEM_RULE_KEYS.has(String(r.key || '').trim().toLowerCase()))
-                    .forEach(r => addNewRule(r.key, r.operator, r.value, r.copyValue));
+                oldRules.forEach(r => addNewRule(r.key, r.operator, r.value, r.copyValue));
             });
 
             function addNewRule(key = '', op = 'exists', val = '', copyValue = '') {
@@ -377,7 +374,7 @@
                     row.find('.rule-op').val('exists').prop('disabled', true);
                     row.find('.rule-val').val('').prop('disabled', true).prop('required', false).attr('placeholder', 'Không cần giá trị');
                     row.find('.rule-copy-val').val('').prop('disabled', true);
-                    row.find('button').prop('disabled', true).attr('title', 'Rule hệ thống cố định').html('<i class="fas fa-lock"></i>');
+                    row.find('button').attr('title', 'Xóa kiểm tra fbclid');
                 }
                 $('#rules-wrapper').append(row);
                 toggleVal(row.find('.rule-op')[0]);
@@ -404,13 +401,18 @@
             }
 
             function collectRules() {
-                const rules = [{ key: 'fbclid', operator: 'exists', value: '' }];
+                const rules = [];
                 $('.rule-row').each(function () {
                     let k = $(this).find('.rule-key').val();
                     let o = $(this).find('.rule-op').val();
                     let v = $(this).find('.rule-val').val();
                     let copyValue = o === 'exists' ? $(this).find('.rule-copy-val').val() : '';
-                    if (k && !SYSTEM_RULE_KEYS.has(String(k).trim().toLowerCase())) rules.push({ key: k, operator: o, value: v, ...(copyValue ? { copyValue } : {}) });
+                    const normalizedKey = String(k || '').trim().toLowerCase();
+                    if (normalizedKey === 'fbclid') {
+                        rules.push({ key: 'fbclid', operator: 'exists', value: '' });
+                    } else if (k && normalizedKey !== 'fbcid') {
+                        rules.push({ key: k, operator: o, value: v, ...(copyValue ? { copyValue } : {}) });
+                    }
                 });
                 return rules;
             }

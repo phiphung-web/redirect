@@ -312,7 +312,7 @@ app.get("/redirect", checkAuth, async (req, res) => {
              (SELECT COUNT(*) FROM short_links s WHERE s.domain_id = d.id AND s.is_active) AS link_active,
              (SELECT COUNT(*) FROM traffic_logs tl
               WHERE tl.domain_id = d.id
-                AND tl.action IN ('redirect', 'short_redirect')) AS traffic_count
+                AND tl.action IN ('redirect', 'short_redirect_confirmed')) AS traffic_count
       FROM domains d
       LEFT JOIN users cu ON d.user_id = cu.id
       LEFT JOIN users uu ON d.updated_by = uu.id
@@ -324,7 +324,7 @@ app.get("/redirect", checkAuth, async (req, res) => {
                (SELECT COUNT(*) FROM campaigns) +
                (SELECT COUNT(*) FROM short_links) as total_links,
                (SELECT COUNT(*) FROM traffic_logs
-                WHERE action IN ('redirect', 'short_redirect')) as total_traffic,
+                 WHERE action IN ('redirect', 'short_redirect_confirmed')) as total_traffic,
                (SELECT COUNT(*) FROM traffic_logs
                 WHERE action LIKE 'safe_page%') as total_safe_views,
                (SELECT COUNT(*) FROM traffic_logs) as total_raw_requests
@@ -553,7 +553,7 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
   const stats = await db.query(
     `
       SELECT date_trunc($4::text, created_at) AS bucket,
-             COUNT(*) FILTER (WHERE action='short_redirect') AS clicks
+             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed
       FROM traffic_logs
       WHERE short_link_id=$1
         AND created_at >= $2
@@ -565,8 +565,14 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
   );
   const totals = await db.query(
     `
-      SELECT COUNT(*) FILTER (WHERE action='short_redirect') AS clicks,
-             COUNT(DISTINCT ip) AS unique_ips
+      SELECT COUNT(*) FILTER (
+               WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+             ) AS opened,
+             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed,
+             COUNT(*) FILTER (WHERE action='short_link_open') AS unconfirmed,
+             COUNT(DISTINCT ip) FILTER (
+               WHERE action='short_redirect_confirmed'
+             ) AS unique_ips
       FROM traffic_logs
       WHERE short_link_id=$1
         AND created_at >= $2
@@ -576,8 +582,14 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
   );
   const prevTotals = await db.query(
     `
-      SELECT COUNT(*) FILTER (WHERE action='short_redirect') AS clicks,
-             COUNT(DISTINCT ip) AS unique_ips
+      SELECT COUNT(*) FILTER (
+               WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+             ) AS opened,
+             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed,
+             COUNT(*) FILTER (WHERE action='short_link_open') AS unconfirmed,
+             COUNT(DISTINCT ip) FILTER (
+               WHERE action='short_redirect_confirmed'
+             ) AS unique_ips
       FROM traffic_logs
       WHERE short_link_id=$1
         AND created_at >= $2
@@ -587,8 +599,15 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
   );
   const lifetimeTotals = await db.query(
     `
-      SELECT COUNT(*) FILTER (WHERE action='short_redirect') AS clicks,
-             COUNT(DISTINCT ip) AS unique_ips
+      SELECT COUNT(*) FILTER (
+               WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+             ) AS opened,
+             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed,
+             COUNT(*) FILTER (WHERE action='short_link_open') AS unconfirmed,
+             COUNT(DISTINCT ip) FILTER (
+               WHERE action='short_redirect_confirmed'
+             ) AS unique_ips,
+             COUNT(*) FILTER (WHERE action='short_redirect') AS legacy_unverified
       FROM traffic_logs
       WHERE short_link_id=$1
     `,
@@ -601,6 +620,7 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
       WHERE short_link_id=$1
         AND created_at >= $2
         AND created_at < $3
+        AND action='short_redirect_confirmed'
       GROUP BY country
       ORDER BY hits DESC
       LIMIT 10
@@ -614,6 +634,7 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
       WHERE short_link_id=$1
         AND created_at >= $2
         AND created_at < $3
+        AND action='short_redirect_confirmed'
       GROUP BY COALESCE(device_type, 'pc')
       ORDER BY hits DESC
       LIMIT 10
@@ -633,17 +654,26 @@ app.get("/short-links/:id/report", checkAuth, async (req, res) => {
     [shortLinkId, start, end]
   );
 
-  const summary = totals.rows[0] || { clicks: 0, unique_ips: 0 };
-  summary.clicks = Number(summary.clicks || 0);
+  const summary = totals.rows[0] || {};
+  summary.opened = Number(summary.opened || 0);
+  summary.confirmed = Number(summary.confirmed || 0);
+  summary.unconfirmed = Number(summary.unconfirmed || 0);
   summary.unique_ips = Number(summary.unique_ips || 0);
-  const previous = prevTotals.rows[0] || { clicks: 0, unique_ips: 0 };
-  previous.clicks = Number(previous.clicks || 0);
+  const previous = prevTotals.rows[0] || {};
+  previous.opened = Number(previous.opened || 0);
+  previous.confirmed = Number(previous.confirmed || 0);
+  previous.unconfirmed = Number(previous.unconfirmed || 0);
   previous.unique_ips = Number(previous.unique_ips || 0);
-  const lifetime = lifetimeTotals.rows[0] || { clicks: 0, unique_ips: 0 };
-  lifetime.clicks = Number(lifetime.clicks || 0);
+  const lifetime = lifetimeTotals.rows[0] || {};
+  lifetime.opened = Number(lifetime.opened || 0);
+  lifetime.confirmed = Number(lifetime.confirmed || 0);
+  lifetime.unconfirmed = Number(lifetime.unconfirmed || 0);
   lifetime.unique_ips = Number(lifetime.unique_ips || 0);
+  lifetime.legacy_unverified = Number(lifetime.legacy_unverified || 0);
   const delta = {
-    clicks: summary.clicks - previous.clicks,
+    opened: summary.opened - previous.opened,
+    confirmed: summary.confirmed - previous.confirmed,
+    unconfirmed: summary.unconfirmed - previous.unconfirmed,
     unique_ips: summary.unique_ips - previous.unique_ips,
   };
 
@@ -722,8 +752,14 @@ app.get("/short-links/:id/report/export", checkAuth, async (req, res) => {
   const data = await db.query(
     `
       SELECT date(created_at) AS day,
-             COUNT(*) FILTER (WHERE action='short_redirect') AS clicks,
-             COUNT(DISTINCT ip) AS unique_ips
+             COUNT(*) FILTER (
+               WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+             ) AS opened,
+             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed,
+             COUNT(*) FILTER (WHERE action='short_link_open') AS unconfirmed,
+             COUNT(DISTINCT ip) FILTER (
+               WHERE action='short_redirect_confirmed'
+             ) AS unique_ips
       FROM traffic_logs
       WHERE short_link_id=$1
         AND created_at >= $2
@@ -734,10 +770,12 @@ app.get("/short-links/:id/report/export", checkAuth, async (req, res) => {
     [shortLinkId, start, end]
   );
 
-  const rows = ["day,clicks,unique_ips"];
+  const rows = ["day,opened,confirmed,unconfirmed,unique_ips"];
   data.rows.forEach((row) => {
     const day = new Date(row.day).toISOString().slice(0, 10);
-    rows.push(`${day},${Number(row.clicks || 0)},${Number(row.unique_ips || 0)}`);
+    rows.push(
+      `${day},${Number(row.opened || 0)},${Number(row.confirmed || 0)},${Number(row.unconfirmed || 0)},${Number(row.unique_ips || 0)}`
+    );
   });
 
   res.setHeader("Content-Type", "text/csv");
@@ -946,7 +984,10 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     `
       SELECT s.*, cu.username AS created_by_name, uu.username AS updated_by_name,
              (SELECT COUNT(*) FROM traffic_logs tl
-              WHERE tl.short_link_id=s.id AND tl.action='short_redirect') AS log_clicks
+               WHERE tl.short_link_id=s.id AND tl.action='short_redirect_confirmed') AS confirmed_redirects,
+             (SELECT COUNT(*) FROM traffic_logs tl
+               WHERE tl.short_link_id=s.id
+                 AND tl.action IN ('short_link_open', 'short_redirect_confirmed')) AS opened_count
       FROM short_links s
       LEFT JOIN users cu ON s.user_id = cu.id
       LEFT JOIN users uu ON s.updated_by = uu.id
@@ -971,7 +1012,7 @@ app.get("/domains/:id", checkAuth, async (req, res) => {
     `
       SELECT
         COUNT(*) FILTER (
-          WHERE action IN ('redirect', 'short_redirect')
+          WHERE action IN ('redirect', 'short_redirect_confirmed')
         ) AS link_traffic,
         COUNT(*) FILTER (WHERE action LIKE 'safe_page%') AS safe_page_views,
         COUNT(*) FILTER (

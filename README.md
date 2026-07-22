@@ -14,6 +14,16 @@ Production-oriented redirect and campaign management for a single organization. 
 - users, roles and admin audit logs;
 - health endpoints, database backups and raw-log retention.
 
+## Delayed-link reporting
+
+Delayed links keep separate lifecycle metrics:
+
+- `short_link_open`: the Safe Page loaded;
+- `short_redirect_confirmed`: the browser stayed until the configured delay and sent a signed, one-time confirmation immediately before navigation;
+- an open that remains unconfirmed is reported separately and is not counted as a redirect.
+
+The confirmation proves that navigation was initiated, not that a cross-origin destination finished loading. End-to-end destination confirmation requires a pixel or callback installed on the destination site. Historical `short_redirect` rows predate this protocol and are displayed as unverified legacy data.
+
 ## Automatic domain SSL
 
 When automatic SSL is enabled, adding a domain creates a background certificate
@@ -50,7 +60,7 @@ configuration test and reload.
 
 ## Performance model
 
-The redirect hot path uses short-lived in-process caches for domain, campaign and short-link configuration. Traffic logs and counters are buffered in production so redirect responses are not blocked by reporting writes.
+The redirect hot path uses short-lived in-process caches for domain, campaign and short-link configuration. Most traffic logs and counters are buffered in production so redirect responses are not blocked by reporting writes. Delayed-link opens are persisted immediately because their row is atomically promoted when the browser confirms navigation.
 
 Default production profile for a 6-vCPU / 12-GB VPS:
 

@@ -53,12 +53,13 @@
             <th>Quốc gia</th>
             <th>Thiết bị / OS</th>
             <th>Browser</th>
+            <th>Trạng thái</th>
             <th>Referer</th>
             <th>Request URL</th>
           </tr>
         </thead>
         <tbody>
-          <% if (!logs.length) { %><tr><td colspan="7" class="text-center text-muted">Không có log</td></tr><% } %>
+          <% if (!logs.length) { %><tr><td colspan="8" class="text-center text-muted">Không có log</td></tr><% } %>
           <% logs.forEach(log => { const meta = log.meta || {}; %>
             <tr>
               <td><%= new Date(log.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
@@ -66,6 +67,11 @@
               <td><span class="badge bg-info text-dark"><%= log.country || '-' %></span></td>
               <td><%= log.device_type || 'pc' %> / <%= log.os_name || 'Unknown' %></td>
               <td><%= log.browser_name || 'Unknown' %></td>
+              <td>
+                <% if (log.action === 'short_redirect_confirmed') { %><span class="badge bg-success">Đã chuyển</span>
+                <% } else if (log.action === 'short_link_open') { %><span class="badge bg-warning text-dark">Chưa xác nhận</span>
+                <% } else { %><span class="badge bg-secondary">Dữ liệu cũ</span><% } %>
+              </td>
               <td class="text-break small" style="max-width:240px;"><%= meta.ref || log.referer || '-' %></td>
               <td class="text-break small" style="max-width:320px;"><%= meta.url || '-' %></td>
             </tr>

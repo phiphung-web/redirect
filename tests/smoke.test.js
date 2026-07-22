@@ -198,13 +198,14 @@ test("admin analytics separate successful link traffic from raw safe-page reques
     "utf8"
   );
 
-  assert.match(serverSource, /action IN \('redirect', 'short_redirect'\)/);
+  assert.match(serverSource, /action IN \('redirect', 'short_redirect_confirmed'\)/);
   assert.match(serverSource, /action LIKE 'safe_page%'/);
   assert.match(dashboardSource, /Lượt qua link/);
   assert.match(dashboardSource, /Không tính Safe Page\/probe/);
   assert.match(domainSource, /direct_or_unmatched/);
   assert.match(domainSource, /log_redirects/);
-  assert.match(domainSource, /log_clicks/);
+  assert.match(domainSource, /confirmed_redirects/);
+  assert.match(domainSource, /opened_count/);
 });
 
 test("contextual help is available across the admin product", () => {
@@ -395,7 +396,7 @@ test("exists rules check only the key while equals rules check the value", async
   assert.match(wrongValue.text, /Repair and Maintenance Services/);
 });
 
-test("ads gives legacy short links the default 3-second wait", async () => {
+test("ads records a short-link open without counting a redirect before the timer", async () => {
   let clickUpdated = false;
   let trafficLogged = false;
 
@@ -436,7 +437,7 @@ test("ads gives legacy short links the default 3-second wait", async () => {
     }
     if (sql.includes("INSERT INTO traffic_logs")) {
       trafficLogged = true;
-      assert.equal(params[8], "short_redirect");
+      assert.equal(params[8], "short_link_open");
       assert.equal(params[12], 12);
       return { rowCount: 1, rows: [] };
     }
@@ -451,11 +452,89 @@ test("ads gives legacy short links the default 3-second wait", async () => {
   assert.equal(res.status, 200);
   assert.match(res.text, /Repair and Maintenance Services/);
   assert.match(res.text, /const delayMs = 3000/);
+  assert.match(res.text, /navigator\.sendBeacon/);
+  assert.match(res.text, /\/s\/spring2026\/confirm/);
   assert.match(res.text, /https:\/\/target\.test\/promo\?utm_source=email/);
   assert.doesNotMatch(res.text, /countdown|Continue now/i);
-  assert.equal(clickUpdated, true);
+  assert.equal(clickUpdated, false);
   assert.equal(trafficLogged, true);
   assert.ok(res.headers["x-request-id"]);
+});
+
+test("ads counts a delayed redirect only after a signed browser confirmation", async () => {
+  let visitId = null;
+  let confirmed = false;
+  let clickUpdates = 0;
+
+  db.query = async (sql, params) => {
+    if (sql.includes("FROM domains WHERE domain_url")) {
+      return {
+        rowCount: 1,
+        rows: [{ id: 8, domain_url: "confirm.example", status: "active" }],
+      };
+    }
+    if (sql.includes("FROM short_links")) {
+      return {
+        rowCount: 1,
+        rows: [{
+          id: 33,
+          domain_id: 8,
+          code: "confirm1",
+          is_active: true,
+          redirect_delay_seconds: 1,
+          target_url: "https://target.test/confirmed",
+        }],
+      };
+    }
+    if (sql.includes("INSERT INTO traffic_logs")) {
+      assert.equal(params[8], "short_link_open");
+      visitId = params[11];
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes("SET action='short_redirect_confirmed'")) {
+      assert.deepEqual(params, [visitId, 33, 8]);
+      if (confirmed) return { rowCount: 0, rows: [] };
+      confirmed = true;
+      return { rowCount: 1, rows: [{ id: 1 }] };
+    }
+    if (sql.includes("UPDATE short_links SET clicks")) {
+      clickUpdates += 1;
+      return { rowCount: 1, rows: [] };
+    }
+    throw new Error(`Unhandled query in confirmed short-link test: ${sql}`);
+  };
+
+  const open = await request(adsApp)
+    .get("/s/confirm1")
+    .set("Host", "confirm.example")
+    .set("User-Agent", "Mozilla/5.0");
+  assert.equal(open.status, 200);
+  assert.equal(clickUpdates, 0);
+
+  const tokenMatch = open.text.match(/const confirmToken = ("[^"]+")/);
+  assert.ok(tokenMatch, "missing signed redirect confirmation token");
+  const token = JSON.parse(tokenMatch[1]);
+  const payload = JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString("utf8"));
+  const realDateNow = Date.now;
+  Date.now = () => payload.notBefore;
+  try {
+    const confirm = await request(adsApp)
+      .post("/s/confirm1/confirm")
+      .set("Host", "confirm.example")
+      .send({ token });
+    assert.equal(confirm.status, 204);
+
+    const duplicate = await request(adsApp)
+      .post("/s/confirm1/confirm")
+      .set("Host", "confirm.example")
+      .send({ token });
+    assert.equal(duplicate.status, 204);
+  } finally {
+    Date.now = realDateNow;
+  }
+
+  assert.equal(confirmed, true);
+  assert.equal(clickUpdates, 1);
 });
 
 test("ads keeps the domain safe page visible and redirects silently", async () => {

@@ -106,6 +106,8 @@ const logTraffic = (data) => {
   }
 };
 
+const logTrafficNow = (data) => persistRows([normalizeTraffic(data)]);
+
 if (performance.trafficBufferEnabled) {
   const timer = setInterval(flushTrafficLogs, performance.trafficFlushMs);
   timer.unref();
@@ -113,6 +115,7 @@ if (performance.trafficBufferEnabled) {
 
 module.exports = {
   logTraffic,
+  logTrafficNow,
   flushTrafficLogs,
   getTrafficBufferStats: () => ({
     queued: queue.length,

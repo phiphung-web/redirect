@@ -58,31 +58,49 @@
       </div>
     </div>
 
+    <div class="alert alert-info py-2 small">
+      <i class="fa-solid fa-circle-info me-1"></i>
+      <strong>Đã kích hoạt chuyển hướng</strong> chỉ được ghi khi trình duyệt ở lại hết thời gian chờ và gửi xác nhận ngay trước khi điều hướng. Để biết trang đích đã tải hoàn tất cần cài pixel/callback trên trang đích.
+    </div>
+
+    <% if (lifetime.legacy_unverified > 0) { %>
+      <div class="alert alert-secondary py-2 small"><%= lifetime.legacy_unverified %> lượt dữ liệu cũ được ghi trước cơ chế xác nhận, không tính vào số đã chuyển hướng.</div>
+    <% } %>
+
     <div class="row g-3">
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="card shadow-sm h-100">
           <div class="card-body">
-            <div class="text-muted small">Click</div>
-            <div class="display-6 fw-bold text-success"><%= summary.clicks || 0 %></div>
-            <div class="text-muted small">So với kỳ trước: <%= delta.clicks >= 0 ? '+' : '' %><%= delta.clicks %></div>
+            <div class="text-muted small" data-help="Số lần Safe Page của link được tải. Người dùng có thể đóng trang trước khi chuyển hướng.">Mở link</div>
+            <div class="display-6 fw-bold"><%= summary.opened || 0 %></div>
+            <div class="text-muted small">So với kỳ trước: <%= delta.opened >= 0 ? '+' : '' %><%= delta.opened %></div>
           </div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="card shadow-sm h-100">
           <div class="card-body">
-            <div class="text-muted small">IP duy nhất</div>
+            <div class="text-muted small" data-help="Trình duyệt đã gửi xác nhận sau khi hết thời gian chờ, ngay trước lệnh điều hướng.">Đã kích hoạt chuyển hướng</div>
+            <div class="display-6 fw-bold text-success"><%= summary.confirmed || 0 %></div>
+            <div class="text-muted small">Toàn thời gian: <%= lifetime.confirmed || 0 %></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <div class="text-muted small" data-help="Đã mở link nhưng chưa nhận được xác nhận chuyển hướng; có thể đã thoát sớm, tắt JavaScript hoặc mất mạng.">Chưa xác nhận</div>
+            <div class="display-6 fw-bold text-warning"><%= summary.unconfirmed || 0 %></div>
+            <div class="text-muted small">Toàn thời gian: <%= lifetime.unconfirmed || 0 %></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <div class="text-muted small">IP đã chuyển hướng</div>
             <div class="display-6 fw-bold"><%= summary.unique_ips || 0 %></div>
             <div class="text-muted small">Kỳ trước: <%= previous.unique_ips || 0 %></div>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <div class="text-muted small" data-help="Tính trực tiếp từ log short_redirect, cùng nguồn với bảng log chi tiết.">Tổng lượt qua link (toàn thời gian)</div>
-            <div class="display-6 fw-bold"><%= lifetime.clicks || 0 %></div>
-            <div class="text-muted small"><%= lifetime.unique_ips || 0 %> IP duy nhất</div>
           </div>
         </div>
       </div>
@@ -92,7 +110,7 @@
       <div class="col-lg-8">
         <div class="card shadow-sm h-100">
           <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <b><i class="fa-solid fa-chart-line me-2"></i>Click theo thời gian</b>
+            <b><i class="fa-solid fa-chart-line me-2"></i>Chuyển hướng đã xác nhận theo thời gian</b>
             <span class="text-muted small"><%= presetLabel %></span>
           </div>
           <div class="card-body">
@@ -102,7 +120,7 @@
       </div>
       <div class="col-lg-4">
         <div class="card shadow-sm mb-3">
-          <div class="card-header bg-white"><b data-help="Phân bổ click theo quốc gia suy ra từ địa chỉ IP.">Top quốc gia</b></div>
+          <div class="card-header bg-white"><b data-help="Phân bổ các lượt chuyển hướng đã xác nhận theo quốc gia suy ra từ địa chỉ IP.">Top quốc gia</b></div>
           <div class="table-responsive">
             <table class="table table-sm mb-0">
               <tbody>
@@ -144,11 +162,12 @@
               <th>Quốc gia</th>
               <th>Thiết bị / OS</th>
               <th>Browser</th>
+              <th>Trạng thái</th>
               <th>Request URL</th>
             </tr>
           </thead>
           <tbody>
-            <% if (!logs.length) { %><tr><td colspan="6" class="text-center text-muted">Không có log</td></tr><% } %>
+            <% if (!logs.length) { %><tr><td colspan="7" class="text-center text-muted">Không có log</td></tr><% } %>
             <% logs.forEach(log => { const meta = log.meta || {}; %>
               <tr>
                 <td><%= new Date(log.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
@@ -156,6 +175,11 @@
                 <td><span class="badge bg-info text-dark"><%= log.country || '-' %></span></td>
                 <td><%= log.device_type || 'pc' %> / <%= log.os_name || 'Unknown' %></td>
                 <td><%= log.browser_name || 'Unknown' %></td>
+                <td>
+                  <% if (log.action === 'short_redirect_confirmed') { %><span class="badge bg-success">Đã chuyển</span>
+                  <% } else if (log.action === 'short_link_open') { %><span class="badge bg-warning text-dark">Chưa xác nhận</span>
+                  <% } else { %><span class="badge bg-secondary">Dữ liệu cũ</span><% } %>
+                </td>
                 <td class="text-break small"><%= meta.url || '-' %></td>
               </tr>
             <% }) %>
@@ -202,7 +226,7 @@
         data: {
           labels: statsData.map(row => formatLabel(row.bucket)),
           datasets: [
-            { label: 'Click', data: statsData.map(row => Number(row.clicks || 0)), borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.12)', tension: 0.3 }
+            { label: 'Đã kích hoạt chuyển hướng', data: statsData.map(row => Number(row.confirmed || 0)), borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.12)', tension: 0.3 }
           ]
         },
         options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }

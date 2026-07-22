@@ -116,7 +116,7 @@
             </div>
 
             <div class="row g-3 mb-4">
-                <div class="col-md-4"><div class="card h-100 shadow-sm"><div class="card-body"><div class="text-muted small" data-help="Số request đã đi qua một link hợp lệ và chuyển hướng thành công. Đây là KPI traffic chính.">Lượt qua link</div><div class="h3 mb-0 text-success"><%= Number(domainTrafficStats?.link_traffic || 0).toLocaleString('vi-VN') %></div></div></div></div>
+                <div class="col-md-4"><div class="card h-100 shadow-sm"><div class="card-body"><div class="text-muted small" data-help="Link điều kiện được tính khi server trả redirect. Link chờ chỉ được tính sau xác nhận của trình duyệt khi hết thời gian chờ.">Lượt qua link</div><div class="h3 mb-0 text-success"><%= Number(domainTrafficStats?.link_traffic || 0).toLocaleString('vi-VN') %></div></div></div></div>
                 <div class="col-md-4"><div class="card h-100 shadow-sm"><div class="card-body"><div class="text-muted small" data-help="Lượt hệ thống hiển thị Safe Page do truy cập thẳng domain, link sai/tắt hoặc rule không đạt.">Lượt hiển thị Safe Page</div><div class="h3 mb-0"><%= Number(domainTrafficStats?.safe_page_views || 0).toLocaleString('vi-VN') %></div></div></div></div>
                 <div class="col-md-4"><div class="card h-100 shadow-sm"><div class="card-body"><div class="text-muted small" data-help="Request không gắn với campaign hoặc link tự chuyển, thường là mở thẳng domain, bot hoặc probe.">Truy cập thẳng/chưa khớp link</div><div class="h3 mb-0 text-secondary"><%= Number(domainTrafficStats?.direct_or_unmatched || 0).toLocaleString('vi-VN') %></div></div></div></div>
             </div>
@@ -280,7 +280,7 @@
                 <div class="table-responsive">
                     <table class="table table-hover mb-0 align-middle">
                         <thead class="table-light">
-                            <tr><th>Tên link</th><th>Link sử dụng</th><th>Thời gian chờ</th><th>Click</th><th>Trạng thái</th><th class="text-end">Hành động</th></tr>
+                            <tr><th>Tên link</th><th>Link sử dụng</th><th>Thời gian chờ</th><th data-help="Mở: Safe Page đã tải. Đã chuyển: trình duyệt ở lại đủ thời gian và gửi xác nhận ngay trước khi điều hướng.">Mở / Đã chuyển</th><th>Trạng thái</th><th class="text-end">Hành động</th></tr>
                         </thead>
                         <tbody>
                             <% if (!shortLinks.length) { %>
@@ -291,7 +291,7 @@
                                     <td><strong><%= link.title || link.code %></strong><small class="text-muted d-block text-truncate" style="max-width:230px"><%= link.target_url %></small></td>
                                     <td style="min-width:270px"><div class="input-group input-group-sm"><input type="text" class="form-control bg-white text-primary fw-bold" value="<%= link.full_url %>" readonly id="short-link-<%= link.id %>"><button type="button" class="btn btn-primary" onclick="copyLink('short-link-<%= link.id %>')"><i class="fas fa-copy"></i></button></div><small class="text-muted">/s/<%= link.code %></small></td>
                                     <td><span class="badge bg-warning text-dark"><%= link.redirect_delay_seconds || 3 %> giây</span></td>
-                                    <td><strong><%= Number(link.log_clicks || 0).toLocaleString('vi-VN') %></strong></td>
+                                    <td><strong><%= Number(link.opened_count || 0).toLocaleString('vi-VN') %></strong> / <strong class="text-success"><%= Number(link.confirmed_redirects || 0).toLocaleString('vi-VN') %></strong></td>
                                     <td>
                                         <form action="/short-links/toggle/<%= link.id %>" method="POST" class="d-inline">
                                             <input type="hidden" name="_csrf" value="<%= csrfToken %>">

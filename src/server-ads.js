@@ -3,12 +3,17 @@ require("dotenv").config({ quiet: true });
 const express = require("express");
 const helmet = require("helmet");
 const path = require("path");
+const crypto = require("crypto");
 const geoip = require("geoip-lite");
 const UAParser = require("ua-parser-js");
-const { ports, trustProxy, product } = require("./config/app");
+const { ports, trustProxy, product, session } = require("./config/app");
 const db = require("./config/db");
 const { requestContext } = require("./middleware/request-context");
-const { logTraffic, flushTrafficLogs } = require("./services/logger");
+const {
+  logTraffic,
+  logTrafficNow,
+  flushTrafficLogs,
+} = require("./services/logger");
 const {
   domainCache,
   campaignCache,
@@ -26,6 +31,7 @@ const {
 
 const app = express();
 const PORT = ports.ads;
+const SHORT_CONFIRM_TTL_MS = 10 * 60 * 1000;
 
 app.disable("x-powered-by");
 app.set("trust proxy", trustProxy);
@@ -40,6 +46,50 @@ app.use(
     maxAge: "7d",
   })
 );
+
+const signShortRedirect = (payload) => {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", session.secret)
+    .update(encoded)
+    .digest("base64url");
+  return `${encoded}.${signature}`;
+};
+
+const verifyShortRedirect = (token) => {
+  const raw = String(token || "");
+  const [encoded, signature, extra] = raw.split(".");
+  if (!encoded || !signature || extra || raw.length > 2048) return null;
+  const expected = crypto
+    .createHmac("sha256", session.secret)
+    .update(encoded)
+    .digest();
+  let received;
+  try {
+    received = Buffer.from(signature, "base64url");
+  } catch (_) {
+    return null;
+  }
+  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    if (
+      !payload ||
+      !/^[0-9a-f-]{36}$/i.test(String(payload.visitId || "")) ||
+      !Number.isInteger(payload.shortLinkId) ||
+      !Number.isInteger(payload.domainId) ||
+      !Number.isFinite(payload.notBefore) ||
+      !Number.isFinite(payload.expiresAt)
+    ) {
+      return null;
+    }
+    return payload;
+  } catch (_) {
+    return null;
+  }
+};
 
 const normalizeQueryEntries = (query) =>
   Object.entries(query)
@@ -149,6 +199,53 @@ app.get("/healthz", async (req, res) => {
   }
 });
 
+app.post(
+  "/s/:code/confirm",
+  express.json({ limit: "2kb", type: ["application/json", "text/plain"] }),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const payload = verifyShortRedirect(req.body?.token);
+      const now = Date.now();
+      if (!payload) return res.status(400).json({ status: "invalid" });
+      if (now < payload.notBefore) {
+        return res.status(425).json({ status: "too_early" });
+      }
+      if (now > payload.expiresAt) {
+        return res.status(410).json({ status: "expired" });
+      }
+
+      const host = String(req.hostname || req.get("host") || "").toLowerCase();
+      const domain = await getDomain(host);
+      if (!domain || Number(domain.id) !== payload.domainId) {
+        return res.status(404).json({ status: "not_found" });
+      }
+
+      const code = normalizeShortCode(decodeURIComponent(req.params.code));
+      const shortLink = await getShortLink(domain.id, code);
+      if (!shortLink?.is_active || Number(shortLink.id) !== payload.shortLinkId) {
+        return res.status(404).json({ status: "not_found" });
+      }
+
+      const confirmed = await db.query(
+        `UPDATE traffic_logs
+         SET action='short_redirect_confirmed'
+         WHERE request_id=$1
+           AND short_link_id=$2
+           AND domain_id=$3
+           AND action='short_link_open'
+         RETURNING id`,
+        [payload.visitId, payload.shortLinkId, payload.domainId]
+      );
+      if (confirmed.rowCount) incrementShortLink(payload.shortLinkId);
+      return res.status(204).end();
+    } catch (error) {
+      console.error(`[${req.requestId}] short redirect confirm error:`, error.message);
+      return res.status(500).json({ status: "error" });
+    }
+  }
+);
+
 app.get(/.*/, async (req, res) => {
   let campaign = null;
   let domain = null;
@@ -185,23 +282,25 @@ app.get(/.*/, async (req, res) => {
         Expires: "0",
       });
 
-      logTraffic({
-        domainId: domData.id,
-        campaignId: campaign?.id || null,
-        shortLinkId: options.shortLinkId || null,
-        requestId: req.requestId,
-        ip,
-        country,
-        city: geo?.city,
-        device: deviceType,
-        os: osName,
-        browser: browserName,
-        action,
-        referer: req.headers.referer,
-        requestUrl,
-        detail,
-        ua: uaString,
-      });
+      if (!options.skipTrafficLog) {
+        logTraffic({
+          domainId: domData.id,
+          campaignId: campaign?.id || null,
+          shortLinkId: options.shortLinkId || null,
+          requestId: req.requestId,
+          ip,
+          country,
+          city: geo?.city,
+          device: deviceType,
+          os: osName,
+          browser: browserName,
+          action,
+          referer: req.headers.referer,
+          requestUrl,
+          detail,
+          ua: uaString,
+        });
+      }
 
       const viewData = {
         title: host,
@@ -239,7 +338,6 @@ app.get(/.*/, async (req, res) => {
         );
       }
 
-      incrementShortLink(shortLink.id);
       const target = new URL(shortLink.target_url);
       queryEntries.forEach(([key, value]) => {
         if (!target.searchParams.has(key)) target.searchParams.append(key, value);
@@ -253,11 +351,45 @@ app.get(/.*/, async (req, res) => {
         ? Math.min(Math.max(configuredDelay, 1), 30)
         : 3;
 
-      return renderSafe(domain, "short_redirect", `short=${shortLink.id}`, {
+      const visitId = crypto.randomUUID();
+      const notBefore = Date.now() + redirectDelaySeconds * 1000;
+      let redirectConfirmToken = null;
+      try {
+        await logTrafficNow({
+          domainId: domain.id,
+          shortLinkId: shortLink.id,
+          requestId: visitId,
+          ip,
+          country,
+          city: geo?.city,
+          device: deviceType,
+          os: osName,
+          browser: browserName,
+          action: "short_link_open",
+          referer: req.headers.referer,
+          requestUrl,
+          detail: `short=${shortLink.id}`,
+          ua: uaString,
+        });
+        redirectConfirmToken = signShortRedirect({
+          visitId,
+          shortLinkId: Number(shortLink.id),
+          domainId: Number(domain.id),
+          notBefore,
+          expiresAt: notBefore + SHORT_CONFIRM_TTL_MS,
+        });
+      } catch (error) {
+        console.error(`[${req.requestId}] short-link open log error:`, error.message);
+      }
+
+      return renderSafe(domain, "short_link_open", `short=${shortLink.id}`, {
         shortLinkId: shortLink.id,
+        skipTrafficLog: true,
         viewData: {
           redirectTargetUrl: target.toString(),
           redirectDelaySeconds,
+          redirectConfirmUrl: `/s/${encodeURIComponent(shortCode)}/confirm`,
+          redirectConfirmToken,
         },
       });
     }

@@ -31,7 +31,7 @@
       </div>
       <div class="metric-card">
         <div class="metric-icon green"><i class="fa-solid fa-arrow-trend-up"></i></div>
-        <div><span>Lượt qua link</span><strong><%= Number(stats.total_traffic || 0).toLocaleString('vi-VN') %></strong><small data-help="Chỉ đếm redirect thành công của link. Truy cập thẳng domain, Safe Page và probe không làm tăng số này.">Không tính Safe Page/probe</small></div>
+        <div><span>Lượt qua link</span><strong><%= Number(stats.total_traffic || 0).toLocaleString('vi-VN') %></strong><small data-help="Link điều kiện được tính khi server trả redirect. Link chờ chỉ được tính khi trình duyệt xác nhận hết thời gian chờ. Truy cập thẳng, Safe Page và probe không làm tăng số này.">Không tính Safe Page/probe</small></div>
       </div>
     </section>
 

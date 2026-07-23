@@ -1948,20 +1948,43 @@ const parseUserIdList = (value) => {
 app.post(
   "/domains/:id/access",
   checkAuth,
-  requireRole(["super_admin"]),
   async (req, res) => {
     const domainId = Number.parseInt(req.params.id, 10);
-    const ownerUserId = Number.parseInt(req.body.owner_user_id, 10);
-    if (!Number.isInteger(domainId) || !Number.isInteger(ownerUserId)) {
-      return res.status(400).send("Domain hoặc chủ sở hữu không hợp lệ");
+    if (!Number.isInteger(domainId)) {
+      return res.status(400).send("Domain không hợp lệ");
     }
 
+    const domainResult = await db.query(
+      `SELECT id, domain_url, user_id
+       FROM domains
+       WHERE id=$1
+       LIMIT 1`,
+      [domainId]
+    );
+    if (!domainResult.rowCount) {
+      return res.status(404).send("Không tìm thấy domain");
+    }
+    const domain = domainResult.rows[0];
+    const isSuperAdmin = req.session.user.role_name === "super_admin";
+    const isOwner = Number(domain.user_id) === Number(req.session.user.id);
+    if (!isSuperAdmin && !isOwner) {
+      return res
+        .status(403)
+        .send("Chỉ chủ sở hữu domain mới có quyền thay đổi người được chia sẻ");
+    }
+
+    const ownerUserId = Number(domain.user_id);
     const memberUserIds = parseUserIdList(req.body.member_user_ids);
-    const selectedUserIds = [...new Set([ownerUserId, ...memberUserIds])];
+    const selectedUserIds = [...new Set(memberUserIds)].filter(
+      (userId) => userId !== ownerUserId
+    );
     const users = await db.query(
-      `SELECT id
-       FROM users
-       WHERE is_active=true AND id=ANY($1::int[])
+      `SELECT u.id
+       FROM users u
+       JOIN roles r ON r.id=u.role_id
+       WHERE u.is_active=true
+         AND r.name='user'
+         AND u.id=ANY($1::int[])
        ORDER BY id`,
       [selectedUserIds]
     );
@@ -1972,29 +1995,29 @@ app.post(
     const client = await db.connect();
     try {
       await client.query("BEGIN");
-      const domain = await client.query(
-        `UPDATE domains
-         SET user_id=$2, updated_by=$3, updated_at=now()
-         WHERE id=$1
-         RETURNING id, domain_url`,
-        [domainId, ownerUserId, req.session.user.id]
+      await client.query(
+        `DELETE FROM domain_user_access
+         WHERE domain_id=$1 AND access_level='member'`,
+        [domainId]
       );
-      if (!domain.rowCount) {
-        await client.query("ROLLBACK");
-        return res.status(404).send("Không tìm thấy domain");
-      }
-
-      await client.query(`DELETE FROM domain_user_access WHERE domain_id=$1`, [
-        domainId,
-      ]);
       await client.query(
         `INSERT INTO domain_user_access
            (domain_id, user_id, access_level, granted_by)
-         SELECT $1, member_id,
-                CASE WHEN member_id=$2 THEN 'owner' ELSE 'member' END,
-                $3
-         FROM unnest($4::int[]) AS member_id`,
-        [domainId, ownerUserId, req.session.user.id, selectedUserIds]
+         VALUES ($1, $2, 'owner', $3)
+         ON CONFLICT (domain_id, user_id) DO UPDATE
+           SET access_level='owner', granted_by=$3, updated_at=now()`,
+        [domainId, ownerUserId, req.session.user.id]
+      );
+      await client.query(
+        `INSERT INTO domain_user_access
+           (domain_id, user_id, access_level, granted_by)
+         SELECT $1, member_id, 'member', $2
+         FROM unnest($3::int[]) AS member_id`,
+        [domainId, req.session.user.id, selectedUserIds]
+      );
+      await client.query(
+        `UPDATE domains SET updated_by=$2, updated_at=now() WHERE id=$1`,
+        [domainId, req.session.user.id]
       );
       await client.query("COMMIT");
 
@@ -2004,7 +2027,7 @@ app.post(
         targetType: "domain",
         targetId: domainId,
         detail: {
-          domain_url: domain.rows[0].domain_url,
+          domain_url: domain.domain_url,
           owner_user_id: ownerUserId,
           member_user_ids: selectedUserIds,
         },
@@ -2148,10 +2171,13 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
   const domainId = req.params.id;
   const rDom = await db.query(
     `
-      SELECT d.*, cu.username AS owner_name, uu.username AS updated_by_name
+      SELECT d.*, cu.username AS owner_name, owner_role.name AS owner_role_name,
+             uu.username AS updated_by_name, updated_role.name AS updated_by_role_name
       FROM domains d
       LEFT JOIN users cu ON d.user_id = cu.id
+      LEFT JOIN roles owner_role ON owner_role.id=cu.role_id
       LEFT JOIN users uu ON d.updated_by = uu.id
+      LEFT JOIN roles updated_role ON updated_role.id=uu.role_id
       WHERE d.id=$1
     `,
     [domainId]
@@ -2167,16 +2193,36 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
      ORDER BY CASE WHEN dua.access_level='owner' THEN 0 ELSE 1 END, u.username`,
     [domainId]
   );
+  const isDomainOwner =
+    Number(rDom.rows[0].user_id) === Number(req.session.user.id);
+  const canManageDomainAccess =
+    req.session.user.role_name === "super_admin" || isDomainOwner;
   const assignableUsers =
-    req.session.user.role_name === "super_admin"
+    canManageDomainAccess
       ? await db.query(
-          `SELECT u.id, u.username, r.name AS role_name
-           FROM users u
-           JOIN roles r ON r.id=u.role_id
-           WHERE u.is_active=true
-           ORDER BY CASE WHEN r.name='super_admin' THEN 0 ELSE 1 END, u.username`
-        )
-      : { rows: [] };
+           `SELECT u.id, u.username, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id=u.role_id
+            WHERE u.is_active=true
+              AND r.name='user'
+              AND u.id<>$1
+            ORDER BY lower(u.username), u.id`,
+            [rDom.rows[0].user_id]
+         )
+       : { rows: [] };
+  const visibleDomainMembers = domainMembers.rows.filter(
+    (member) => member.role_name !== "super_admin"
+  );
+  const displayOwnerName =
+    rDom.rows[0].owner_role_name === "super_admin" &&
+    req.session.user.role_name !== "super_admin"
+      ? null
+      : rDom.rows[0].owner_name;
+  const displayUpdatedByName =
+    rDom.rows[0].updated_by_role_name === "super_admin" &&
+    req.session.user.role_name !== "super_admin"
+      ? null
+      : rDom.rows[0].updated_by_name;
 
   const rLinks = await db.query(
     `
@@ -2323,8 +2369,12 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     shortLinks,
     linkStats: linkStats.rows[0],
     domainTrafficStats: domainTrafficStats.rows[0],
-    domainMembers: domainMembers.rows,
+    domainMembers: visibleDomainMembers,
     assignableUsers: assignableUsers.rows,
+    isDomainOwner,
+    canManageDomainAccess,
+    displayOwnerName,
+    displayUpdatedByName,
     projects: availableProjects.rows,
   });
 });
@@ -3079,54 +3129,152 @@ app.post(
 );
 
 app.get("/users/view/:id", requireRole(["super_admin"]), async (req, res) =>
-  renderUserProfile({ req, res, userId: req.params.id, selfView: false })
+  renderUserProfile({
+    req,
+    res,
+    userId: req.params.id,
+    selfView: false,
+    profileNotice: (() => {
+      const notice = req.session.userNotice || null;
+      delete req.session.userNotice;
+      return notice;
+    })(),
+  })
+);
+
+app.post(
+  "/users/view/:id/update",
+  requireRole(["super_admin"]),
+  async (req, res) => {
+    const targetId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(targetId)) {
+      return res.status(400).send("User không hợp lệ");
+    }
+
+    try {
+      const username = validateName(req.body.username, "Username");
+      const requestedPassword = String(req.body.new_password || "");
+      if (requestedPassword && requestedPassword.length < 6) {
+        throw new Error("Mật khẩu mới phải có ít nhất 6 ký tự");
+      }
+
+      const [targetResult, roleResult] = await Promise.all([
+        db.query(
+          `SELECT u.id, u.username, u.is_active, r.name AS role_name
+           FROM users u
+           JOIN roles r ON r.id=u.role_id
+           WHERE u.id=$1
+           LIMIT 1`,
+          [targetId]
+        ),
+        db.query(
+          `SELECT id, name
+           FROM roles
+           WHERE id=$1 AND name IN ('super_admin', 'user')
+           LIMIT 1`,
+          [req.body.role_id]
+        ),
+      ]);
+      if (!targetResult.rowCount) {
+        return res.status(404).send("Không tìm thấy user");
+      }
+      if (!roleResult.rowCount) {
+        return res.status(400).send("Role không hợp lệ");
+      }
+
+      const target = targetResult.rows[0];
+      const nextRole = roleResult.rows[0];
+      const isSelf = targetId === Number(req.session.user.id);
+      const nextActive = isSelf ? true : req.body.is_active === "true";
+      if (target.is_active && !nextActive) {
+        return res
+          .status(400)
+          .send("Hãy dùng nút Xóa user để thu hồi và chuyển giao tài nguyên an toàn");
+      }
+      if (isSelf && nextRole.name !== target.role_name) {
+        return res
+          .status(400)
+          .send("Không thể tự thay đổi quyền của tài khoản đang đăng nhập");
+      }
+
+      const removesActiveSuperAdmin =
+        target.role_name === "super_admin" &&
+        target.is_active &&
+        (nextRole.name !== "super_admin" || !nextActive);
+      if (removesActiveSuperAdmin) {
+        const count = await db.query(
+          `SELECT COUNT(*)::int AS total
+           FROM users u
+           JOIN roles r ON r.id=u.role_id
+           WHERE r.name='super_admin' AND u.is_active=true`
+        );
+        if (count.rows[0].total <= 1) {
+          return res.status(400).send("Phải giữ lại ít nhất một super admin");
+        }
+      }
+
+      const passwordHash = requestedPassword
+        ? await hashPassword(requestedPassword)
+        : null;
+      const client = await db.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `UPDATE users
+           SET username=$1,
+               role_id=$2,
+               is_active=$3,
+               password_hash=COALESCE($4, password_hash)
+           WHERE id=$5`,
+          [username, nextRole.id, nextActive, passwordHash, targetId]
+        );
+        if (nextRole.name === "super_admin") {
+          await client.query(
+            `DELETE FROM domain_user_access
+             WHERE user_id=$1 AND access_level='member'`,
+            [targetId]
+          );
+        }
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      await auditAdminAction({
+        req,
+        action: "user_update",
+        targetType: "user",
+        targetId,
+        detail: {
+          username,
+          role: nextRole.name,
+          is_active: nextActive,
+          password_reset: Boolean(requestedPassword),
+        },
+      });
+      req.session.userNotice = "Đã cập nhật tài khoản.";
+      return res.redirect(`/users/view/${targetId}`);
+    } catch (error) {
+      const message =
+        error.code === "23505"
+          ? "Username đã tồn tại."
+          : String(error.message || "Không thể cập nhật tài khoản.");
+      req.session.userNotice = message;
+      return res.redirect(`/users/view/${targetId}`);
+    }
+  }
 );
 
 app.post(
   "/users/view/:id/role",
   requireRole(["super_admin"]),
-  async (req, res) => {
-    const role = await db.query(
-      `SELECT id, name FROM roles
-       WHERE id=$1 AND name IN ('super_admin', 'user') LIMIT 1`,
-      [req.body.role_id]
-    );
-    if (!role.rowCount) return res.status(400).send("Role không hợp lệ");
-
-    const target = await db.query(
-      `SELECT r.name AS role_name
-       FROM users u JOIN roles r ON r.id=u.role_id
-       WHERE u.id=$1 LIMIT 1`,
-      [req.params.id]
-    );
-    if (!target.rowCount) return res.status(404).send("Không tìm thấy user");
-    if (
-      target.rows[0].role_name === "super_admin" &&
-      role.rows[0].name !== "super_admin"
-    ) {
-      const count = await db.query(
-        `SELECT COUNT(*)::int AS total
-         FROM users u JOIN roles r ON r.id=u.role_id
-         WHERE r.name='super_admin' AND u.is_active=true`
-      );
-      if (count.rows[0].total <= 1) {
-        return res.status(400).send("Phải giữ lại ít nhất một super admin");
-      }
-    }
-
-    await db.query(`UPDATE users SET role_id=$1 WHERE id=$2`, [
-      role.rows[0].id,
-      req.params.id,
-    ]);
-    await auditAdminAction({
-      req,
-      action: "user_role_update",
-      targetType: "user",
-      targetId: req.params.id,
-      detail: { role_id: role.rows[0].id, role_name: role.rows[0].name },
-    });
-    res.redirect("/users/view/" + req.params.id);
-  }
+  (req, res) =>
+    res
+      .status(405)
+      .send("Hãy dùng màn Chỉnh sửa tài khoản để cập nhật user an toàn")
 );
 
 const deleteUserHandler = async (req, res) => {
@@ -3156,6 +3304,7 @@ const deleteUserHandler = async (req, res) => {
 
     const client = await db.connect();
     let transferredDomains = 0;
+    let transferredProjects = 0;
     try {
       await client.query("BEGIN");
       await client.query(
@@ -3179,6 +3328,14 @@ const deleteUserHandler = async (req, res) => {
         [targetId, curUser.id]
       );
       transferredDomains = transferred.rowCount;
+      const movedProjects = await client.query(
+        `UPDATE projects
+         SET user_id=$2, updated_by=$2, updated_at=now()
+         WHERE user_id=$1
+         RETURNING id`,
+        [targetId, curUser.id]
+      );
+      transferredProjects = movedProjects.rowCount;
       await client.query(`UPDATE users SET is_active=false WHERE id=$1`, [
         targetId,
       ]);
@@ -3196,6 +3353,7 @@ const deleteUserHandler = async (req, res) => {
       targetId,
       detail: {
         transferred_domains: transferredDomains,
+        transferred_projects: transferredProjects,
         new_owner_user_id: curUser.id,
       },
     });

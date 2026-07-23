@@ -24,6 +24,9 @@
             <h3 class="mb-0" data-help="Xem quyền, trạng thái và các tài nguyên liên quan đến tài khoản."><%= selfView ? 'Hồ sơ của tôi' : 'User: ' + target.username %></h3>
             <div></div>
         </div>
+        <% if (profileNotice) { %>
+            <div class="alert alert-info shadow-sm"><%= profileNotice %></div>
+        <% } %>
         <div class="card shadow-sm mb-3">
             <div class="card-body">
                 <p><b>Role:</b> <span class="badge <%= target.role_name==='super_admin' ? 'bg-danger' : 'bg-secondary' %>"><%= target.role_name %></span></p>
@@ -42,23 +45,65 @@
         </div>
         <% if (!selfView && viewer.role_name === 'super_admin') { %>
         <div class="card shadow-sm mb-3">
-            <div class="card-header bg-white fw-bold"><span data-help="Thay đổi có hiệu lực với lần kiểm tra quyền tiếp theo. Tránh tự hạ quyền tài khoản quản trị duy nhất.">Đổi role</span></div>
-            <form class="card-body" action="/users/view/<%= target.id %>/role" method="POST">
+            <div class="card-header bg-white">
+                <div class="fw-bold">Chỉnh sửa tài khoản</div>
+                <small class="text-muted">Cập nhật thông tin đăng nhập, quyền và trạng thái trong một lần.</small>
+            </div>
+            <form class="card-body" action="/users/view/<%= target.id %>/update" method="POST">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <div class="row g-3 align-items-center">
-                    <div class="col-md-8">
-                        <select name="role_id" class="form-select">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Tên đăng nhập</label>
+                        <input type="text" name="username" class="form-control" value="<%= target.username %>" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" data-help="Super admin có quyền quản trị toàn hệ thống. User chỉ quản lý tài nguyên được sở hữu hoặc được chia sẻ.">Quyền</label>
+                        <select name="role_id" class="form-select" <%= Number(target.id) === Number(viewer.id) ? 'disabled' : '' %>>
                             <% roles.forEach(r => { %>
                                 <option value="<%= r.id %>" <%= r.id === target.role_id ? 'selected' : '' %>><%= r.name %></option>
                             <% }) %>
                         </select>
+                        <% if (Number(target.id) === Number(viewer.id)) { %>
+                            <input type="hidden" name="role_id" value="<%= target.role_id %>">
+                        <% } %>
                     </div>
-                    <div class="col-md-4 text-end">
-                        <button class="btn btn-primary">Cập nhật</button>
+                    <div class="col-md-3">
+                        <label class="form-label">Trạng thái</label>
+                        <% if (target.is_active) { %>
+                            <div class="form-control bg-light"><span class="badge bg-success">Hoạt động</span></div>
+                            <input type="hidden" name="is_active" value="true">
+                        <% } else { %>
+                            <select name="is_active" class="form-select">
+                                <option value="false" selected>Đã xóa</option>
+                                <option value="true">Khôi phục</option>
+                            </select>
+                        <% } %>
                     </div>
+                    <div class="col-12">
+                        <label class="form-label" data-help="Để trống nếu không cần thay mật khẩu hiện tại.">Đặt mật khẩu mới</label>
+                        <input type="password" name="new_password" class="form-control" minlength="6" autocomplete="new-password" placeholder="Để trống nếu không thay đổi">
+                        <div class="form-text">Tối thiểu 6 ký tự.</div>
+                    </div>
+                </div>
+                <div class="text-end mt-3">
+                    <button class="btn btn-primary px-4">Lưu thay đổi</button>
                 </div>
             </form>
         </div>
+        <% if (Number(target.id) !== Number(viewer.id) && target.is_active) { %>
+        <div class="card border-danger shadow-sm mb-3">
+            <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                    <div class="fw-bold text-danger">Xóa user</div>
+                    <small class="text-muted">Tài khoản sẽ không thể đăng nhập. Nhật ký cũ vẫn được giữ; domain và dự án đang sở hữu được chuyển về super admin.</small>
+                </div>
+                <form action="/users/delete/<%= target.id %>" method="POST" onsubmit="return confirm('Xóa user này? Tài khoản sẽ bị khóa và quyền chia sẻ domain sẽ bị thu hồi.')">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button type="submit" class="btn btn-outline-danger text-nowrap">Xóa user</button>
+                </form>
+            </div>
+        </div>
+        <% } %>
         <% } %>
 
         <% if (selfView) { %>
@@ -66,7 +111,6 @@
             <div class="card-header bg-white fw-bold">Đổi mật khẩu</div>
             <form class="card-body" action="/account/password" method="POST">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <% if (profileNotice) { %><div class="alert alert-info"><%= profileNotice %></div><% } %>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Mật khẩu hiện tại</label>

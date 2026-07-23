@@ -94,7 +94,7 @@ test("owner branch keeps two roles and private seven-day audit retention", () =>
   assert.doesNotMatch(auditService, /req\.body/);
 });
 
-test("domain access supports one owner, many members, and one-time legacy takeover", () => {
+test("domain access keeps its creator as owner and only shares with regular users", () => {
   const migration = fs.readFileSync(
     path.join(
       root,
@@ -121,6 +121,13 @@ test("domain access supports one owner, many members, and one-time legacy takeov
     ),
     "utf8"
   );
+  const sharingPolicyMigration = fs.readFileSync(
+    path.join(
+      root,
+      "database/migrations/2026-07-23-zz-domain-sharing-policy.sql"
+    ),
+    "utf8"
+  );
 
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.domain_user_access/);
   assert.match(migration, /idx_domain_user_access_one_owner/);
@@ -130,13 +137,45 @@ test("domain access supports one owner, many members, and one-time legacy takeov
   assert.match(migration, /UPDATE public\.short_links[\s\S]+SET user_id=super_admin_id/);
   assert.match(adminSource, /FROM domain_user_access[\s\S]+WHERE domain_id=\$1 AND user_id=\$2/);
   assert.match(adminSource, /"\/domains\/:id\/access"/);
-  assert.match(domainView, /name="owner_user_id"/);
-  assert.match(domainView, /name="member_user_ids"/);
+  assert.doesNotMatch(domainView, /owner_user_id/);
+  assert.match(domainView, /member_user_ids/);
+  assert.match(adminSource, /const isOwner = Number\(domain\.user_id\)/);
+  assert.match(adminSource, /r\.name='user'/);
+  assert.match(domainView, /viewerCanManageAccess/);
+  assert.match(domainView, /không thể chia sẻ tiếp/);
+  assert.match(sharingPolicyMigration, /r\.name='super_admin'/);
+  assert.match(sharingPolicyMigration, /dua\.access_level='member'/);
   assert.match(cleanup, /DELETE FROM traffic_logs/);
   assert.match(cleanup, /DELETE FROM admin_audit_logs/);
   assert.match(cleanup, /short_link_id/);
   assert.match(trafficArchiveMigration, /PRIMARY KEY \(day, domain_id, campaign_id, short_link_id, action\)/);
   assert.match(adminSource, /FROM traffic_daily_stats/);
+});
+
+test("user administration supports safe edit, reset, delete, and restore", () => {
+  const adminSource = fs.readFileSync(
+    path.join(root, "src/server-admin.js"),
+    "utf8"
+  );
+  const detailView = fs.readFileSync(
+    path.join(root, "src/views/admin/user_detail.ejs"),
+    "utf8"
+  );
+  const listView = fs.readFileSync(
+    path.join(root, "src/views/admin/users_list.ejs"),
+    "utf8"
+  );
+
+  assert.match(adminSource, /"\/users\/view\/:id\/update"/);
+  assert.match(adminSource, /requestedPassword\.length < 6/);
+  assert.match(adminSource, /Phải giữ lại ít nhất một super admin/);
+  assert.match(adminSource, /DELETE FROM domain_user_access[\s\S]+access_level='member'/);
+  assert.match(adminSource, /UPDATE projects[\s\S]+WHERE user_id=\$1/);
+  assert.match(detailView, /name="username"/);
+  assert.match(detailView, /name="new_password"/);
+  assert.match(detailView, /name="is_active"/);
+  assert.match(detailView, /Xóa user/);
+  assert.match(listView, /Xem \/ khôi phục/);
 });
 
 test("projects organize links across domains without changing legacy links", () => {

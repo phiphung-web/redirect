@@ -15,10 +15,12 @@
             { label: 'Người dùng' }
         ]
     }) %>
-    <div class="container mt-3">
+    <div class="container mt-3" style="max-width: 1180px;">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="mb-0" data-help="Quản lý tài khoản được phép truy cập trang quản trị và phạm vi quyền của từng người.">Người dùng</h3>
-            <div></div>
+            <div>
+                <h3 class="mb-1" data-help="Quản lý tài khoản được phép truy cập trang quản trị và phạm vi quyền của từng người.">Người dùng</h3>
+                <div class="text-muted">Mỗi người dùng có tài khoản riêng để phân quyền và ghi nhật ký chính xác.</div>
+            </div>
         </div>
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white fw-bold"><span data-help="Tài khoản Inactive không thể đăng nhập nhưng lịch sử thao tác vẫn được giữ lại.">Danh sách</span></div>
@@ -31,16 +33,24 @@
                         <% users.forEach((u, idx) => { %>
                             <tr>
                                 <td><%= idx + 1 %></td>
-                                <td><%= u.username %></td>
-                                <td><span class="badge <%= u.role_name==='super_admin' ? 'bg-danger' : 'bg-secondary' %>"><%= u.role_name %></span></td>
-                                <td><span class="badge <%= u.is_active ? 'bg-success' : 'bg-warning' %>"><%= u.is_active ? 'Active' : 'Inactive' %></span></td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="rounded-circle bg-primary-subtle text-primary fw-bold d-inline-flex align-items-center justify-content-center" style="width:34px;height:34px;"><%= String(u.username || '?').slice(0, 1).toUpperCase() %></span>
+                                        <div>
+                                            <div class="fw-semibold"><%= u.username %></div>
+                                            <% if (Number(u.id) === Number(user.id)) { %><small class="text-muted">Tài khoản của bạn</small><% } %>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="badge <%= u.role_name==='super_admin' ? 'bg-primary' : 'bg-secondary' %>"><%= u.role_name === 'super_admin' ? 'Super admin' : 'User' %></span></td>
+                                <td><span class="badge <%= u.is_active ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary' %>"><%= u.is_active ? 'Hoạt động' : 'Đã xóa' %></span></td>
                                 <td><%= new Date(u.created_at).toLocaleString('vi-VN') %></td>
                                 <td class="text-end">
-                                    <a href="/users/view/<%= u.id %>" class="btn btn-sm btn-outline-primary">Chi tiết</a>
-                                    <% if (currentUserRole==='super_admin') { %>
-                                        <form action="/users/delete/<%= u.id %>" method="POST" class="d-inline" onsubmit="return confirm('Vô hiệu hóa tài khoản và thu hồi quyền domain? Domain đang sở hữu sẽ chuyển cho super admin hiện tại. Tiếp tục?')">
+                                    <a href="/users/view/<%= u.id %>" class="btn btn-sm btn-outline-primary"><%= u.is_active ? 'Chỉnh sửa' : 'Xem / khôi phục' %></a>
+                                    <% if (currentUserRole==='super_admin' && u.is_active && Number(u.id) !== Number(user.id)) { %>
+                                        <form action="/users/delete/<%= u.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa user này? Tài khoản sẽ bị khóa, quyền chia sẻ bị thu hồi và tài nguyên sở hữu được chuyển về super admin.')">
                                             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                                            <button type="submit" class="btn btn-sm btn-danger">Vô hiệu hóa</button>
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Xóa</button>
                                         </form>
                                     <% } %>
                                 </td>
@@ -52,7 +62,10 @@
         </div>
 
         <div class="card shadow-sm">
-            <div class="card-header bg-white fw-bold"><span data-help="Mỗi người vận hành nên có tài khoản riêng để nhật ký quản trị ghi đúng người thực hiện.">Tạo người dùng</span></div>
+            <div class="card-header bg-white">
+                <div class="fw-bold">Tạo người dùng</div>
+                <small class="text-muted">Tài khoản mới mặc định có quyền User và chưa được truy cập domain nào.</small>
+            </div>
             <form class="card-body" action="/users/create" method="POST">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <div class="row g-3">
@@ -66,7 +79,7 @@
                     </div>
                 </div>
                 <div class="mt-3 text-end">
-                    <button class="btn btn-primary">Tạo</button>
+                    <button class="btn btn-primary px-4">Tạo user</button>
                 </div>
             </form>
         </div>

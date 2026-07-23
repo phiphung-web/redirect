@@ -912,6 +912,8 @@ test("automatic SSL uses a constrained Certbot helper and tracked domain state",
   assert.doesNotMatch(provisioner, /\bexec\s*\(/);
   assert.match(helper, /Invalid domain name/);
   assert.match(helper, /LETSENCRYPT_AGREE_TOS=true is required/);
+  assert.match(helper, /ADS_PORT must be a valid TCP port/);
+  assert.match(helper, /proxy_pass http:\/\/127\.0\.0\.1:\$\{ads_port\}/);
   assert.match(helper, /certbot certonly/);
   assert.match(helper, /--webroot/);
   assert.match(helper, /nginx -t/);

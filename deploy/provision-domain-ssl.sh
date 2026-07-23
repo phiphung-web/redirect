@@ -47,6 +47,11 @@ if ! command -v certbot >/dev/null 2>&1; then
 fi
 
 webroot="${SSL_ACME_WEBROOT:-/var/www/redirect-pro-acme}"
+ads_port="${ADS_PORT:-4101}"
+if [[ ! "${ads_port}" =~ ^[0-9]{2,5}$ ]] || (( ads_port < 1 || ads_port > 65535 )); then
+  echo "ADS_PORT must be a valid TCP port" >&2
+  exit 5
+fi
 install -d -m 0755 "${webroot}/.well-known/acme-challenge"
 
 certbot certonly \
@@ -88,7 +93,7 @@ server {
     }
 
     location / {
-        proxy_pass http://127.0.0.1:4101;
+        proxy_pass http://127.0.0.1:${ads_port};
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -110,7 +115,7 @@ server {
     ssl_session_timeout 1d;
 
     location / {
-        proxy_pass http://127.0.0.1:4101;
+        proxy_pass http://127.0.0.1:${ads_port};
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;

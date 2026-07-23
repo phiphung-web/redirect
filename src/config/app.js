@@ -117,6 +117,10 @@ const monitoring = {
     15,
     parseInteger(process.env.MONITOR_ALERT_REPEAT_MINUTES, 360)
   ),
+  ruleFailureAlertCooldownMinutes: Math.max(
+    10,
+    parseInteger(process.env.MONITOR_RULE_FAILURE_COOLDOWN_MINUTES, 60)
+  ),
   stateFile:
     process.env.MONITOR_STATE_FILE ||
     (isProduction

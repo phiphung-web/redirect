@@ -25,7 +25,11 @@ const {
   parseRules,
 } = require("../src/utils/validation");
 const { hashConnectCode, parseCommand } = require("../src/services/telegram-bot");
-const { inspectLinkConfiguration } = require("../scripts/monitor-system");
+const {
+  groupRuleFailuresByUser,
+  inspectLinkConfiguration,
+  parseRuleFailureDetail,
+} = require("../scripts/monitor-system");
 
 const product = {
   name: "LinkPilot",
@@ -409,6 +413,44 @@ test("contextual help is available across the admin product", () => {
   assert.match(css, /\.help-popover/);
   assert.match(users, /type="password"/);
   assert.match(users, /autocomplete="new-password"/);
+});
+
+test("rule-failure traffic alerts explain and group near-miss requests", () => {
+  assert.equal(
+    parseRuleFailureDetail(
+      "safe_page_missing_param",
+      "url=https://safe.test | detail=missing:fbclid"
+    ),
+    "Thiếu tham số fbclid"
+  );
+  assert.equal(
+    parseRuleFailureDetail(
+      "safe_page_wrong_param_val",
+      "detail=expect utm_source=facebook; got=google"
+    ),
+    'Sai utm_source: cần "facebook", nhận "google"'
+  );
+
+  const grouped = groupRuleFailuresByUser([
+    {
+      campaign_id: 9,
+      campaign_name: "Meta Ads",
+      domain_url: "safe.test",
+      action: "safe_page_missing_param",
+      referer: "detail=missing:fbclid",
+      user_ids: [1, 7],
+    },
+    {
+      campaign_id: 9,
+      campaign_name: "Meta Ads",
+      domain_url: "safe.test",
+      action: "safe_page_missing_param",
+      referer: "detail=missing:fbclid",
+      user_ids: [1],
+    },
+  ]);
+  assert.equal(grouped.get("1").values().next().value.count, 2);
+  assert.equal(grouped.get("7").values().next().value.count, 1);
 });
 
 test("users have a self-service profile and six-character password minimum", () => {

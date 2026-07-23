@@ -162,6 +162,113 @@ const saveState = (state) => {
 
 const fingerprint = (messages) => [...messages].sort().join("|");
 
+const parseRuleFailureDetail = (action, rawReferer) => {
+  const raw = String(rawReferer || "");
+  const detail = raw.includes("detail=")
+    ? raw.slice(raw.lastIndexOf("detail=") + 7).trim()
+    : "";
+  if (action === "safe_page_missing_param") {
+    const key = detail.startsWith("missing:") ? detail.slice(8) : "không xác định";
+    return `Thiếu tham số ${key}`;
+  }
+  const match = detail.match(/^expect ([^=;\s]+)=([^;]*);\s*got=(.*)$/i);
+  if (match) {
+    return `Sai ${match[1]}: cần "${match[2]}", nhận "${match[3]}"`;
+  }
+  return "Giá trị tham số không khớp";
+};
+
+const getRuleFailureCursor = async () => {
+  const result = await db.query(
+    `SELECT COALESCE(MAX(id), 0)::bigint AS last_id
+     FROM traffic_logs
+     WHERE action IN ('safe_page_missing_param', 'safe_page_wrong_param_val')`
+  );
+  return String(result.rows[0]?.last_id || "0");
+};
+
+const getRuleFailuresAfter = async (lastId) => {
+  const result = await db.query(
+    `SELECT tl.id, tl.campaign_id, tl.action, tl.referer,
+            c.name AS campaign_name, d.domain_url,
+            COALESCE(
+              array_agg(DISTINCT dua.user_id)
+                FILTER (WHERE dua.user_id IS NOT NULL),
+              '{}'
+            ) AS user_ids
+     FROM traffic_logs tl
+     JOIN campaigns c ON c.id=tl.campaign_id
+     JOIN domains d ON d.id=tl.domain_id
+     LEFT JOIN domain_user_access dua ON dua.domain_id=tl.domain_id
+     WHERE tl.id > $1::bigint
+       AND tl.created_at >= now() - interval '24 hours'
+       AND tl.action IN ('safe_page_missing_param', 'safe_page_wrong_param_val')
+     GROUP BY tl.id, tl.campaign_id, tl.action, tl.referer,
+              c.name, d.domain_url
+     ORDER BY tl.id ASC
+     LIMIT 5000`,
+    [String(lastId || "0")]
+  );
+  return result.rows;
+};
+
+const groupRuleFailuresByUser = (rows) => {
+  const byUser = new Map();
+  rows.forEach((row) => {
+    const reason = parseRuleFailureDetail(row.action, row.referer);
+    (row.user_ids || []).forEach((userId) => {
+      const id = String(userId);
+      if (!byUser.has(id)) byUser.set(id, new Map());
+      const groups = byUser.get(id);
+      const key = `${row.campaign_id}:${reason}`;
+      const current = groups.get(key) || {
+        domain: row.domain_url,
+        campaign: row.campaign_name,
+        reason,
+        count: 0,
+      };
+      current.count += 1;
+      groups.set(key, current);
+    });
+  });
+  return byUser;
+};
+
+const sendRuleFailureAlerts = async (state) => {
+  state.ruleFailures ||= { lastId: null, users: {} };
+  if (state.ruleFailures.lastId === null) {
+    state.ruleFailures.lastId = await getRuleFailureCursor();
+    return;
+  }
+
+  const rows = await getRuleFailuresAfter(state.ruleFailures.lastId);
+  if (!rows.length) return;
+
+  state.ruleFailures.lastId = String(rows[rows.length - 1].id);
+  const byUser = groupRuleFailuresByUser(rows);
+  const cooldownMs = monitoring.ruleFailureAlertCooldownMinutes * 60000;
+  const now = Date.now();
+
+  for (const [userId, groups] of byUser) {
+    const lastSentAt = Number(state.ruleFailures.users[userId] || 0);
+    if (now - lastSentAt < cooldownMs) continue;
+    const lines = [...groups.values()].slice(0, 10).map(
+      (item) =>
+        `${item.domain} · ${item.campaign}: ${item.count} lượt bị chặn — ${item.reason}`
+    );
+    if (groups.size > lines.length) {
+      lines.push(`Và ${groups.size - lines.length} lỗi khác.`);
+    }
+    await alertUser(userId, {
+      title: `${product.name}: traffic không khớp rule`,
+      severity: "warning",
+      lines,
+      cooldownMs: 0,
+    });
+    state.ruleFailures.users[userId] = now;
+  }
+};
+
 const shouldAlert = (previous, messages) => {
   const nextFingerprint = fingerprint(messages);
   const repeatMs = monitoring.repeatMinutes * 60000;
@@ -206,6 +313,11 @@ const runMonitor = async () => {
   });
 
   const state = loadState();
+  try {
+    await sendRuleFailureAlerts(state);
+  } catch (error) {
+    globalIssues.push(issue(`Không kiểm tra được traffic fail rule (${error.message})`));
+  }
   state.system = await sendScope({ key: "system", messages: globalIssues.filter(Boolean).map((item) => item.message), previous: state.system });
   state.users ||= {};
   const knownUsers = new Set([...Object.keys(state.users), ...byUser.keys()]);
@@ -227,7 +339,11 @@ module.exports = {
   checkBackup,
   checkResources,
   fingerprint,
+  getRuleFailuresAfter,
+  groupRuleFailuresByUser,
   inspectLinkConfiguration,
+  parseRuleFailureDetail,
   runMonitor,
+  sendRuleFailureAlerts,
   shouldAlert,
 };

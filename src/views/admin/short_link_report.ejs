@@ -160,7 +160,7 @@
     <div class="card shadow-sm mt-3">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <b data-help="Các lượt mở link gần nhất cùng nguồn giới thiệu, thiết bị và URL request.">Log mới</b>
-        <a class="btn btn-link btn-sm" href="/short-links/<%= link.id %>/logs">Xem tất cả</a>
+        <a class="btn btn-link btn-sm" href="/short-links/<%= link.id %>/logs?start_date=<%= encodeURIComponent(logStartDate) %>&end_date=<%= encodeURIComponent(logEndDate) %>">Xem tất cả</a>
       </div>
       <div class="table-responsive p-3">
         <table class="table table-sm table-striped table-hover mb-0">

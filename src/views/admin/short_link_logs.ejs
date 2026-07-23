@@ -33,12 +33,39 @@
 
     <form class="row g-2 mb-3" method="GET">
       <div class="col-auto">
+        <label class="form-label">Trạng thái</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="" <%= !status ? 'selected' : '' %>>Tất cả</option>
+          <option value="confirmed" <%= status==='confirmed' ? 'selected' : '' %>>Đã chuyển hướng</option>
+          <option value="unconfirmed" <%= status==='unconfirmed' ? 'selected' : '' %>>Chưa xác nhận</option>
+          <option value="legacy" <%= status==='legacy' ? 'selected' : '' %>>Dữ liệu cũ</option>
+        </select>
+      </div>
+      <div class="col-auto">
         <label class="form-label">Từ ngày</label>
-        <input type="date" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
+        <input type="date" name="start_date" value="<%= startDateValue %>" class="form-control form-control-sm">
       </div>
       <div class="col-auto">
         <label class="form-label">Đến ngày</label>
-        <input type="date" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
+        <input type="date" name="end_date" value="<%= endDateValue %>" class="form-control form-control-sm">
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Quốc gia</label>
+        <input type="text" name="country" value="<%= country %>" maxlength="8" placeholder="VD: PH" class="form-control form-control-sm text-uppercase">
+      </div>
+      <div class="col-auto">
+        <label class="form-label">Thiết bị</label>
+        <select name="device" class="form-select form-select-sm">
+          <option value="" <%= !device ? 'selected' : '' %>>Tất cả</option>
+          <option value="mobile" <%= device==='mobile' ? 'selected' : '' %>>Mobile</option>
+          <option value="desktop" <%= device==='desktop' ? 'selected' : '' %>>Desktop</option>
+          <option value="tablet" <%= device==='tablet' ? 'selected' : '' %>>Tablet</option>
+          <option value="unknown" <%= device==='unknown' ? 'selected' : '' %>>Không xác định</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label">IP</label>
+        <input type="text" name="ip" value="<%= ip %>" maxlength="64" placeholder="IP chính xác" class="form-control form-control-sm">
       </div>
       <div class="col-auto">
         <label class="form-label" data-help="Giới hạn số bản ghi tải trong một lần, tối đa 2.000 dòng.">Số dòng</label>
@@ -48,6 +75,15 @@
         <button class="btn btn-primary btn-sm" type="submit">Lọc</button>
       </div>
     </form>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+      <div class="text-muted small">
+        Tìm thấy <b><%= total.toLocaleString('vi-VN') %></b> log · Trang <%= page %>/<%= totalPages %>
+      </div>
+      <% if (status || country || device || ip) { %>
+        <a class="btn btn-outline-secondary btn-sm" href="/short-links/<%= link.id %>/logs?start_date=<%= encodeURIComponent(startDateValue) %>&end_date=<%= encodeURIComponent(endDateValue) %>&limit=<%= limit %>">Xóa bộ lọc</a>
+      <% } %>
+    </div>
 
     <div class="table-responsive">
       <table class="table table-sm table-striped table-hover">
@@ -84,6 +120,19 @@
         </tbody>
       </table>
     </div>
+    <% if (totalPages > 1) { %>
+      <nav class="mt-3" aria-label="Phân trang log">
+        <ul class="pagination pagination-sm justify-content-center mb-0">
+          <li class="page-item <%= page <= 1 ? 'disabled' : '' %>">
+            <a class="page-link" href="?<%= paginationQuery %>&page=<%= Math.max(1, page - 1) %>">Trước</a>
+          </li>
+          <li class="page-item disabled"><span class="page-link"><%= page %> / <%= totalPages %></span></li>
+          <li class="page-item <%= page >= totalPages ? 'disabled' : '' %>">
+            <a class="page-link" href="?<%= paginationQuery %>&page=<%= Math.min(totalPages, page + 1) %>">Sau</a>
+          </li>
+        </ul>
+      </nav>
+    <% } %>
   </div>
 
   <%- include('../partials/footer') %>

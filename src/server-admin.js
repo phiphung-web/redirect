@@ -50,6 +50,26 @@ const { hashConnectCode } = require("./services/telegram-bot");
 const app = express();
 const PORT = ports.admin;
 const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
+const DATE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const formatDateInTimezone = (value) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: DEFAULT_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(
+    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value])
+  );
+  return `${values.year}-${values.month}-${values.day}`;
+};
+const parseVietnamDateStart = (value) => {
+  if (typeof value !== "string" || !DATE_INPUT_PATTERN.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00+07:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const addUtcDays = (value, days) =>
+  new Date(new Date(value).getTime() + days * 24 * 60 * 60 * 1000);
 const loginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -1484,7 +1504,22 @@ app.get("/short-links/:id/report", checkAuth, viewShortLinkFromParams, async (re
 
   const stats = await db.query(
     `
-      WITH series AS (
+      WITH buckets AS (
+        SELECT generate_series(
+          date_trunc($4::text, $2::timestamp),
+          date_trunc(
+            $4::text,
+            LEAST($3::timestamp - interval '1 microsecond', LOCALTIMESTAMP)
+          ),
+          CASE $4::text
+            WHEN 'hour' THEN interval '1 hour'
+            WHEN 'day' THEN interval '1 day'
+            WHEN 'week' THEN interval '1 week'
+            ELSE interval '1 month'
+          END
+        ) AS bucket
+      ),
+      series AS (
         SELECT date_trunc($4::text, created_at) AS bucket,
                COUNT(*) FILTER (WHERE action='short_redirect_confirmed')::bigint AS confirmed
         FROM traffic_logs
@@ -1502,11 +1537,16 @@ app.get("/short-links/:id/report", checkAuth, viewShortLinkFromParams, async (re
           AND day >= $2::date
           AND day < $3::date
         GROUP BY bucket
+      ),
+      aggregated AS (
+        SELECT bucket, SUM(confirmed)::bigint AS confirmed
+        FROM series
+        GROUP BY bucket
       )
-      SELECT bucket, SUM(confirmed) AS confirmed
-      FROM series
-      GROUP BY bucket
-      ORDER BY bucket ASC
+      SELECT buckets.bucket, COALESCE(aggregated.confirmed, 0)::bigint AS confirmed
+      FROM buckets
+      LEFT JOIN aggregated USING (bucket)
+      ORDER BY buckets.bucket ASC
     `,
     [shortLinkId, start, end, bucketType]
   );
@@ -1624,12 +1664,27 @@ app.get("/short-links/:id/report", checkAuth, viewShortLinkFromParams, async (re
   );
   const countryStats = await db.query(
     `
-      SELECT country, COUNT(*) AS hits
-      FROM traffic_logs
-      WHERE short_link_id=$1
-        AND created_at >= $2
-        AND created_at < $3
-        AND action='short_redirect_confirmed'
+      WITH dimensions AS (
+        SELECT COALESCE(NULLIF(BTRIM(country), ''), 'N/A') AS country,
+               COUNT(*)::bigint AS hits
+        FROM traffic_logs
+        WHERE short_link_id=$1
+          AND created_at >= $2
+          AND created_at < $3
+          AND action='short_redirect_confirmed'
+        GROUP BY COALESCE(NULLIF(BTRIM(country), ''), 'N/A')
+        UNION ALL
+        SELECT COALESCE(NULLIF(BTRIM(country), ''), 'N/A') AS country,
+               SUM(hits)::bigint AS hits
+        FROM traffic_daily_stats
+        WHERE short_link_id=$1
+          AND day >= $2::date
+          AND day < $3::date
+          AND action='short_redirect_confirmed'
+        GROUP BY COALESCE(NULLIF(BTRIM(country), ''), 'N/A')
+      )
+      SELECT country, SUM(hits)::bigint AS hits
+      FROM dimensions
       GROUP BY country
       ORDER BY hits DESC
       LIMIT 10
@@ -1638,13 +1693,28 @@ app.get("/short-links/:id/report", checkAuth, viewShortLinkFromParams, async (re
   );
   const deviceStats = await db.query(
     `
-      SELECT COALESCE(device_type, 'pc') AS device_type, COUNT(*) AS hits
-      FROM traffic_logs
-      WHERE short_link_id=$1
-        AND created_at >= $2
-        AND created_at < $3
-        AND action='short_redirect_confirmed'
-      GROUP BY COALESCE(device_type, 'pc')
+      WITH dimensions AS (
+        SELECT COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown') AS device_type,
+               COUNT(*)::bigint AS hits
+        FROM traffic_logs
+        WHERE short_link_id=$1
+          AND created_at >= $2
+          AND created_at < $3
+          AND action='short_redirect_confirmed'
+        GROUP BY COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown')
+        UNION ALL
+        SELECT COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown') AS device_type,
+               SUM(hits)::bigint AS hits
+        FROM traffic_daily_stats
+        WHERE short_link_id=$1
+          AND day >= $2::date
+          AND day < $3::date
+          AND action='short_redirect_confirmed'
+        GROUP BY COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown')
+      )
+      SELECT device_type, SUM(hits)::bigint AS hits
+      FROM dimensions
+      GROUP BY device_type
       ORDER BY hits DESC
       LIMIT 10
     `,
@@ -1703,21 +1773,44 @@ app.get("/short-links/:id/report", checkAuth, viewShortLinkFromParams, async (re
     rangeLabel,
     start,
     end,
+    logStartDate: formatDateInTimezone(start),
+    logEndDate: formatDateInTimezone(new Date(end.getTime() - 1)),
   });
 });
 
 app.get("/short-links/:id/logs", checkAuth, viewShortLinkFromParams, async (req, res) => {
   const shortLinkId = req.params.id;
-  const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
+  const allowedStatuses = new Set(["", "confirmed", "unconfirmed", "legacy"]);
+  const requestedStatus =
+    typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const status = allowedStatuses.has(requestedStatus) ? requestedStatus : "";
+  const country =
+    typeof req.query.country === "string"
+      ? req.query.country.trim().toUpperCase().slice(0, 8)
+      : "";
+  const allowedDevices = new Set(["", "mobile", "desktop", "tablet", "pc", "unknown"]);
+  const requestedDevice =
+    typeof req.query.device === "string" ? req.query.device.trim().toLowerCase() : "";
+  const device = allowedDevices.has(requestedDevice) ? requestedDevice : "";
+  const ip =
+    typeof req.query.ip === "string" ? req.query.ip.trim().slice(0, 64) : "";
+  const limit = Math.max(
+    50,
+    Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000)
+  );
+  const page = Math.max(parseInt(req.query.page || "1", 10) || 1, 1);
   const now = new Date();
-  const start =
-    req.query.start_date && !isNaN(new Date(req.query.start_date))
-      ? new Date(req.query.start_date)
-      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const end =
-    req.query.end_date && !isNaN(new Date(req.query.end_date))
-      ? new Date(req.query.end_date)
-      : now;
+  const defaultEndDate = formatDateInTimezone(now);
+  const defaultStartDate = formatDateInTimezone(addUtcDays(now, -6));
+  const startDateValue = parseVietnamDateStart(req.query.start_date)
+    ? req.query.start_date
+    : defaultStartDate;
+  const endDateValue = parseVietnamDateStart(req.query.end_date)
+    ? req.query.end_date
+    : defaultEndDate;
+  const start = parseVietnamDateStart(startDateValue);
+  let end = addUtcDays(parseVietnamDateStart(endDateValue), 1);
+  if (end <= start) end = addUtcDays(start, 1);
   const rLink = await db.query(
     `
       SELECT s.*, d.domain_url
@@ -1728,18 +1821,55 @@ app.get("/short-links/:id/logs", checkAuth, viewShortLinkFromParams, async (req,
     [shortLinkId]
   );
   if (!rLink.rowCount) return res.redirect("/short-links");
-  const logs = await db.query(
-    `
-      SELECT *
-      FROM traffic_logs
-      WHERE short_link_id=$1
-        AND created_at >= $2
-        AND created_at < $3
-      ORDER BY id DESC
-      LIMIT ${limit}
-    `,
-    [shortLinkId, start, end]
+  let whereSql = `short_link_id=$1 AND created_at >= $2 AND created_at < $3`;
+  const params = [shortLinkId, start, end];
+  if (status) {
+    const actionByStatus = {
+      confirmed: "short_redirect_confirmed",
+      unconfirmed: "short_link_open",
+      legacy: "short_redirect",
+    };
+    params.push(actionByStatus[status]);
+    whereSql += ` AND action=$${params.length}`;
+  }
+  if (country) {
+    params.push(country);
+    whereSql += ` AND UPPER(COALESCE(country, ''))=$${params.length}`;
+  }
+  if (device) {
+    params.push(device);
+    whereSql += ` AND LOWER(COALESCE(device_type, 'unknown'))=$${params.length}`;
+  }
+  if (ip) {
+    params.push(ip);
+    whereSql += ` AND ip::text=$${params.length}`;
+  }
+  const totalResult = await db.query(
+    `SELECT COUNT(*)::bigint AS total FROM traffic_logs WHERE ${whereSql}`,
+    params
   );
+  const total = Number(totalResult.rows[0]?.total || 0);
+  const totalPages = Math.max(Math.ceil(total / limit), 1);
+  const currentPage = Math.min(page, totalPages);
+  const offset = (currentPage - 1) * limit;
+  const sqlParams = [...params, limit, offset];
+  const logs = await db.query(
+    `SELECT *
+     FROM traffic_logs
+     WHERE ${whereSql}
+     ORDER BY id DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    sqlParams
+  );
+  const paginationParams = new URLSearchParams({
+    status,
+    country,
+    device,
+    ip,
+    start_date: startDateValue,
+    end_date: endDateValue,
+    limit: String(limit),
+  });
   res.render("admin/short_link_logs", {
     user: req.session.user,
     link: rLink.rows[0],
@@ -1747,6 +1877,16 @@ app.get("/short-links/:id/logs", checkAuth, viewShortLinkFromParams, async (req,
     limit,
     start,
     end,
+    status,
+    country,
+    device,
+    ip,
+    total,
+    page: currentPage,
+    totalPages,
+    paginationQuery: paginationParams.toString(),
+    startDateValue,
+    endDateValue,
   });
 });
 
@@ -2928,7 +3068,22 @@ app.get("/campaigns/:id/report/v2", checkAuth, viewCampaignFromParams, async (re
 
   const stats = await db.query(
     `
-        WITH series AS (
+        WITH buckets AS (
+          SELECT generate_series(
+            date_trunc($4::text, $2::timestamp),
+            date_trunc(
+              $4::text,
+              LEAST($3::timestamp - interval '1 microsecond', LOCALTIMESTAMP)
+            ),
+            CASE $4::text
+              WHEN 'hour' THEN interval '1 hour'
+              WHEN 'day' THEN interval '1 day'
+              WHEN 'week' THEN interval '1 week'
+              ELSE interval '1 month'
+            END
+          ) AS bucket
+        ),
+        series AS (
           SELECT date_trunc($4::text, created_at) as bucket,
                  COUNT(*) FILTER (WHERE action = 'redirect')::bigint as redirects,
                  COUNT(*) FILTER (WHERE action LIKE 'safe_page%')::bigint as safe
@@ -2946,11 +3101,20 @@ app.get("/campaigns/:id/report/v2", checkAuth, viewCampaignFromParams, async (re
             AND day >= $2::date
             AND day < $3::date
           GROUP BY bucket
+        ),
+        aggregated AS (
+          SELECT bucket,
+                 SUM(redirects)::bigint AS redirects,
+                 SUM(safe)::bigint AS safe
+          FROM series
+          GROUP BY bucket
         )
-        SELECT bucket, SUM(redirects) AS redirects, SUM(safe) AS safe
-        FROM series
-        GROUP BY bucket
-        ORDER BY bucket ASC
+        SELECT buckets.bucket,
+               COALESCE(aggregated.redirects, 0)::bigint AS redirects,
+               COALESCE(aggregated.safe, 0)::bigint AS safe
+        FROM buckets
+        LEFT JOIN aggregated USING (bucket)
+        ORDER BY buckets.bucket ASC
       `,
     [campId, start, end, bucketType]
   );
@@ -3007,13 +3171,29 @@ app.get("/campaigns/:id/report/v2", checkAuth, viewCampaignFromParams, async (re
 
   const countryStats = await db.query(
     `
+        WITH dimensions AS (
+          SELECT COALESCE(NULLIF(BTRIM(country), ''), 'N/A') AS country,
+                 COUNT(*) FILTER (WHERE action='redirect')::bigint AS redirects,
+                 COUNT(*)::bigint AS hits
+          FROM traffic_logs
+          WHERE campaign_id=$1
+            AND created_at >= $2
+            AND created_at < $3
+          GROUP BY COALESCE(NULLIF(BTRIM(country), ''), 'N/A')
+          UNION ALL
+          SELECT COALESCE(NULLIF(BTRIM(country), ''), 'N/A') AS country,
+                 COALESCE(SUM(hits) FILTER (WHERE action='redirect'), 0)::bigint,
+                 COALESCE(SUM(hits), 0)::bigint
+          FROM traffic_daily_stats
+          WHERE campaign_id=$1
+            AND day >= $2::date
+            AND day < $3::date
+          GROUP BY COALESCE(NULLIF(BTRIM(country), ''), 'N/A')
+        )
         SELECT country,
-               COUNT(*) FILTER (WHERE action='redirect') as redirects,
-               COUNT(*) as hits
-        FROM traffic_logs
-        WHERE campaign_id=$1
-          AND created_at >= $2
-          AND created_at < $3
+               SUM(redirects)::bigint AS redirects,
+               SUM(hits)::bigint AS hits
+        FROM dimensions
         GROUP BY country
         ORDER BY hits DESC
         LIMIT 10
@@ -3023,14 +3203,30 @@ app.get("/campaigns/:id/report/v2", checkAuth, viewCampaignFromParams, async (re
 
   const deviceStats = await db.query(
     `
-        SELECT COALESCE(device_type, 'pc') AS device_type,
-               COUNT(*) AS hits
-        FROM traffic_logs
-        WHERE campaign_id=$1
-          AND created_at >= $2
-          AND created_at < $3
-          AND action='redirect'
-        GROUP BY COALESCE(device_type, 'pc')
+        WITH dimensions AS (
+          SELECT COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown') AS device_type,
+                 COUNT(*) FILTER (WHERE action='redirect')::bigint AS redirects,
+                 COUNT(*)::bigint AS hits
+          FROM traffic_logs
+          WHERE campaign_id=$1
+            AND created_at >= $2
+            AND created_at < $3
+          GROUP BY COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown')
+          UNION ALL
+          SELECT COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown') AS device_type,
+                 COALESCE(SUM(hits) FILTER (WHERE action='redirect'), 0)::bigint,
+                 COALESCE(SUM(hits), 0)::bigint
+          FROM traffic_daily_stats
+          WHERE campaign_id=$1
+            AND day >= $2::date
+            AND day < $3::date
+          GROUP BY COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown')
+        )
+        SELECT device_type,
+               SUM(redirects)::bigint AS redirects,
+               SUM(hits)::bigint AS hits
+        FROM dimensions
+        GROUP BY device_type
         ORDER BY hits DESC
         LIMIT 10
     `,
@@ -3098,6 +3294,8 @@ app.get("/campaigns/:id/report/v2", checkAuth, viewCampaignFromParams, async (re
     rangeLabel,
     start,
     end,
+    logStartDate: formatDateInTimezone(start),
+    logEndDate: formatDateInTimezone(new Date(end.getTime() - 1)),
   });
 });
 app.get("/campaigns/:id/report", checkAuth, viewCampaignFromParams, async (req, res) => {
@@ -3110,30 +3308,95 @@ app.get("/campaigns/:id/report", checkAuth, viewCampaignFromParams, async (req, 
 
 app.get("/campaigns/:id/logs", checkAuth, viewCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
-  const action = req.query.action;
-  const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
+  const allowedActions = new Set([
+    "",
+    "redirect",
+    "fail",
+    "safe_page",
+    "safe_page_wrong_country",
+    "safe_page_wrong_device",
+    "safe_page_wrong_param_val",
+    "safe_page_missing_param",
+    "safe_page_inactive",
+  ]);
+  const requestedAction =
+    typeof req.query.action === "string" ? req.query.action.trim() : "";
+  const action = allowedActions.has(requestedAction) ? requestedAction : "";
+  const country =
+    typeof req.query.country === "string"
+      ? req.query.country.trim().toUpperCase().slice(0, 8)
+      : "";
+  const allowedDevices = new Set(["", "mobile", "desktop", "tablet", "pc", "unknown"]);
+  const requestedDevice =
+    typeof req.query.device === "string" ? req.query.device.trim().toLowerCase() : "";
+  const device = allowedDevices.has(requestedDevice) ? requestedDevice : "";
+  const ip =
+    typeof req.query.ip === "string" ? req.query.ip.trim().slice(0, 64) : "";
+  const limit = Math.max(
+    50,
+    Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000)
+  );
+  const page = Math.max(parseInt(req.query.page || "1", 10) || 1, 1);
   const now = new Date();
-  const start =
-    req.query.start_date && !isNaN(new Date(req.query.start_date))
-      ? new Date(req.query.start_date)
-      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const end =
-    req.query.end_date && !isNaN(new Date(req.query.end_date))
-      ? new Date(req.query.end_date)
-      : now;
+  const defaultEndDate = formatDateInTimezone(now);
+  const defaultStartDate = formatDateInTimezone(addUtcDays(now, -6));
+  const startDateValue = parseVietnamDateStart(req.query.start_date)
+    ? req.query.start_date
+    : defaultStartDate;
+  const endDateValue = parseVietnamDateStart(req.query.end_date)
+    ? req.query.end_date
+    : defaultEndDate;
+  let start = parseVietnamDateStart(startDateValue);
+  let end = addUtcDays(parseVietnamDateStart(endDateValue), 1);
+  if (end <= start) end = addUtcDays(start, 1);
   const rCamp = await db.query(`SELECT * FROM campaigns WHERE id=$1`, [
     campId,
   ]);
   if (!rCamp.rowCount) return res.redirect("/redirect");
-  let sql = `SELECT * FROM traffic_logs WHERE campaign_id=$1 AND created_at >= $2 AND created_at < $3`;
+  let whereSql = `campaign_id=$1 AND created_at >= $2 AND created_at < $3`;
   const params = [campId, start, end];
-  if (action) {
+  if (action === "fail" || action === "safe_page") {
+    whereSql += ` AND action LIKE 'safe_page%'`;
+  } else if (action) {
     params.push(action);
-    sql += ` AND action=$${params.length}`;
+    whereSql += ` AND action=$${params.length}`;
   }
-  sql += ` ORDER BY id DESC LIMIT ${limit}`;
-  const logs = await db.query(sql, params);
+  if (country) {
+    params.push(country);
+    whereSql += ` AND UPPER(COALESCE(country, ''))=$${params.length}`;
+  }
+  if (device) {
+    params.push(device);
+    whereSql += ` AND LOWER(COALESCE(device_type, 'unknown'))=$${params.length}`;
+  }
+  if (ip) {
+    params.push(ip);
+    whereSql += ` AND ip::text=$${params.length}`;
+  }
+  const totalResult = await db.query(
+    `SELECT COUNT(*)::bigint AS total FROM traffic_logs WHERE ${whereSql}`,
+    params
+  );
+  const total = Number(totalResult.rows[0]?.total || 0);
+  const totalPages = Math.max(Math.ceil(total / limit), 1);
+  const currentPage = Math.min(page, totalPages);
+  const offset = (currentPage - 1) * limit;
+  const sqlParams = [...params, limit, offset];
+  const sql = `SELECT * FROM traffic_logs
+               WHERE ${whereSql}
+               ORDER BY id DESC
+               LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+  const logs = await db.query(sql, sqlParams);
   const logsMapped = logs.rows.map(parseLogMeta);
+  const paginationParams = new URLSearchParams({
+    action,
+    country,
+    device,
+    ip,
+    start_date: startDateValue,
+    end_date: endDateValue,
+    limit: String(limit),
+  });
   res.render("admin/logs", {
     user: req.session.user,
     camp: rCamp.rows[0],
@@ -3142,6 +3405,15 @@ app.get("/campaigns/:id/logs", checkAuth, viewCampaignFromParams, async (req, re
     limit,
     start,
     end,
+    country,
+    device,
+    ip,
+    total,
+    page: currentPage,
+    totalPages,
+    paginationQuery: paginationParams.toString(),
+    startDateValue,
+    endDateValue,
   });
 });
 

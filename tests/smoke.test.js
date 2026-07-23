@@ -121,6 +121,13 @@ test("domain access keeps its creator as owner and only shares with regular user
     ),
     "utf8"
   );
+  const trafficDimensionMigration = fs.readFileSync(
+    path.join(
+      root,
+      "database/migrations/2026-07-23-zzzz-traffic-report-dimensions.sql"
+    ),
+    "utf8"
+  );
   const sharingPolicyMigration = fs.readFileSync(
     path.join(
       root,
@@ -148,7 +155,14 @@ test("domain access keeps its creator as owner and only shares with regular user
   assert.match(cleanup, /DELETE FROM traffic_logs/);
   assert.match(cleanup, /DELETE FROM admin_audit_logs/);
   assert.match(cleanup, /short_link_id/);
+  assert.match(cleanup, /country,[\s\S]*device_type,[\s\S]*hits/);
   assert.match(trafficArchiveMigration, /PRIMARY KEY \(day, domain_id, campaign_id, short_link_id, action\)/);
+  assert.match(trafficDimensionMigration, /ADD COLUMN IF NOT EXISTS country/);
+  assert.match(trafficDimensionMigration, /ADD COLUMN IF NOT EXISTS device_type/);
+  assert.match(
+    trafficDimensionMigration,
+    /PRIMARY KEY \([\s\S]*country,[\s\S]*device_type[\s\S]*\)/
+  );
   assert.match(adminSource, /FROM traffic_daily_stats/);
 });
 
@@ -421,9 +435,31 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
 test("report time filters keep labels outside controls", () => {
   const report = fs.readFileSync(path.join(__dirname, "../src/views/admin/report_v2.ejs"), "utf8");
   const shortReport = fs.readFileSync(path.join(__dirname, "../src/views/admin/short_link_report.ejs"), "utf8");
+  const serverSource = fs.readFileSync(
+    path.join(__dirname, "../src/server-admin.js"),
+    "utf8"
+  );
+  const campaignLogs = fs.readFileSync(
+    path.join(__dirname, "../src/views/admin/logs.ejs"),
+    "utf8"
+  );
+  const shortLinkLogs = fs.readFileSync(
+    path.join(__dirname, "../src/views/admin/short_link_logs.ejs"),
+    "utf8"
+  );
   [report, shortReport].forEach((source) => {
     assert.match(source, /class="report-filter-field"/);
     assert.doesNotMatch(source, /class="form-floating/);
+  });
+  assert.match(serverSource, /SELECT generate_series\(/);
+  assert.match(serverSource, /LEFT JOIN aggregated USING \(bucket\)/);
+  assert.match(serverSource, /action LIKE 'safe_page%'/);
+  assert.match(serverSource, /ip::text=\$/);
+  [campaignLogs, shortLinkLogs].forEach((source) => {
+    assert.match(source, /name="country"/);
+    assert.match(source, /name="device"/);
+    assert.match(source, /name="ip"/);
+    assert.match(source, /paginationQuery/);
   });
 });
 
@@ -453,9 +489,13 @@ test("admin analytics separate successful link traffic from raw safe-page reques
   assert.match(domainSource, /log_redirects/);
   assert.match(domainSource, /confirmed_redirects/);
   assert.match(domainSource, /opened_count/);
-  assert.match(serverSource, /SELECT COALESCE\(device_type, 'pc'\) AS device_type,[\s\S]*AND action='redirect'/);
+  assert.match(
+    serverSource,
+    /SELECT device_type,[\s\S]*SUM\(redirects\)::bigint AS redirects,[\s\S]*SUM\(hits\)::bigint AS hits/
+  );
   assert.match(serverSource, /deviceStats: deviceStats\.rows/);
   assert.match(campaignReportSource, /deviceStats && deviceStats\.forEach/);
+  assert.match(campaignReportSource, />Hit<[\s\S]*>Pass</);
 });
 
 test("contextual help is available across the admin product", () => {

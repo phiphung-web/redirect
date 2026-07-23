@@ -33,20 +33,40 @@
                 <label class="form-label" data-help="Lọc theo kết quả xử lý: redirect thành công hoặc các trạng thái Safe Page/fail.">Action</label>
                 <select name="action" class="form-select form-select-sm">
                     <option value="" <%= !action ? 'selected' : '' %>>Tất cả</option>
-                    <option value="redirect" <%= action==='redirect' ? 'selected' : '' %>>redirect</option>
-                    <option value="safe_page" <%= action==='safe_page' ? 'selected' : '' %>>safe_page</option>
-                    <option value="safe_page_wrong_country" <%= action==='safe_page_wrong_country' ? 'selected' : '' %>>wrong_country</option>
-                    <option value="safe_page_wrong_param_val" <%= action==='safe_page_wrong_param_val' ? 'selected' : '' %>>wrong_param_val</option>
-                    <option value="safe_page_missing_param" <%= action==='safe_page_missing_param' ? 'selected' : '' %>>missing_param</option>
+                    <option value="redirect" <%= action==='redirect' ? 'selected' : '' %>>PASS · Đã redirect</option>
+                    <option value="fail" <%= action==='fail' || action==='safe_page' ? 'selected' : '' %>>FAIL · Tất cả</option>
+                    <option value="safe_page_wrong_country" <%= action==='safe_page_wrong_country' ? 'selected' : '' %>>FAIL · Sai quốc gia</option>
+                    <option value="safe_page_wrong_device" <%= action==='safe_page_wrong_device' ? 'selected' : '' %>>FAIL · Sai thiết bị</option>
+                    <option value="safe_page_wrong_param_val" <%= action==='safe_page_wrong_param_val' ? 'selected' : '' %>>FAIL · Sai giá trị tham số</option>
+                    <option value="safe_page_missing_param" <%= action==='safe_page_missing_param' ? 'selected' : '' %>>FAIL · Thiếu tham số</option>
+                    <option value="safe_page_inactive" <%= action==='safe_page_inactive' ? 'selected' : '' %>>FAIL · Link đang tắt</option>
                 </select>
             </div>
             <div class="col-auto">
                 <label class="form-label">Từ ngày</label>
-                <input type="date" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
+                <input type="date" name="start_date" value="<%= startDateValue %>" class="form-control form-control-sm">
             </div>
             <div class="col-auto">
                 <label class="form-label">Đến ngày</label>
-                <input type="date" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>" class="form-control form-control-sm">
+                <input type="date" name="end_date" value="<%= endDateValue %>" class="form-control form-control-sm">
+            </div>
+            <div class="col-auto">
+                <label class="form-label">Quốc gia</label>
+                <input type="text" name="country" value="<%= country %>" maxlength="8" placeholder="VD: PH" class="form-control form-control-sm text-uppercase">
+            </div>
+            <div class="col-auto">
+                <label class="form-label">Thiết bị</label>
+                <select name="device" class="form-select form-select-sm">
+                    <option value="" <%= !device ? 'selected' : '' %>>Tất cả</option>
+                    <option value="mobile" <%= device==='mobile' ? 'selected' : '' %>>Mobile</option>
+                    <option value="desktop" <%= device==='desktop' ? 'selected' : '' %>>Desktop</option>
+                    <option value="tablet" <%= device==='tablet' ? 'selected' : '' %>>Tablet</option>
+                    <option value="unknown" <%= device==='unknown' ? 'selected' : '' %>>Không xác định</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label">IP</label>
+                <input type="text" name="ip" value="<%= ip %>" maxlength="64" placeholder="IP chính xác" class="form-control form-control-sm">
             </div>
             <div class="col-auto">
                 <label class="form-label" data-help="Giới hạn số bản ghi tải trong một lần để tránh trang log quá nặng.">Số dòng</label>
@@ -56,6 +76,14 @@
                 <button class="btn btn-primary btn-sm" type="submit">Lọc</button>
             </div>
         </form>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <div class="text-muted small">
+                Tìm thấy <b><%= total.toLocaleString('vi-VN') %></b> log · Trang <%= page %>/<%= totalPages %>
+            </div>
+            <% if (action || country || device || ip) { %>
+                <a class="btn btn-outline-secondary btn-sm" href="/campaigns/<%= camp.id %>/logs?start_date=<%= encodeURIComponent(startDateValue) %>&end_date=<%= encodeURIComponent(endDateValue) %>&limit=<%= limit %>">Xóa bộ lọc</a>
+            <% } %>
+        </div>
         <div class="table-responsive">
             <table class="table table-sm table-striped table-hover table-log">
                 <thead class="table-dark">
@@ -124,6 +152,19 @@
                 </tbody>
             </table>
         </div>
+        <% if (totalPages > 1) { %>
+            <nav class="mt-3" aria-label="Phân trang log">
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    <li class="page-item <%= page <= 1 ? 'disabled' : '' %>">
+                        <a class="page-link" href="?<%= paginationQuery %>&page=<%= Math.max(1, page - 1) %>">Trước</a>
+                    </li>
+                    <li class="page-item disabled"><span class="page-link"><%= page %> / <%= totalPages %></span></li>
+                    <li class="page-item <%= page >= totalPages ? 'disabled' : '' %>">
+                        <a class="page-link" href="?<%= paginationQuery %>&page=<%= Math.min(totalPages, page + 1) %>">Sau</a>
+                    </li>
+                </ul>
+            </nav>
+        <% } %>
     </div>
     <%- include('../partials/footer') %>
 </body>

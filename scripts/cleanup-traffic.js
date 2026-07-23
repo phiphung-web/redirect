@@ -21,13 +21,21 @@ const run = async () => {
     await client.query("BEGIN");
     await client.query(
       `INSERT INTO traffic_daily_stats
-         (day, domain_id, campaign_id, short_link_id, action, hits, updated_at)
+         (day, domain_id, campaign_id, short_link_id, action, country,
+          device_type, hits, updated_at)
        SELECT created_at::date, COALESCE(domain_id, 0), COALESCE(campaign_id, 0),
-              COALESCE(short_link_id, 0), action, COUNT(*), now()
+              COALESCE(short_link_id, 0), action,
+              COALESCE(NULLIF(BTRIM(country), ''), 'N/A'),
+              COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown'),
+              COUNT(*), now()
        FROM traffic_logs
        WHERE created_at < now() - ($1::text || ' days')::interval
-       GROUP BY created_at::date, domain_id, campaign_id, short_link_id, action
-       ON CONFLICT (day, domain_id, campaign_id, short_link_id, action)
+       GROUP BY created_at::date, domain_id, campaign_id, short_link_id, action,
+                COALESCE(NULLIF(BTRIM(country), ''), 'N/A'),
+                COALESCE(NULLIF(BTRIM(device_type), ''), 'unknown')
+       ON CONFLICT (
+         day, domain_id, campaign_id, short_link_id, action, country, device_type
+       )
        DO UPDATE SET
          hits = traffic_daily_stats.hits + EXCLUDED.hits,
          updated_at = now()`,

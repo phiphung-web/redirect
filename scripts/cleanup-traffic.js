@@ -1,6 +1,7 @@
 require("dotenv").config({ quiet: true });
 
 const db = require("../src/config/db");
+const { cleanupExpiredFiles } = require("../src/services/file-audit");
 
 const retentionDays = Number.parseInt(process.env.LOG_RETENTION_DAYS || "30", 10);
 const auditRetentionDays = Number.parseInt(
@@ -46,6 +47,8 @@ const run = async () => {
     console.log(
       `Admin audit cleanup completed: ${auditResult.rowCount} rows removed`
     );
+    cleanupExpiredFiles();
+    console.log("Private audit file cleanup completed");
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

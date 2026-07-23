@@ -19,11 +19,16 @@
   </style>
 </head>
 <body class="bg-light">
+  <% const projectOnlyView = typeof resourceReadOnly !== 'undefined' && resourceReadOnly && camp.project_id; %>
   <%- include('../partials/header', {
     user,
-    active: 'redirect',
-    backUrl: '/domains/' + camp.domain_id,
-    breadcrumb: [
+    active: projectOnlyView ? 'projects' : 'redirect',
+    backUrl: projectOnlyView ? '/projects/' + camp.project_id : '/domains/' + camp.domain_id,
+    breadcrumb: projectOnlyView ? [
+      { label: 'Dự án', url: '/projects/' + camp.project_id },
+      { label: camp.name },
+      { label: 'Báo cáo' }
+    ] : [
       { label: 'Redirect', url: '/redirect' },
       { label: 'Domain #' + camp.domain_id, url: '/domains/' + camp.domain_id },
       { label: 'Báo cáo' }

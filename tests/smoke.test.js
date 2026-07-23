@@ -1465,6 +1465,24 @@ test("a project viewer sees only project links and cannot manage them", async ()
         ],
       };
     }
+    if (sql.includes("SELECT domain_id, project_id") && sql.includes("FROM campaigns")) {
+      return {
+        rowCount: 1,
+        rows: [{ domain_id: 8, project_id: 31 }],
+      };
+    }
+    if (sql.includes("AS domain_access") && sql.includes("AS project_access")) {
+      return {
+        rowCount: 1,
+        rows: [{ domain_access: false, project_access: true }],
+      };
+    }
+    if (sql.includes("SELECT domain_id AS domain_id") && sql.includes("FROM campaigns")) {
+      return { rowCount: 1, rows: [{ domain_id: 8 }] };
+    }
+    if (sql.includes("FROM domain_user_access") && sql.includes("WHERE domain_id=$1 AND user_id=$2")) {
+      return { rowCount: 0, rows: [] };
+    }
     if (sql.includes("SELECT s.*, d.domain_url")) {
       return { rowCount: 0, rows: [] };
     }
@@ -1501,9 +1519,19 @@ test("a project viewer sees only project links and cannot manage them", async ()
   const projectPage = await agent.get("/projects/31");
   assert.equal(projectPage.status, 200);
   assert.match(projectPage.text, /Visible campaign/);
-  assert.match(projectPage.text, /Chỉ xem/);
+  assert.match(projectPage.text, /báo cáo và log/);
+  assert.match(projectPage.text, /Không chỉnh sửa/);
+  assert.match(projectPage.text, /campaigns\/501\/report/);
+  assert.match(projectPage.text, /campaigns\/501\/logs/);
   assert.doesNotMatch(projectPage.text, /projects\/31\/links\/assign/);
   assert.doesNotMatch(projectPage.text, /campaigns\/edit\/501/);
+
+  const report = await agent.get("/campaigns/501/report");
+  assert.equal(report.status, 302);
+  assert.equal(report.headers.location, "/campaigns/501/report/v2");
+
+  const edit = await agent.get("/campaigns/edit/501");
+  assert.equal(edit.status, 403);
 
   const csrf = extractCsrf(projectPage.text);
   const forbidden = await agent

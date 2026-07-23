@@ -12,11 +12,16 @@
   </style>
 </head>
 <body class="bg-light">
+  <% const projectOnlyView = typeof resourceReadOnly !== 'undefined' && resourceReadOnly && link.project_id; %>
   <%- include('../partials/header', {
     user,
-    active: 'short-links',
-    backUrl: '/domains/' + link.domain_id,
-    breadcrumb: [
+    active: projectOnlyView ? 'projects' : 'short-links',
+    backUrl: projectOnlyView ? '/projects/' + link.project_id : '/domains/' + link.domain_id,
+    breadcrumb: projectOnlyView ? [
+      { label: 'Dự án', url: '/projects/' + link.project_id },
+      { label: link.title || link.code },
+      { label: 'Báo cáo' }
+    ] : [
       { label: link.domain_url, url: '/domains/' + link.domain_id },
       { label: 'Link tự chuyển' },
       { label: link.title || link.code },

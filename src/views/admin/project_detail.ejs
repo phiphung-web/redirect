@@ -78,7 +78,7 @@
             <% if (canManage) { %>
               Chia sẻ riêng dự án ở chế độ chỉ xem; user không thể thêm, xóa hoặc sửa link.
             <% } else { %>
-              Bạn được chia sẻ dự án này ở chế độ chỉ xem.
+              Bạn được xem link, báo cáo và log; không thể thay đổi cấu hình.
             <% } %>
           </div>
         </div>
@@ -176,19 +176,23 @@
                 <td><strong class="text-success"><%= Number(link.redirects).toLocaleString('vi-VN') %></strong></td>
                 <td><span class="badge <%= link.is_active ? 'bg-success' : 'bg-danger' %>"><%= link.is_active ? 'ON' : 'OFF' %></span></td>
                 <td class="text-end text-nowrap">
-                  <% if (canManage) { %>
-                    <% if (link.type === 'campaign') { %>
+                  <% if (link.type === 'campaign') { %>
+                    <% if (canManage) { %>
                       <a class="btn btn-sm btn-outline-primary" href="/campaigns/edit/<%= link.id %>">Chi tiết</a>
-                      <a class="btn btn-sm btn-outline-info" href="/campaigns/<%= link.id %>/report"><i class="fa-solid fa-chart-line"></i></a>
-                    <% } else { %>
-                      <a class="btn btn-sm btn-outline-info" href="/short-links/<%= link.id %>/report"><i class="fa-solid fa-chart-line"></i></a>
                     <% } %>
+                    <a class="btn btn-sm btn-outline-info" href="/campaigns/<%= link.id %>/report" title="Báo cáo"><i class="fa-solid fa-chart-line"></i></a>
+                    <a class="btn btn-sm btn-outline-secondary" href="/campaigns/<%= link.id %>/logs" title="Log"><i class="fa-solid fa-list"></i></a>
+                  <% } else { %>
+                    <a class="btn btn-sm btn-outline-info" href="/short-links/<%= link.id %>/report" title="Báo cáo"><i class="fa-solid fa-chart-line"></i></a>
+                    <a class="btn btn-sm btn-outline-secondary" href="/short-links/<%= link.id %>/logs" title="Log"><i class="fa-solid fa-list"></i></a>
+                  <% } %>
+                  <% if (canManage) { %>
                     <form class="d-inline" action="/projects/<%= project.id %>/links/<%= link.type %>/<%= link.id %>/remove" method="POST" onsubmit="return confirm('Đưa link này về Chưa phân loại?')">
                       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                       <button class="btn btn-sm btn-outline-secondary" title="Bỏ khỏi dự án"><i class="fa-solid fa-folder-minus"></i></button>
                     </form>
                   <% } else { %>
-                    <span class="badge bg-light text-secondary border"><i class="fa-solid fa-eye me-1"></i>Chỉ xem</span>
+                    <span class="badge bg-light text-secondary border"><i class="fa-solid fa-eye me-1"></i>Không chỉnh sửa</span>
                   <% } %>
                 </td>
               </tr>

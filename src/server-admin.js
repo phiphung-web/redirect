@@ -320,6 +320,61 @@ const ownShortLinkFromParams = requireOwnedResource(
   (req) => req.params.id
 );
 
+const requireViewableResource = (resourceType, getId) => {
+  return async (req, res, next) => {
+    if (!req.session.user) return res.redirect("/login");
+    if (req.session.user.role_name === "super_admin") return next();
+
+    const resource = RESOURCE_DOMAIN_EXPRESSIONS[resourceType];
+    const resourceId = Number.parseInt(getId(req), 10);
+    if (!resource || !Number.isInteger(resourceId)) {
+      return res.status(400).send("Tài nguyên không hợp lệ");
+    }
+    const result = await db.query(
+      `SELECT domain_id, project_id
+       FROM ${resource.table}
+       WHERE id=$1
+       LIMIT 1`,
+      [resourceId]
+    );
+    if (!result.rowCount) {
+      return res.status(404).send("Không tìm thấy tài nguyên");
+    }
+    const link = result.rows[0];
+    const access = await db.query(
+      `SELECT
+         EXISTS (
+           SELECT 1 FROM domain_user_access
+           WHERE domain_id=$1 AND user_id=$2
+         ) AS domain_access,
+         (
+           $3::int IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM project_user_access
+             WHERE project_id=$3 AND user_id=$2
+           )
+         ) AS project_access`,
+      [link.domain_id, req.session.user.id, link.project_id]
+    );
+    const allowed =
+      access.rows[0]?.domain_access || access.rows[0]?.project_access;
+    if (!allowed) {
+      return res.status(403).send("Bạn không có quyền xem link này");
+    }
+    res.locals.resourceReadOnly = !access.rows[0]?.domain_access;
+    return next();
+  };
+};
+
+const viewCampaignFromParams = requireViewableResource(
+  "campaign",
+  (req) => req.params.id
+);
+const viewShortLinkFromParams = requireViewableResource(
+  "shortLink",
+  (req) => req.params.id
+);
+
 const projectScopeUserId = (req) =>
   req.session.user.role_name === "super_admin" ? null : req.session.user.id;
 
@@ -1329,7 +1384,7 @@ app.post(
   deleteShortLinkHandler
 );
 
-app.get("/short-links/:id/report", checkAuth, ownShortLinkFromParams, async (req, res) => {
+app.get("/short-links/:id/report", checkAuth, viewShortLinkFromParams, async (req, res) => {
   const shortLinkId = req.params.id;
   const preset = req.query.preset || "today";
   const now = new Date();
@@ -1651,7 +1706,7 @@ app.get("/short-links/:id/report", checkAuth, ownShortLinkFromParams, async (req
   });
 });
 
-app.get("/short-links/:id/logs", checkAuth, ownShortLinkFromParams, async (req, res) => {
+app.get("/short-links/:id/logs", checkAuth, viewShortLinkFromParams, async (req, res) => {
   const shortLinkId = req.params.id;
   const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
   const now = new Date();
@@ -1695,7 +1750,7 @@ app.get("/short-links/:id/logs", checkAuth, ownShortLinkFromParams, async (req, 
   });
 });
 
-app.get("/short-links/:id/report/export", checkAuth, ownShortLinkFromParams, async (req, res) => {
+app.get("/short-links/:id/report/export", checkAuth, viewShortLinkFromParams, async (req, res) => {
   const shortLinkId = req.params.id;
   const { normalized, start, end } = parseMonthRange(req.query.month);
   const rLink = await db.query(`SELECT title FROM short_links WHERE id=$1`, [
@@ -2772,7 +2827,7 @@ app.get("/api/campaigns/:id/config", checkAuth, ownCampaignFromParams, async (re
 });
 
 // ... 기존 routes ...
-app.get("/campaigns/:id/report/v2", checkAuth, ownCampaignFromParams, async (req, res) => {
+app.get("/campaigns/:id/report/v2", checkAuth, viewCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const preset = req.query.preset || "today"; // today/this_week/this_month/this_year/all/custom
   const now = new Date();
@@ -3045,7 +3100,7 @@ app.get("/campaigns/:id/report/v2", checkAuth, ownCampaignFromParams, async (req
     end,
   });
 });
-app.get("/campaigns/:id/report", checkAuth, ownCampaignFromParams, async (req, res) => {
+app.get("/campaigns/:id/report", checkAuth, viewCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const query = req.originalUrl.includes("?")
     ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
@@ -3053,7 +3108,7 @@ app.get("/campaigns/:id/report", checkAuth, ownCampaignFromParams, async (req, r
   return res.redirect(`/campaigns/${campId}/report/v2${query}`);
 });
 
-app.get("/campaigns/:id/logs", checkAuth, ownCampaignFromParams, async (req, res) => {
+app.get("/campaigns/:id/logs", checkAuth, viewCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const action = req.query.action;
   const limit = Math.min(parseInt(req.query.limit || "300", 10) || 300, 2000);
@@ -3090,7 +3145,7 @@ app.get("/campaigns/:id/logs", checkAuth, ownCampaignFromParams, async (req, res
   });
 });
 
-app.get("/campaigns/:id/report/export", checkAuth, ownCampaignFromParams, async (req, res) => {
+app.get("/campaigns/:id/report/export", checkAuth, viewCampaignFromParams, async (req, res) => {
   const campId = req.params.id;
   const { normalized, start, end } = parseMonthRange(req.query.month);
   const rCamp = await db.query(`SELECT name FROM campaigns WHERE id=$1`, [

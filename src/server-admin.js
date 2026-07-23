@@ -25,7 +25,6 @@ const {
   buildFilters,
   normalizeDomainUrl,
   normalizeSafeTemplate,
-  normalizeShortCode,
   normalizeTargetUrl,
   parseRules,
   validateName,
@@ -70,7 +69,13 @@ const generateCode = (len = 8) => {
   return res;
 };
 
-const generateShortCode = (len = 7) => generateCode(len).toLowerCase();
+const generateShortCode = (len = 10) => {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  return Array.from(
+    crypto.randomBytes(len),
+    (byte) => alphabet[byte % alphabet.length]
+  ).join("");
+};
 
 const parseMonthRange = (monthStr) => {
   const now = new Date();
@@ -1150,14 +1155,13 @@ app.post("/short-links/create", checkAuth, ownDomainFromBody, async (req, res) =
     ) {
       throw new Error("Thoi gian cho phai tu 1 den 30 giay");
     }
-    let code = req.body.code ? normalizeShortCode(req.body.code) : null;
     const domain = await db.query(`SELECT id FROM domains WHERE id=$1 LIMIT 1`, [
       domainId,
     ]);
     if (!domain.rowCount) throw new Error("Domain khong ton tai");
 
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      const currentCode = code || generateShortCode(attempt < 3 ? 7 : 9);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const currentCode = generateShortCode(attempt < 5 ? 10 : 14);
       try {
         await db.query(
           `
@@ -1192,9 +1196,6 @@ app.post("/short-links/create", checkAuth, ownDomainFromBody, async (req, res) =
         });
         return res.redirect(`/domains/${domainId}`);
       } catch (e) {
-        if (e.code === "23505" && code) {
-          throw new Error("Ma rut gon da ton tai tren domain nay");
-        }
         if (e.code !== "23505") throw e;
       }
     }

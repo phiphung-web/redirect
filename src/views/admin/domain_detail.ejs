@@ -439,15 +439,10 @@
 
                             <section id="delayedFields" data-flow="delayed" hidden>
                                 <div class="alert alert-warning py-2 small"><i class="fas fa-clock me-1"></i>Luồng này hiển thị Safe Page đã chọn cho domain, không hiển đếm ngược, sau đó tự chuyển và giữ lại tham số tracking.</div>
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-bold">Thời gian chờ</label>
-                                        <div class="input-group"><input type="number" name="redirect_delay_seconds" class="form-control" min="1" max="30" value="3" data-flow-field="delayed"><span class="input-group-text">giây</span></div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-bold">Mã ngắn (không bắt buộc)</label>
-                                        <div class="input-group"><span class="input-group-text">/s/</span><input type="text" name="code" class="form-control" pattern="[a-z0-9_-]{3,80}" placeholder="Tự sinh nếu để trống" data-flow-field="delayed"></div>
-                                    </div>
+                                <div>
+                                    <label class="form-label fw-bold">Thời gian chờ</label>
+                                    <div class="input-group"><input type="number" name="redirect_delay_seconds" class="form-control" min="1" max="30" value="3" data-flow-field="delayed"><span class="input-group-text">giây</span></div>
+                                    <div class="form-text">Đường dẫn ngắn sẽ được hệ thống tự sinh khi tạo link.</div>
                                 </div>
                             </section>
                         </div>

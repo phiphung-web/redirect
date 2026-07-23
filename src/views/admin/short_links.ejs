@@ -44,15 +44,6 @@
               <input type="url" name="target_url" class="form-control" placeholder="https://example.com/landing" required>
             </div>
 
-            <div class="mb-3">
-              <label class="form-label fw-bold">Mã ngắn</label>
-              <div class="input-group">
-                <span class="input-group-text">/s/</span>
-                <input type="text" name="code" class="form-control" pattern="[a-z0-9_-]{3,80}" placeholder="để trống để tự sinh">
-              </div>
-              <div class="form-text">Chỉ dùng a-z, 0-9, dấu gạch ngang hoặc gạch dưới.</div>
-            </div>
-
             <button class="btn btn-primary w-100" type="submit" <%= domains.length ? '' : 'disabled' %>>
               Tạo link
             </button>

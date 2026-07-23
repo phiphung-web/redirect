@@ -355,6 +355,8 @@ test("domain link builder keeps tracking presets clean and exposes both flows", 
   assert.match(source, /data-link-type="conditional"/);
   assert.match(source, /data-link-type="delayed"/);
   assert.match(source, /form\.action = isConditional \? '\/campaigns\/create' : '\/short-links\/create'/);
+  assert.doesNotMatch(source, /name="code"/);
+  assert.match(source, /Đường dẫn ngắn sẽ được hệ thống tự sinh/);
   assert.doesNotMatch(source, /data-simple-param|advancedConditionalSettings/);
   assert.match(source, /if \(isConditional && !document\.querySelector\('#rules-wrapper \.rule-row'\)\) \{\s*addTemplate\('fb_custom'\)/);
   assert.match(source, /if \(key\.toLowerCase\(\) === 'fbclid'\) \{\s*return \[\{ key: 'fbclid', operator: 'exists', value: '' \}\]/);
@@ -1190,7 +1192,7 @@ test("admin login lazy-migrates plain password and creates domain via csrf form"
   ]);
 });
 
-test("admin creates an automatic redirect with a configurable delay", async () => {
+test("admin creates an automatic redirect with a generated short code", async () => {
   let insertedSql = "";
   let insertedParams = null;
 
@@ -1262,10 +1264,11 @@ test("admin creates an automatic redirect with a configurable delay", async () =
   assert.equal(createRes.status, 302);
   assert.equal(createRes.headers.location, "/domains/5");
   assert.match(insertedSql, /redirect_delay_seconds/);
-  assert.deepEqual(insertedParams, [
-    5,
-    11,
-    "wait3",
+  assert.equal(insertedParams[0], 5);
+  assert.equal(insertedParams[1], 11);
+  assert.match(insertedParams[2], /^[a-z0-9]{10}$/);
+  assert.notEqual(insertedParams[2], "wait3");
+  assert.deepEqual(insertedParams.slice(3), [
     "Chờ 7 giây",
     "https://target.test/landing",
     11,

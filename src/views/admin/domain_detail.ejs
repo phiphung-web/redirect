@@ -88,6 +88,8 @@
 </head>
 
 <body>
+    <% const visibleDomainMembers = typeof domainMembers !== 'undefined' && Array.isArray(domainMembers) ? domainMembers : []; %>
+    <% const visibleAssignableUsers = typeof assignableUsers !== 'undefined' && Array.isArray(assignableUsers) ? assignableUsers : []; %>
     <%- include('../partials/header', { user, active: 'redirect' , backUrl: '/redirect' , breadcrumb: [ {
         label: 'Tên miền & Link' , url: '/redirect' }, { label: domain.domain_url } ] }) %>
         <input type="hidden" id="csrfToken" value="<%= csrfToken %>">
@@ -107,9 +109,9 @@
                         <span class="badge <%= domain.status === 'active' ? 'bg-success' : 'bg-warning' %>">
                             <%= domain.status.toUpperCase() %>
                         </span>
-                        <div class="text-muted small mt-1">Tạo: <%= domain.created_by_name || 'N/A' %> @ <%= new
+                        <div class="text-muted small mt-1">Chủ sở hữu: <%= domain.owner_name || 'N/A' %> · Tạo lúc <%= new
                                     Date(domain.created_at).toLocaleString('vi-VN') %> | Cập nhật: <%=
-                                        domain.updated_by_name || domain.created_by_name || '-' %> @ <%=
+                                        domain.updated_by_name || domain.owner_name || '-' %> @ <%=
                                             domain.updated_at ? new Date(domain.updated_at).toLocaleString('vi-VN')
                                             : '-' %>
                         </div>
@@ -136,6 +138,52 @@
                         <button type="button" class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#addLinkModal" data-create-link-type="delayed"><i class="fas fa-clock me-1"></i>Tạo link tự chuyển</button>
                     </div>
                 </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div>
+                        <div class="fw-bold" data-help="Mỗi domain có một chủ sở hữu và có thể chia sẻ cho nhiều tài khoản. Tất cả thành viên được cấp quyền đều có thể quản lý link trong domain này.">Quyền truy cập domain</div>
+                        <div class="small text-muted">Chủ sở hữu và các tài khoản đang được chia sẻ.</div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <% visibleDomainMembers.forEach(member => { %>
+                            <span class="badge <%= member.access_level === 'owner' ? 'bg-primary' : 'bg-light text-dark border' %>">
+                                <%= member.username %><%= member.access_level === 'owner' ? ' · Owner' : '' %>
+                            </span>
+                        <% }) %>
+                    </div>
+                </div>
+                <% if (user.role_name === 'super_admin') { %>
+                    <form class="card-body" action="/domains/<%= domain.id %>/access" method="POST">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <div class="row g-3">
+                            <div class="col-lg-4">
+                                <label class="form-label fw-bold" data-help="Nhượng domain bằng cách chọn một chủ sở hữu mới. Super admin vẫn luôn có quyền quản trị hệ thống.">Chủ sở hữu</label>
+                                <select class="form-select" name="owner_user_id" required>
+                                    <% visibleAssignableUsers.forEach(account => { %>
+                                        <option value="<%= account.id %>" <%= Number(account.id) === Number(domain.user_id) ? 'selected' : '' %>>
+                                            <%= account.username %> · <%= account.role_name %>
+                                        </option>
+                                    <% }) %>
+                                </select>
+                            </div>
+                            <div class="col-lg-6">
+                                <label class="form-label fw-bold" data-help="Chọn thêm các tài khoản cùng quản lý domain và toàn bộ link bên trong. Chủ sở hữu luôn tự động được giữ trong danh sách.">Chia sẻ thêm cho</label>
+                                <select class="form-select" name="member_user_ids" multiple size="4">
+                                    <% visibleAssignableUsers.forEach(account => { const selected = visibleDomainMembers.some(member => Number(member.id) === Number(account.id)); %>
+                                        <option value="<%= account.id %>" <%= selected ? 'selected' : '' %>>
+                                            <%= account.username %> · <%= account.role_name %>
+                                        </option>
+                                    <% }) %>
+                                </select>
+                            </div>
+                            <div class="col-lg-2 d-flex align-items-end">
+                                <button class="btn btn-primary w-100" type="submit">Lưu quyền</button>
+                            </div>
+                        </div>
+                    </form>
+                <% } %>
             </div>
 
             <div class="row g-3 mb-4">

@@ -256,10 +256,10 @@ const requireRole = (rolesArray) => {
   };
 };
 
-const OWNED_RESOURCE_TABLES = {
-  domain: "domains",
-  campaign: "campaigns",
-  shortLink: "short_links",
+const RESOURCE_DOMAIN_EXPRESSIONS = {
+  domain: { table: "domains", expression: "id" },
+  campaign: { table: "campaigns", expression: "domain_id" },
+  shortLink: { table: "short_links", expression: "domain_id" },
 };
 
 const requireOwnedResource = (resourceType, getId) => {
@@ -267,20 +267,30 @@ const requireOwnedResource = (resourceType, getId) => {
     if (!req.session.user) return res.redirect("/login");
     if (req.session.user.role_name === "super_admin") return next();
 
-    const table = OWNED_RESOURCE_TABLES[resourceType];
+    const resource = RESOURCE_DOMAIN_EXPRESSIONS[resourceType];
     const resourceId = Number.parseInt(getId(req), 10);
-    if (!table || !Number.isInteger(resourceId)) {
+    if (!resource || !Number.isInteger(resourceId)) {
       return res.status(400).send("Tài nguyên không hợp lệ");
     }
 
     const result = await db.query(
-      `SELECT user_id FROM ${table} WHERE id=$1 LIMIT 1`,
+      `SELECT ${resource.expression} AS domain_id
+       FROM ${resource.table}
+       WHERE id=$1
+       LIMIT 1`,
       [resourceId]
     );
     if (!result.rowCount) {
       return res.status(404).send("Không tìm thấy tài nguyên");
     }
-    if (Number(result.rows[0].user_id) !== Number(req.session.user.id)) {
+    const access = await db.query(
+      `SELECT 1
+       FROM domain_user_access
+       WHERE domain_id=$1 AND user_id=$2
+       LIMIT 1`,
+      [result.rows[0].domain_id, req.session.user.id]
+    );
+    if (!access.rowCount) {
       return res.status(403).send("Bạn không có quyền với tài nguyên này");
     }
     return next();
@@ -477,11 +487,19 @@ app.get("/redirect", checkAuth, async (req, res) => {
              (SELECT COUNT(*) FROM short_links s WHERE s.domain_id = d.id AND s.is_active) AS link_active,
              (SELECT COUNT(*) FROM traffic_logs tl
               WHERE tl.domain_id = d.id
-                AND tl.action IN ('redirect', 'short_redirect_confirmed')) AS traffic_count
+                AND tl.action IN ('redirect', 'short_redirect_confirmed')) AS traffic_count,
+             (SELECT COUNT(*) FROM domain_user_access dua
+              WHERE dua.domain_id=d.id) AS member_count
       FROM domains d
       LEFT JOIN users cu ON d.user_id = cu.id
       LEFT JOIN users uu ON d.updated_by = uu.id
-      WHERE ($1::int IS NULL OR d.user_id=$1)
+      WHERE (
+        $1::int IS NULL
+        OR EXISTS (
+          SELECT 1 FROM domain_user_access dua
+          WHERE dua.domain_id=d.id AND dua.user_id=$1
+        )
+      )
       ORDER BY d.id DESC
     `,
     [scopedUserId]
@@ -489,22 +507,40 @@ app.get("/redirect", checkAuth, async (req, res) => {
   const stats = await db.query(`
         SELECT (SELECT COUNT(*) FROM domains) AS total_domains_unscoped,
                (SELECT COUNT(*) FROM domains
-                WHERE ($1::int IS NULL OR user_id=$1)) as total_domains,
+                WHERE (
+                  $1::int IS NULL
+                  OR EXISTS (
+                    SELECT 1 FROM domain_user_access dua
+                    WHERE dua.domain_id=domains.id AND dua.user_id=$1
+                  )
+                )) as total_domains,
                (SELECT COUNT(*) FROM campaigns c
-                WHERE ($1::int IS NULL OR c.user_id=$1)) +
+                WHERE (
+                  $1::int IS NULL
+                  OR EXISTS (
+                    SELECT 1 FROM domain_user_access dua
+                    WHERE dua.domain_id=c.domain_id AND dua.user_id=$1
+                  )
+                )) +
                (SELECT COUNT(*) FROM short_links s
-                WHERE ($1::int IS NULL OR s.user_id=$1)) as total_links,
+                WHERE (
+                  $1::int IS NULL
+                  OR EXISTS (
+                    SELECT 1 FROM domain_user_access dua
+                    WHERE dua.domain_id=s.domain_id AND dua.user_id=$1
+                  )
+                )) as total_links,
                (SELECT COUNT(*) FROM traffic_logs
                  WHERE action IN ('redirect', 'short_redirect_confirmed')
                    AND ($1::int IS NULL OR domain_id IN
-                     (SELECT id FROM domains WHERE user_id=$1))) as total_traffic,
+                     (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) as total_traffic,
                (SELECT COUNT(*) FROM traffic_logs
                  WHERE action LIKE 'safe_page%'
                    AND ($1::int IS NULL OR domain_id IN
-                     (SELECT id FROM domains WHERE user_id=$1))) as total_safe_views,
+                     (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) as total_safe_views,
                (SELECT COUNT(*) FROM traffic_logs
                  WHERE ($1::int IS NULL OR domain_id IN
-                   (SELECT id FROM domains WHERE user_id=$1))) as total_raw_requests
+                   (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) as total_raw_requests
     `, [scopedUserId]);
   res.render("admin/dashboard", {
     user: req.session.user,
@@ -1171,9 +1207,16 @@ app.post("/domains/create", checkAuth, async (req, res) => {
     const domainUrl = normalizeDomainUrl(req.body.domain_url);
     const safeTemplate = normalizeSafeTemplate(req.body.safe_template);
     const inserted = await db.query(
-      `INSERT INTO domains (domain_url, safe_template, user_id, updated_by, ssl_status)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id`,
+      `WITH created AS (
+         INSERT INTO domains (domain_url, safe_template, user_id, updated_by, ssl_status)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, user_id
+       )
+       INSERT INTO domain_user_access
+         (domain_id, user_id, access_level, granted_by)
+       SELECT id, user_id, 'owner', $4
+       FROM created
+       RETURNING domain_id AS id`,
       [
         domainUrl,
         safeTemplate,
@@ -1203,6 +1246,94 @@ app.post("/domains/create", checkAuth, async (req, res) => {
     res.send("Lỗi: Domain đã tồn tại");
   }
 });
+
+const parseUserIdList = (value) => {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  return [
+    ...new Set(
+      values
+        .map((item) => Number.parseInt(item, 10))
+        .filter(Number.isInteger)
+    ),
+  ];
+};
+
+app.post(
+  "/domains/:id/access",
+  checkAuth,
+  requireRole(["super_admin"]),
+  async (req, res) => {
+    const domainId = Number.parseInt(req.params.id, 10);
+    const ownerUserId = Number.parseInt(req.body.owner_user_id, 10);
+    if (!Number.isInteger(domainId) || !Number.isInteger(ownerUserId)) {
+      return res.status(400).send("Domain hoặc chủ sở hữu không hợp lệ");
+    }
+
+    const memberUserIds = parseUserIdList(req.body.member_user_ids);
+    const selectedUserIds = [...new Set([ownerUserId, ...memberUserIds])];
+    const users = await db.query(
+      `SELECT id
+       FROM users
+       WHERE is_active=true AND id=ANY($1::int[])
+       ORDER BY id`,
+      [selectedUserIds]
+    );
+    if (users.rowCount !== selectedUserIds.length) {
+      return res.status(400).send("Danh sách người dùng có tài khoản không hợp lệ");
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      const domain = await client.query(
+        `UPDATE domains
+         SET user_id=$2, updated_by=$3, updated_at=now()
+         WHERE id=$1
+         RETURNING id, domain_url`,
+        [domainId, ownerUserId, req.session.user.id]
+      );
+      if (!domain.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).send("Không tìm thấy domain");
+      }
+
+      await client.query(`DELETE FROM domain_user_access WHERE domain_id=$1`, [
+        domainId,
+      ]);
+      await client.query(
+        `INSERT INTO domain_user_access
+           (domain_id, user_id, access_level, granted_by)
+         SELECT $1, member_id,
+                CASE WHEN member_id=$2 THEN 'owner' ELSE 'member' END,
+                $3
+         FROM unnest($4::int[]) AS member_id`,
+        [domainId, ownerUserId, req.session.user.id, selectedUserIds]
+      );
+      await client.query("COMMIT");
+
+      await auditAdminAction({
+        req,
+        action: "domain_access_update",
+        targetType: "domain",
+        targetId: domainId,
+        detail: {
+          domain_url: domain.rows[0].domain_url,
+          owner_user_id: ownerUserId,
+          member_user_ids: selectedUserIds,
+        },
+      });
+      return res.redirect(`/domains/${domainId}`);
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      notifyConfigError(req, "Cập nhật quyền domain", error, [
+        `Domain ID: ${domainId}`,
+      ]);
+      return res.status(500).send("Không thể cập nhật quyền domain");
+    } finally {
+      client.release();
+    }
+  }
+);
 
 const toggleDomainHandler = async (req, res) => {
   await db.query(
@@ -1265,7 +1396,7 @@ app.get("/domains/delete/:id", checkAuth, ownDomainFromParams, (req, res) =>
 app.post(
   "/domains/delete/:id",
   checkAuth,
-  ownDomainFromParams,
+  requireRole(["super_admin"]),
   deleteDomainHandler
 );
 
@@ -1327,7 +1458,7 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
   const domainId = req.params.id;
   const rDom = await db.query(
     `
-      SELECT d.*, cu.username AS created_by_name, uu.username AS updated_by_name
+      SELECT d.*, cu.username AS owner_name, uu.username AS updated_by_name
       FROM domains d
       LEFT JOIN users cu ON d.user_id = cu.id
       LEFT JOIN users uu ON d.updated_by = uu.id
@@ -1336,6 +1467,26 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     [domainId]
   );
   if (!rDom.rowCount) return res.redirect("/redirect");
+
+  const domainMembers = await db.query(
+    `SELECT u.id, u.username, r.name AS role_name, dua.access_level
+     FROM domain_user_access dua
+     JOIN users u ON u.id=dua.user_id
+     JOIN roles r ON r.id=u.role_id
+     WHERE dua.domain_id=$1
+     ORDER BY CASE WHEN dua.access_level='owner' THEN 0 ELSE 1 END, u.username`,
+    [domainId]
+  );
+  const assignableUsers =
+    req.session.user.role_name === "super_admin"
+      ? await db.query(
+          `SELECT u.id, u.username, r.name AS role_name
+           FROM users u
+           JOIN roles r ON r.id=u.role_id
+           WHERE u.is_active=true
+           ORDER BY CASE WHEN r.name='super_admin' THEN 0 ELSE 1 END, u.username`
+        )
+      : { rows: [] };
 
   const rLinks = await db.query(
     `
@@ -1438,6 +1589,8 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     shortLinks,
     linkStats: linkStats.rows[0],
     domainTrafficStats: domainTrafficStats.rows[0],
+    domainMembers: domainMembers.rows,
+    assignableUsers: assignableUsers.rows,
   });
 });
 
@@ -2111,7 +2264,12 @@ app.get("/users/view/:id", requireRole(["super_admin"]), async (req, res) => {
   );
   if (!u.rowCount) return res.redirect("/users");
   const recentDomains = await db.query(
-    `SELECT id, domain_url, created_at FROM domains WHERE user_id=$1 ORDER BY id DESC LIMIT 5`,
+    `SELECT d.id, d.domain_url, d.created_at, dua.access_level
+     FROM domain_user_access dua
+     JOIN domains d ON d.id=dua.domain_id
+     WHERE dua.user_id=$1
+     ORDER BY d.id DESC
+     LIMIT 10`,
     [userId]
   );
   const recentCamps = await db.query(
@@ -2202,12 +2360,50 @@ const deleteUserHandler = async (req, res) => {
       }
     }
 
-    await db.query(`DELETE FROM users WHERE id=$1`, [targetId]);
+    const client = await db.connect();
+    let transferredDomains = 0;
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `DELETE FROM domain_user_access WHERE user_id=$1`,
+        [targetId]
+      );
+      const transferred = await client.query(
+        `WITH moved AS (
+           UPDATE domains
+           SET user_id=$2, updated_by=$2, updated_at=now()
+           WHERE user_id=$1
+           RETURNING id
+         )
+         INSERT INTO domain_user_access
+           (domain_id, user_id, access_level, granted_by)
+         SELECT id, $2, 'owner', $2
+         FROM moved
+         ON CONFLICT (domain_id, user_id) DO UPDATE
+           SET access_level='owner', granted_by=$2, updated_at=now()
+         RETURNING domain_id`,
+        [targetId, curUser.id]
+      );
+      transferredDomains = transferred.rowCount;
+      await client.query(`UPDATE users SET is_active=false WHERE id=$1`, [
+        targetId,
+      ]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return res.status(500).send("Không thể vô hiệu hóa tài khoản");
+    } finally {
+      client.release();
+    }
     await auditAdminAction({
       req,
-      action: "user_delete",
+      action: "user_deactivate",
       targetType: "user",
       targetId,
+      detail: {
+        transferred_domains: transferredDomains,
+        new_owner_user_id: curUser.id,
+      },
     });
     res.redirect("/users");
   };

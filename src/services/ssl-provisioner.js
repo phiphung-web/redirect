@@ -2,7 +2,7 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const db = require("../config/db");
 const { ssl } = require("../config/app");
-const { alertUser } = require("./telegram-alerts");
+const { alertDomainUsers } = require("./telegram-alerts");
 
 const execFileAsync = promisify(execFile);
 const queued = new Set();
@@ -75,7 +75,7 @@ const provisionDomainSsl = async (domainId, { force = false } = {}) => {
        WHERE id=$1`,
       [domainId, expiresAt]
     );
-    alertUser(domain.user_id, {
+    alertDomainUsers(domain.id, {
       severity: "success",
       title: "SSL đã sẵn sàng",
       lines: [domain.domain_url, ...(expiresAt ? [`Hết hạn: ${expiresAt}`] : [])],
@@ -93,7 +93,7 @@ const provisionDomainSsl = async (domainId, { force = false } = {}) => {
       [domainId, message]
     );
     console.error(`SSL provisioning failed for ${domain.domain_url}: ${message}`);
-    alertUser(domain.user_id, {
+    alertDomainUsers(domain.id, {
       severity: "error",
       title: "Không thể cấp SSL cho domain",
       lines: [domain.domain_url, `Lỗi: ${message}`],

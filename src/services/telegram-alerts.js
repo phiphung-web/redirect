@@ -82,6 +82,38 @@ const alertUser = async (userId, options) => {
   });
 };
 
+const getDomainRecipients = async (domainId) => {
+  const result = await db.query(
+    `SELECT DISTINCT u.id, u.telegram_chat_id
+     FROM domain_user_access dua
+     JOIN users u ON u.id=dua.user_id
+     WHERE dua.domain_id=$1
+       AND u.is_active=true
+       AND u.telegram_chat_id IS NOT NULL
+       AND u.telegram_link_alerts=true
+     ORDER BY u.id`,
+    [domainId]
+  );
+  return result.rows;
+};
+
+const alertDomainUsers = async (domainId, options) => {
+  if (!telegramReady() || !domainId) return [];
+  const recipients = await getDomainRecipients(domainId);
+  return Promise.allSettled(
+    recipients.map((recipient) =>
+      sendTelegramMessage(
+        recipient.telegram_chat_id,
+        formatAlert(options),
+        {
+          dedupeKey: options.dedupeKey || "",
+          cooldownMs: options.cooldownMs,
+        }
+      )
+    )
+  );
+};
+
 const getSystemRecipients = async () => {
   const recipients = new Set();
   if (telegram.adminChatId) recipients.add(telegram.adminChatId);
@@ -122,11 +154,13 @@ const notifyConfigError = (req, area, error, details = []) => {
 };
 
 module.exports = {
+  alertDomainUsers,
   alertSystem,
   alertUser,
   cleanMessage,
   cleanText,
   formatAlert,
+  getDomainRecipients,
   getSystemRecipients,
   getUserRecipient,
   notifyConfigError,

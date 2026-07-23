@@ -8,7 +8,14 @@ const db = require("../src/config/db");
 const { monitoring, product } = require("../src/config/app");
 const { alertSystem, alertUser, telegramReady } = require("../src/services/telegram-alerts");
 
-const issue = (message, userId = null) => ({ message, userId });
+const issue = (message, userIds = []) => ({
+  message,
+  userIds: Array.isArray(userIds)
+    ? userIds.filter(Boolean)
+    : userIds
+      ? [userIds]
+      : [],
+});
 
 const fetchHealth = async (label, url) => {
   const controller = new AbortController();
@@ -92,37 +99,52 @@ const inspectLinkConfiguration = (row, type) => {
 const checkDomainsAndLinks = async () => {
   const issues = [];
   const domains = await db.query(
-    `SELECT id, user_id, domain_url, ssl_status, ssl_error
-     FROM domains WHERE status='active' ORDER BY id`
+    `SELECT d.id, d.domain_url, d.ssl_status, d.ssl_error,
+            COALESCE(array_agg(dua.user_id) FILTER (WHERE dua.user_id IS NOT NULL), '{}') AS user_ids
+     FROM domains d
+     LEFT JOIN domain_user_access dua ON dua.domain_id=d.id
+     WHERE d.status='active'
+     GROUP BY d.id
+     ORDER BY d.id`
   );
   for (const domain of domains.rows) {
     try {
       const addresses = await dns.resolve4(domain.domain_url);
       if (monitoring.expectedIpv4 && !addresses.includes(monitoring.expectedIpv4)) {
-        issues.push(issue(`${domain.domain_url}: DNS không trỏ về ${monitoring.expectedIpv4}`, domain.user_id));
+        issues.push(issue(`${domain.domain_url}: DNS không trỏ về ${monitoring.expectedIpv4}`, domain.user_ids));
       }
     } catch (error) {
-      issues.push(issue(`${domain.domain_url}: DNS lỗi (${error.code || error.message})`, domain.user_id));
+      issues.push(issue(`${domain.domain_url}: DNS lỗi (${error.code || error.message})`, domain.user_ids));
     }
     if (["error", "fallback"].includes(domain.ssl_status)) {
-      issues.push(issue(`${domain.domain_url}: SSL ${domain.ssl_status}${domain.ssl_error ? ` – ${domain.ssl_error}` : ""}`, domain.user_id));
+      issues.push(issue(`${domain.domain_url}: SSL ${domain.ssl_status}${domain.ssl_error ? ` – ${domain.ssl_error}` : ""}`, domain.user_ids));
     } else if (domain.ssl_status === "active") {
       const tlsIssue = await checkTlsExpiry(domain.domain_url);
-      if (tlsIssue) issues.push(issue(`${domain.domain_url}: ${tlsIssue}`, domain.user_id));
+      if (tlsIssue) issues.push(issue(`${domain.domain_url}: ${tlsIssue}`, domain.user_ids));
     }
   }
 
   const campaigns = await db.query(
-    `SELECT id, user_id, target_url, rules FROM campaigns WHERE is_active=true`
+    `SELECT c.id, c.target_url, c.rules,
+            COALESCE(array_agg(dua.user_id) FILTER (WHERE dua.user_id IS NOT NULL), '{}') AS user_ids
+     FROM campaigns c
+     LEFT JOIN domain_user_access dua ON dua.domain_id=c.domain_id
+     WHERE c.is_active=true
+     GROUP BY c.id`
   );
   campaigns.rows.forEach((row) => {
-    inspectLinkConfiguration(row, "Link điều kiện").forEach((message) => issues.push(issue(message, row.user_id)));
+    inspectLinkConfiguration(row, "Link điều kiện").forEach((message) => issues.push(issue(message, row.user_ids)));
   });
   const shortLinks = await db.query(
-    `SELECT id, user_id, target_url, redirect_delay_seconds FROM short_links WHERE is_active=true`
+    `SELECT s.id, s.target_url, s.redirect_delay_seconds,
+            COALESCE(array_agg(dua.user_id) FILTER (WHERE dua.user_id IS NOT NULL), '{}') AS user_ids
+     FROM short_links s
+     LEFT JOIN domain_user_access dua ON dua.domain_id=s.domain_id
+     WHERE s.is_active=true
+     GROUP BY s.id`
   );
   shortLinks.rows.forEach((row) => {
-    inspectLinkConfiguration(row, "Link tự động").forEach((message) => issues.push(issue(message, row.user_id)));
+    inspectLinkConfiguration(row, "Link tự động").forEach((message) => issues.push(issue(message, row.user_ids)));
   });
   return issues;
 };
@@ -175,10 +197,12 @@ const runMonitor = async () => {
 
   const byUser = new Map();
   resourceIssues.forEach((item) => {
-    if (!item.userId) return globalIssues.push(item);
-    const id = String(item.userId);
-    if (!byUser.has(id)) byUser.set(id, []);
-    byUser.get(id).push(item.message);
+    if (!item.userIds.length) return globalIssues.push(item);
+    item.userIds.forEach((userId) => {
+      const id = String(userId);
+      if (!byUser.has(id)) byUser.set(id, []);
+      byUser.get(id).push(item.message);
+    });
   });
 
   const state = loadState();

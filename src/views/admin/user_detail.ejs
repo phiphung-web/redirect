@@ -52,12 +52,12 @@
         <div class="row g-3">
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white fw-bold"><span data-help="Các domain mới nhất được ghi nhận là do tài khoản này tạo.">Domain gần đây</span></div>
+                    <div class="card-header bg-white fw-bold"><span data-help="Các domain tài khoản này đang được cấp quyền quản lý, gồm domain sở hữu và domain được chia sẻ.">Domain được truy cập</span></div>
                     <div class="card-body">
                         <% if(recentDomains.length===0){ %><div class="text-muted">Không có</div><% } %>
                         <ul class="list-group list-group-flush">
                             <% recentDomains.forEach(d => { %>
-                                <li class="list-group-item">#<%= d.id %> - <%= d.domain_url %> <br><small class="text-muted"><%= new Date(d.created_at).toLocaleString('vi-VN') %></small></li>
+                                <li class="list-group-item">#<%= d.id %> - <%= d.domain_url %> <span class="badge <%= d.access_level === 'owner' ? 'bg-primary' : 'bg-secondary' %>"><%= d.access_level %></span><br><small class="text-muted"><%= new Date(d.created_at).toLocaleString('vi-VN') %></small></li>
                             <% }) %>
                         </ul>
                     </div>

@@ -65,13 +65,13 @@
                     <% } else { %><span class="badge bg-info text-dark">TLS Cloudflare</span><% } %>
                   </td>
                   <td><span class="status-badge <%= d.status === 'active' ? 'active' : 'inactive' %>"><span class="status-dot"></span><%= d.status === 'active' ? 'Hoạt động' : 'Đã tắt' %></span></td>
-                  <td><div class="campaign-count"><strong><%= d.link_active || 0 %></strong> hoạt động <span>/ <%= d.link_count || 0 %> tổng</span></div></td>
+                  <td><div class="campaign-count"><strong><%= d.link_active || 0 %></strong> hoạt động <span>/ <%= d.link_count || 0 %> tổng</span></div><div class="text-muted small"><%= d.member_count || 0 %> tài khoản có quyền</div></td>
                   <td><strong class="text-success"><%= Number(d.traffic_count || 0).toLocaleString('vi-VN') %></strong><div class="text-muted small">redirect thành công</div></td>
                   <td class="text-end pe-4 text-nowrap">
                     <form action="/domains/toggle/<%= d.id %>" method="POST" class="d-inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-secondary" title="Bật/tắt"><i class="fa-solid fa-power-off"></i></button></form>
                     <a href="https://<%= d.domain_url %>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary ms-1" title="Xem Safe Page"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                     <a href="/domains/<%= d.id %>" class="btn btn-sm btn-primary ms-1">Mở domain</a>
-                    <form action="/domains/delete/<%= d.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa domain sẽ xóa toàn bộ chiến dịch và log liên quan. Tiếp tục?')"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Xóa"><i class="fa-solid fa-trash"></i></button></form>
+                    <% if (user.role_name === 'super_admin') { %><form action="/domains/delete/<%= d.id %>" method="POST" class="d-inline" onsubmit="return confirm('Xóa domain sẽ xóa toàn bộ chiến dịch và log liên quan. Tiếp tục?')"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Xóa"><i class="fa-solid fa-trash"></i></button></form><% } %>
                   </td>
                 </tr>
               <% }) %>

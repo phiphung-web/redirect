@@ -90,6 +90,41 @@ test("owner branch keeps two roles and private seven-day audit retention", () =>
   assert.doesNotMatch(auditService, /req\.body/);
 });
 
+test("domain access supports one owner, many members, and one-time legacy takeover", () => {
+  const migration = fs.readFileSync(
+    path.join(
+      root,
+      "database/migrations/2026-07-23-domain-user-access.sql"
+    ),
+    "utf8"
+  );
+  const adminSource = fs.readFileSync(
+    path.join(root, "src/server-admin.js"),
+    "utf8"
+  );
+  const domainView = fs.readFileSync(
+    path.join(root, "src/views/admin/domain_detail.ejs"),
+    "utf8"
+  );
+  const cleanup = fs.readFileSync(
+    path.join(root, "scripts/cleanup-traffic.js"),
+    "utf8"
+  );
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.domain_user_access/);
+  assert.match(migration, /idx_domain_user_access_one_owner/);
+  assert.match(migration, /migration\.domain_user_access\.legacy_owner_v1/);
+  assert.match(migration, /UPDATE public\.domains[\s\S]+SET user_id=super_admin_id/);
+  assert.match(migration, /UPDATE public\.campaigns[\s\S]+SET user_id=super_admin_id/);
+  assert.match(migration, /UPDATE public\.short_links[\s\S]+SET user_id=super_admin_id/);
+  assert.match(adminSource, /FROM domain_user_access[\s\S]+WHERE domain_id=\$1 AND user_id=\$2/);
+  assert.match(adminSource, /"\/domains\/:id\/access"/);
+  assert.match(domainView, /name="owner_user_id"/);
+  assert.match(domainView, /name="member_user_ids"/);
+  assert.match(cleanup, /DELETE FROM traffic_logs/);
+  assert.match(cleanup, /DELETE FROM admin_audit_logs/);
+});
+
 test("Telegram codes and link configuration checks are deterministic", () => {
   assert.deepEqual(parseCommand("/connect ABC-123"), {
     command: "connect",
@@ -1182,8 +1217,11 @@ test("regular users own unlimited domains, private Telegram settings, and no use
         ],
       };
     }
-    if (sql.includes("SELECT user_id FROM domains WHERE id=$1")) {
-      return { rowCount: 1, rows: [{ user_id: 999 }] };
+    if (sql.includes("SELECT id AS domain_id") && sql.includes("FROM domains")) {
+      return { rowCount: 1, rows: [{ domain_id: 999 }] };
+    }
+    if (sql.includes("FROM domain_user_access") && sql.includes("WHERE domain_id=$1 AND user_id=$2")) {
+      return { rowCount: 0, rows: [] };
     }
     if (sql.includes("INSERT INTO admin_audit_logs")) {
       return { rowCount: 1, rows: [] };

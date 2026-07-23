@@ -10,8 +10,8 @@ const run = async () => {
   if (!username || username.length < 3) {
     throw new Error("Set ADMIN_USERNAME with at least 3 characters");
   }
-  if (password.length < 12) {
-    throw new Error("Set ADMIN_PASSWORD with at least 12 characters");
+  if (password.length < 6) {
+    throw new Error("Set ADMIN_PASSWORD with at least 6 characters");
   }
 
   const client = await db.connect();

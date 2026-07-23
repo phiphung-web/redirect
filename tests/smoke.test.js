@@ -411,6 +411,31 @@ test("contextual help is available across the admin product", () => {
   assert.match(users, /autocomplete="new-password"/);
 });
 
+test("users have a self-service profile and six-character password minimum", () => {
+  const root = path.join(__dirname, "..");
+  const server = fs.readFileSync(path.join(root, "src/server-admin.js"), "utf8");
+  const detail = fs.readFileSync(
+    path.join(root, "src/views/admin/user_detail.ejs"),
+    "utf8"
+  );
+  const users = fs.readFileSync(
+    path.join(root, "src/views/admin/users_list.ejs"),
+    "utf8"
+  );
+  const header = fs.readFileSync(
+    path.join(root, "src/views/partials/header.ejs"),
+    "utf8"
+  );
+
+  assert.match(server, /app\.get\("\/account\/profile", checkAuth/);
+  assert.match(server, /app\.post\("\/account\/password", checkAuth/);
+  assert.match(server, /newPassword\.length < 6/);
+  assert.match(detail, /action="\/account\/password"/);
+  assert.match(detail, /href="\/account\/telegram"/);
+  assert.match(users, /minlength="6"/);
+  assert.match(header, /href="\/account\/profile"/);
+});
+
 test("all EJS view templates compile", () => {
   const viewsRoot = path.join(__dirname, "../src/views");
   const folders = ["admin", "partials", "safepages"];

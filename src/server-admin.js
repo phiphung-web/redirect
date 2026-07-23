@@ -367,6 +367,93 @@ const logoutHandler = async (req, res) => {
 app.get("/logout", (req, res) => res.status(405).send("Use POST /logout"));
 app.post("/logout", logoutHandler);
 
+const renderUserProfile = async ({
+  req,
+  res,
+  userId,
+  selfView = false,
+  profileNotice = null,
+}) => {
+  const u = await db.query(
+    `SELECT u.id, u.username, u.is_active, u.created_at,
+            u.telegram_chat_id, u.telegram_username, u.telegram_connected_at,
+            r.name as role_name, u.role_id
+     FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.id=$1`,
+    [userId]
+  );
+  if (!u.rowCount) return res.redirect(selfView ? "/" : "/users");
+  const recentDomains = await db.query(
+    `SELECT d.id, d.domain_url, d.created_at, dua.access_level
+     FROM domain_user_access dua
+     JOIN domains d ON d.id=dua.domain_id
+     WHERE dua.user_id=$1
+     ORDER BY d.id DESC
+     LIMIT 10`,
+    [userId]
+  );
+  const recentCamps = await db.query(
+    `SELECT id, name, created_at FROM campaigns WHERE user_id=$1 ORDER BY id DESC LIMIT 5`,
+    [userId]
+  );
+  const roles = selfView
+    ? { rows: [] }
+    : await db.query(
+        `SELECT * FROM roles WHERE name IN ('super_admin', 'user') ORDER BY name`
+      );
+  return res.render("admin/user_detail", {
+    viewer: req.session.user,
+    target: u.rows[0],
+    recentDomains: recentDomains.rows,
+    recentCamps: recentCamps.rows,
+    roles: roles.rows,
+    selfView,
+    profileNotice,
+  });
+};
+
+app.get("/account/profile", checkAuth, async (req, res) => {
+  const notice = req.session.profileNotice || null;
+  delete req.session.profileNotice;
+  return renderUserProfile({
+    req,
+    res,
+    userId: req.session.user.id,
+    selfView: true,
+    profileNotice: notice,
+  });
+});
+
+app.post("/account/password", checkAuth, async (req, res) => {
+  const currentPassword = String(req.body.current_password || "");
+  const newPassword = String(req.body.new_password || "");
+  if (newPassword.length < 6) {
+    req.session.profileNotice = "Mật khẩu mới phải có ít nhất 6 ký tự.";
+    return res.redirect("/account/profile");
+  }
+  const result = await db.query(`SELECT * FROM users WHERE id=$1 LIMIT 1`, [
+    req.session.user.id,
+  ]);
+  const verified = result.rowCount
+    ? await verifyPasswordWithLazyMigration(result.rows[0], currentPassword)
+    : { isValid: false };
+  if (!verified.isValid) {
+    req.session.profileNotice = "Mật khẩu hiện tại không đúng.";
+    return res.redirect("/account/profile");
+  }
+  await db.query(`UPDATE users SET password_hash=$1 WHERE id=$2`, [
+    await hashPassword(newPassword),
+    req.session.user.id,
+  ]);
+  await auditAdminAction({
+    req,
+    action: "password_change",
+    targetType: "user",
+    targetId: req.session.user.id,
+  });
+  req.session.profileNotice = "Đã đổi mật khẩu.";
+  return res.redirect("/account/profile");
+});
+
 // --- TELEGRAM ACCOUNT LINK ---
 app.get("/account/telegram", checkAuth, async (req, res) => {
   const result = await db.query(
@@ -2465,6 +2552,9 @@ app.post(
   async (req, res) => {
     try {
       const username = validateName(req.body.username, "Username");
+      if (String(req.body.password || "").length < 6) {
+        throw new Error("Mật khẩu phải có ít nhất 6 ký tự");
+      }
       const passwordHash = await hashPassword(req.body.password);
       const role = await db.query(
         `SELECT id FROM roles WHERE name='user' LIMIT 1`
@@ -2483,43 +2573,21 @@ app.post(
       });
       res.redirect("/users");
     } catch (e) {
-      res.send("Lỗi: username đã tồn tại");
+      const message = String(e.message || "");
+      res
+        .status(400)
+        .send(
+          message.includes("6 ký tự")
+            ? "Lỗi: mật khẩu phải có ít nhất 6 ký tự"
+            : "Lỗi: username đã tồn tại"
+        );
     }
   }
 );
 
-app.get("/users/view/:id", requireRole(["super_admin"]), async (req, res) => {
-  const userId = req.params.id;
-  const u = await db.query(
-    `SELECT u.id, u.username, u.is_active, u.created_at, r.name as role_name, u.role_id
-     FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.id=$1`,
-    [userId]
-  );
-  if (!u.rowCount) return res.redirect("/users");
-  const recentDomains = await db.query(
-    `SELECT d.id, d.domain_url, d.created_at, dua.access_level
-     FROM domain_user_access dua
-     JOIN domains d ON d.id=dua.domain_id
-     WHERE dua.user_id=$1
-     ORDER BY d.id DESC
-     LIMIT 10`,
-    [userId]
-  );
-  const recentCamps = await db.query(
-    `SELECT id, name, created_at FROM campaigns WHERE user_id=$1 ORDER BY id DESC LIMIT 5`,
-    [userId]
-  );
-  const roles = await db.query(
-    `SELECT * FROM roles WHERE name IN ('super_admin', 'user') ORDER BY name`
-  );
-  res.render("admin/user_detail", {
-    viewer: req.session.user,
-    target: u.rows[0],
-    recentDomains: recentDomains.rows,
-    recentCamps: recentCamps.rows,
-    roles: roles.rows,
-  });
-});
+app.get("/users/view/:id", requireRole(["super_admin"]), async (req, res) =>
+  renderUserProfile({ req, res, userId: req.params.id, selfView: false })
+);
 
 app.post(
   "/users/view/:id/role",

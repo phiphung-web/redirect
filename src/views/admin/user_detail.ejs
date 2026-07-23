@@ -8,9 +8,12 @@
 <body>
     <%- include('../partials/header', {
         user: viewer,
-        active: 'users',
-        backUrl: '/users',
-        breadcrumb: [
+        active: selfView ? '' : 'users',
+        backUrl: selfView ? '/' : '/users',
+        breadcrumb: selfView ? [
+            { label: 'Tài khoản' },
+            { label: 'Hồ sơ' }
+        ] : [
             { label: 'Quản trị', url: '/users' },
             { label: 'Người dùng', url: '/users' },
             { label: target.username }
@@ -18,7 +21,7 @@
     }) %>
     <div class="container" style="max-width: 800px;">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="mb-0" data-help="Xem quyền, trạng thái và các tài nguyên gần đây do tài khoản này tạo.">User: <%= target.username %></h3>
+            <h3 class="mb-0" data-help="Xem quyền, trạng thái và các tài nguyên liên quan đến tài khoản."><%= selfView ? 'Hồ sơ của tôi' : 'User: ' + target.username %></h3>
             <div></div>
         </div>
         <div class="card shadow-sm mb-3">
@@ -26,9 +29,18 @@
                 <p><b>Role:</b> <span class="badge <%= target.role_name==='super_admin' ? 'bg-danger' : 'bg-secondary' %>"><%= target.role_name %></span></p>
                 <p><b>Trạng thái:</b> <%= target.is_active ? 'Active' : 'Inactive' %></p>
                 <p><b>Tạo lúc:</b> <%= new Date(target.created_at).toLocaleString('vi-VN') %></p>
+                <p class="mb-0"><b>Telegram:</b>
+                    <% if (target.telegram_chat_id) { %>
+                        <span class="badge bg-success">Đã kết nối</span>
+                        <%= target.telegram_username ? '@' + target.telegram_username : '' %>
+                    <% } else { %>
+                        <span class="badge bg-secondary">Chưa kết nối</span>
+                    <% } %>
+                    <% if (selfView) { %><a href="/account/telegram" class="btn btn-sm btn-outline-primary ms-2">Cài đặt Telegram</a><% } %>
+                </p>
             </div>
         </div>
-        <% if (viewer.role_name === 'super_admin') { %>
+        <% if (!selfView && viewer.role_name === 'super_admin') { %>
         <div class="card shadow-sm mb-3">
             <div class="card-header bg-white fw-bold"><span data-help="Thay đổi có hiệu lực với lần kiểm tra quyền tiếp theo. Tránh tự hạ quyền tài khoản quản trị duy nhất.">Đổi role</span></div>
             <form class="card-body" action="/users/view/<%= target.id %>/role" method="POST">
@@ -45,6 +57,28 @@
                         <button class="btn btn-primary">Cập nhật</button>
                     </div>
                 </div>
+            </form>
+        </div>
+        <% } %>
+
+        <% if (selfView) { %>
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white fw-bold">Đổi mật khẩu</div>
+            <form class="card-body" action="/account/password" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <% if (profileNotice) { %><div class="alert alert-info"><%= profileNotice %></div><% } %>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Mật khẩu hiện tại</label>
+                        <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Mật khẩu mới</label>
+                        <input type="password" name="new_password" class="form-control" minlength="6" autocomplete="new-password" required>
+                        <div class="form-text">Tối thiểu 6 ký tự.</div>
+                    </div>
+                </div>
+                <div class="text-end mt-3"><button class="btn btn-primary">Đổi mật khẩu</button></div>
             </form>
         </div>
         <% } %>

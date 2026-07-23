@@ -186,6 +186,13 @@ test("projects organize links across domains without changing legacy links", () 
     ),
     "utf8"
   );
+  const accessMigration = fs.readFileSync(
+    path.join(
+      root,
+      "database/migrations/2026-07-23-zzz-project-user-access.sql"
+    ),
+    "utf8"
+  );
   const adminSource = fs.readFileSync(
     path.join(root, "src/server-admin.js"),
     "utf8"
@@ -200,11 +207,16 @@ test("projects organize links across domains without changing legacy links", () 
   );
 
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.projects/);
+  assert.match(accessMigration, /CREATE TABLE IF NOT EXISTS public\.project_user_access/);
+  assert.match(accessMigration, /access_level = 'viewer'/);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS project_id/);
   assert.match(migration, /ON DELETE SET NULL/);
   assert.match(adminSource, /app\.get\("\/projects", checkAuth/);
   assert.match(adminSource, /"\/projects\/:id"/);
   assert.match(adminSource, /projectScopeUserId/);
+  assert.match(adminSource, /"\/projects\/:id\/access"/);
+  assert.match(adminSource, /FROM project_user_access pua/);
+  assert.match(adminSource, /requireProjectAccess\(\{ manage: true \}\)/);
   assert.match(header, /href="\/projects"/);
   assert.match(domainDetail, /name="project_id"/);
   assert.match(domainDetail, /Chưa phân loại/);
@@ -1390,6 +1402,115 @@ test("an authenticated user can create a cross-domain project", async () => {
     "Khách hàng A",
     "Link từ nhiều domain",
   ]);
+});
+
+test("a project viewer sees only project links and cannot manage them", async () => {
+  db.query = async (sql, params = []) => {
+    if (sql.includes("SELECT u.*, r.name as role_name FROM users")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 22,
+            username: "project-viewer",
+            password_hash: "secret123",
+            role_id: 2,
+            role_name: "user",
+          },
+        ],
+      };
+    }
+    if (sql.includes("UPDATE users SET password_hash=$1")) {
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes("SELECT 1") && sql.includes("FROM projects p")) {
+      return params[2] === true
+        ? { rowCount: 0, rows: [] }
+        : { rowCount: 1, rows: [{ "?column?": 1 }] };
+    }
+    if (sql.includes("SELECT p.*, owner.username AS owner_name")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 31,
+            user_id: 10,
+            name: "Shared project",
+            description: "Read only",
+            status: "active",
+            owner_name: "owner",
+            owner_role_name: "user",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      };
+    }
+    if (sql.includes("SELECT c.*, d.domain_url")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 501,
+            project_id: 31,
+            domain_id: 8,
+            domain_url: "project.example",
+            name: "Visible campaign",
+            target_url: "https://target.example/landing",
+            param_key: "q",
+            param_value: "visible",
+            stats_redirects: 12,
+            is_active: true,
+          },
+        ],
+      };
+    }
+    if (sql.includes("SELECT s.*, d.domain_url")) {
+      return { rowCount: 0, rows: [] };
+    }
+    if (sql.includes("FROM project_user_access pua") && sql.includes("JOIN users u")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 22,
+            username: "project-viewer",
+            access_level: "viewer",
+          },
+        ],
+      };
+    }
+    if (sql.includes("INSERT INTO admin_audit_logs")) {
+      return { rowCount: 1, rows: [] };
+    }
+    throw new Error(`Unhandled query in project viewer test: ${sql}`);
+  };
+
+  const agent = request.agent(adminApp);
+  const loginPage = await agent.get("/login");
+  const loginCsrf = extractCsrf(loginPage.text);
+  await agent
+    .post("/login")
+    .type("form")
+    .send({
+      username: "project-viewer",
+      password: "secret123",
+      _csrf: loginCsrf,
+    });
+
+  const projectPage = await agent.get("/projects/31");
+  assert.equal(projectPage.status, 200);
+  assert.match(projectPage.text, /Visible campaign/);
+  assert.match(projectPage.text, /Chỉ xem/);
+  assert.doesNotMatch(projectPage.text, /projects\/31\/links\/assign/);
+  assert.doesNotMatch(projectPage.text, /campaigns\/edit\/501/);
+
+  const csrf = extractCsrf(projectPage.text);
+  const forbidden = await agent
+    .post("/projects/31/links/assign")
+    .type("form")
+    .send({ link_ref: "campaign:501", _csrf: csrf });
+  assert.equal(forbidden.status, 403);
 });
 
 test("regular users own unlimited domains, private Telegram settings, and no user administration", async () => {

@@ -69,12 +69,15 @@
                     </div>
                     <div>
                       <h5 class="mb-0"><%= project.name %></h5>
-                      <small class="text-muted">Chủ dự án: <%= project.owner_name %></small>
+                      <small class="text-muted">Chủ dự án: <%= project.owner_role_name === 'super_admin' && user.role_name !== 'super_admin' ? 'Hệ thống' : project.owner_name %></small>
                     </div>
                   </div>
-                  <span class="badge align-self-start <%= project.status === 'active' ? 'bg-success' : 'bg-secondary' %>">
-                    <%= project.status === 'active' ? 'Đang dùng' : 'Đã lưu trữ' %>
-                  </span>
+                  <div class="d-flex flex-column align-items-end gap-1">
+                    <span class="badge <%= project.status === 'active' ? 'bg-success' : 'bg-secondary' %>">
+                      <%= project.status === 'active' ? 'Đang dùng' : 'Đã lưu trữ' %>
+                    </span>
+                    <% if (project.project_access === 'viewer') { %><span class="badge bg-light text-secondary border"><i class="fa-solid fa-eye me-1"></i>Chỉ xem</span><% } %>
+                  </div>
                 </div>
                 <p class="text-muted small mb-3" style="min-height:40px"><%= project.description || 'Không có mô tả.' %></p>
                 <div class="row g-2 text-center">

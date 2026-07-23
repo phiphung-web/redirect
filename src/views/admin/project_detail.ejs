@@ -7,6 +7,9 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
+  <% const visibleProjectMembers = Array.isArray(projectMembers) ? projectMembers : []; %>
+  <% const visibleAssignableUsers = Array.isArray(assignableUsers) ? assignableUsers : []; %>
+  <% const visibleProjectOwner = typeof displayOwnerName !== 'undefined' ? displayOwnerName : project.owner_name; %>
   <%- include('../partials/header', {
     user,
     active: 'projects',
@@ -30,7 +33,7 @@
             </span>
           </div>
           <div class="text-muted"><%= project.description || 'Không có mô tả.' %></div>
-          <div class="small text-muted mt-2">Chủ dự án: <%= project.owner_name %> · Cập nhật <%= new Date(project.updated_at || project.created_at).toLocaleString('vi-VN') %></div>
+          <div class="small text-muted mt-2">Chủ dự án: <%= visibleProjectOwner %> · Cập nhật <%= new Date(project.updated_at || project.created_at).toLocaleString('vi-VN') %></div>
         </div>
         <% if (canManage) { %>
           <div class="d-flex gap-2">
@@ -65,6 +68,51 @@
       </div>
     <% } %>
 
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+        <div>
+          <div class="fw-bold" data-help="Người được thêm chỉ xem các link trong dự án này. Quyền này không mở toàn bộ domain và không cho phép sửa cấu hình.">
+            <i class="fa-solid fa-users-viewfinder text-primary me-2"></i>Người được xem dự án
+          </div>
+          <div class="small text-muted mt-1">
+            <% if (canManage) { %>
+              Chia sẻ riêng dự án ở chế độ chỉ xem; user không thể thêm, xóa hoặc sửa link.
+            <% } else { %>
+              Bạn được chia sẻ dự án này ở chế độ chỉ xem.
+            <% } %>
+          </div>
+        </div>
+        <span class="badge rounded-pill bg-primary"><%= visibleProjectMembers.length %> user</span>
+      </div>
+      <% if (canManage) { %>
+        <form class="card-body" action="/projects/<%= project.id %>/access" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+            <div>
+              <div class="fw-semibold">Chọn user được xem</div>
+              <div class="small text-muted">Super admin có quyền ngầm và không xuất hiện trong danh sách.</div>
+            </div>
+            <button class="btn btn-primary px-4"><i class="fa-solid fa-check me-1"></i>Lưu quyền xem</button>
+          </div>
+          <% if (!visibleAssignableUsers.length) { %>
+            <div class="border rounded-3 bg-light p-3 text-muted small">Chưa có user đang hoạt động để thêm.</div>
+          <% } else { %>
+            <div class="row g-2">
+              <% visibleAssignableUsers.forEach(account => { const selected = visibleProjectMembers.some(member => Number(member.id) === Number(account.id)); %>
+                <div class="col-lg-4 col-md-6">
+                  <label class="border rounded-3 p-3 w-100 d-flex align-items-center gap-3 <%= selected ? 'border-primary bg-primary-subtle' : 'bg-white' %>" style="cursor:pointer">
+                    <input class="form-check-input mt-0" type="checkbox" name="member_user_ids" value="<%= account.id %>" <%= selected ? 'checked' : '' %>>
+                    <span class="rounded-circle bg-light border d-inline-grid" style="width:36px;height:36px;place-items:center"><i class="fa-solid fa-eye text-secondary"></i></span>
+                    <span><strong class="d-block"><%= account.username %></strong><small class="text-muted">Chỉ xem</small></span>
+                  </label>
+                </div>
+              <% }) %>
+            </div>
+          <% } %>
+        </form>
+      <% } %>
+    </div>
+
     <div class="row g-3 mb-4">
       <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted">Tổng link</div><div class="h3 mb-0"><%= stats.links %></div></div></div></div>
       <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted">Đang bật</div><div class="h3 mb-0 text-success"><%= stats.active %></div></div></div></div>
@@ -72,7 +120,7 @@
       <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted" data-help="Tổng bộ đếm chuyển hướng thành công của các link hiện nằm trong dự án.">Lượt đã chuyển</div><div class="h3 mb-0 text-success"><%= Number(stats.redirects).toLocaleString('vi-VN') %></div></div></div></div>
     </div>
 
-    <% if (project.status === 'active') { %>
+    <% if (project.status === 'active' && canManage) { %>
       <div class="card shadow-sm mb-4">
         <div class="card-header bg-white fw-bold" data-help="Có thể đưa link từ nhiều domain vào cùng dự án. Thao tác này không đổi URL hoặc rule.">Đưa link vào dự án</div>
         <form class="card-body" action="/projects/<%= project.id %>/links/assign" method="POST">
@@ -114,7 +162,11 @@
                   <strong><%= link.display_name %></strong>
                   <div><span class="badge <%= link.type === 'campaign' ? 'bg-primary' : 'bg-warning text-dark' %>"><%= link.type === 'campaign' ? 'Kiểm tra rule' : 'Tự chuyển' %></span></div>
                 </td>
-                <td><a href="/domains/<%= link.domain_id %>"><%= link.domain_url %></a></td>
+                <td>
+                  <% if (canManage) { %><a href="/domains/<%= link.domain_id %>"><%= link.domain_url %></a>
+                  <% } else { %><span><%= link.domain_url %></span><% } %>
+                  <small class="text-muted d-block text-truncate" style="max-width:220px"><%= link.target_url %></small>
+                </td>
                 <td style="min-width:300px">
                   <div class="input-group input-group-sm">
                     <input id="project-link-<%= link.type %>-<%= link.id %>" class="form-control bg-white" value="<%= link.full_url %>" readonly>
@@ -124,16 +176,20 @@
                 <td><strong class="text-success"><%= Number(link.redirects).toLocaleString('vi-VN') %></strong></td>
                 <td><span class="badge <%= link.is_active ? 'bg-success' : 'bg-danger' %>"><%= link.is_active ? 'ON' : 'OFF' %></span></td>
                 <td class="text-end text-nowrap">
-                  <% if (link.type === 'campaign') { %>
-                    <a class="btn btn-sm btn-outline-primary" href="/campaigns/edit/<%= link.id %>">Chi tiết</a>
-                    <a class="btn btn-sm btn-outline-info" href="/campaigns/<%= link.id %>/report"><i class="fa-solid fa-chart-line"></i></a>
+                  <% if (canManage) { %>
+                    <% if (link.type === 'campaign') { %>
+                      <a class="btn btn-sm btn-outline-primary" href="/campaigns/edit/<%= link.id %>">Chi tiết</a>
+                      <a class="btn btn-sm btn-outline-info" href="/campaigns/<%= link.id %>/report"><i class="fa-solid fa-chart-line"></i></a>
+                    <% } else { %>
+                      <a class="btn btn-sm btn-outline-info" href="/short-links/<%= link.id %>/report"><i class="fa-solid fa-chart-line"></i></a>
+                    <% } %>
+                    <form class="d-inline" action="/projects/<%= project.id %>/links/<%= link.type %>/<%= link.id %>/remove" method="POST" onsubmit="return confirm('Đưa link này về Chưa phân loại?')">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-sm btn-outline-secondary" title="Bỏ khỏi dự án"><i class="fa-solid fa-folder-minus"></i></button>
+                    </form>
                   <% } else { %>
-                    <a class="btn btn-sm btn-outline-info" href="/short-links/<%= link.id %>/report"><i class="fa-solid fa-chart-line"></i></a>
+                    <span class="badge bg-light text-secondary border"><i class="fa-solid fa-eye me-1"></i>Chỉ xem</span>
                   <% } %>
-                  <form class="d-inline" action="/projects/<%= project.id %>/links/<%= link.type %>/<%= link.id %>/remove" method="POST" onsubmit="return confirm('Đưa link này về Chưa phân loại?')">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="btn btn-sm btn-outline-secondary" title="Bỏ khỏi dự án"><i class="fa-solid fa-folder-minus"></i></button>
-                  </form>
                 </td>
               </tr>
             <% }) %>

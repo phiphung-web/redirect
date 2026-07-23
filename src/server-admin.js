@@ -323,31 +323,33 @@ const ownShortLinkFromParams = requireOwnedResource(
 const projectScopeUserId = (req) =>
   req.session.user.role_name === "super_admin" ? null : req.session.user.id;
 
-const getAccessibleProjects = async (req, { activeOnly = false } = {}) =>
+const getAccessibleProjects = async (
+  req,
+  { activeOnly = false, manageOnly = false } = {}
+) =>
   db.query(
-    `SELECT p.*, owner.username AS owner_name
+    `SELECT p.*, owner.username AS owner_name, owner_role.name AS owner_role_name,
+            CASE
+              WHEN $1::int IS NULL THEN 'admin'
+              WHEN p.user_id=$1 THEN 'owner'
+              ELSE 'viewer'
+            END AS project_access
      FROM projects p
      JOIN users owner ON owner.id=p.user_id
+     JOIN roles owner_role ON owner_role.id=owner.role_id
      WHERE ($2::boolean=false OR p.status='active')
+       AND ($3::boolean=false OR $1::int IS NULL OR p.user_id=$1)
        AND (
          $1::int IS NULL
          OR p.user_id=$1
          OR EXISTS (
-           SELECT 1
-           FROM campaigns c
-           JOIN domain_user_access dua ON dua.domain_id=c.domain_id
-           WHERE c.project_id=p.id AND dua.user_id=$1
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM short_links s
-           JOIN domain_user_access dua ON dua.domain_id=s.domain_id
-           WHERE s.project_id=p.id AND dua.user_id=$1
+           SELECT 1 FROM project_user_access pua
+           WHERE pua.project_id=p.id AND pua.user_id=$1
          )
        )
      ORDER BY CASE WHEN p.status='active' THEN 0 ELSE 1 END,
               lower(p.name), p.id`,
-    [projectScopeUserId(req), activeOnly]
+    [projectScopeUserId(req), activeOnly, manageOnly]
   );
 
 const canAccessProject = async (req, projectId, { manage = false } = {}) => {
@@ -361,22 +363,12 @@ const canAccessProject = async (req, projectId, { manage = false } = {}) => {
        AND (
          p.user_id=$2
          OR (
-           $3::boolean=false
-           AND (
-             EXISTS (
-               SELECT 1
-               FROM campaigns c
-               JOIN domain_user_access dua ON dua.domain_id=c.domain_id
-               WHERE c.project_id=p.id AND dua.user_id=$2
-             )
-             OR EXISTS (
-               SELECT 1
-               FROM short_links s
-               JOIN domain_user_access dua ON dua.domain_id=s.domain_id
-               WHERE s.project_id=p.id AND dua.user_id=$2
-             )
-           )
-         )
+            $3::boolean=false
+            AND EXISTS (
+              SELECT 1 FROM project_user_access pua
+              WHERE pua.project_id=p.id AND pua.user_id=$2
+            )
+          )
        )
      LIMIT 1`,
     [id, req.session.user.id, manage]
@@ -393,14 +385,14 @@ const requireProjectAccess = ({ manage = false } = {}) => async (req, res, next)
 const resolveProjectId = async (
   req,
   rawProjectId,
-  { allowArchived = false } = {}
+  { allowArchived = false, manage = true } = {}
 ) => {
   if (rawProjectId === undefined || rawProjectId === null || rawProjectId === "") {
     return null;
   }
   const projectId = Number.parseInt(rawProjectId, 10);
   if (!Number.isInteger(projectId)) throw new Error("Dự án không hợp lệ");
-  const accessible = await canAccessProject(req, projectId);
+  const accessible = await canAccessProject(req, projectId, { manage });
   if (!accessible) throw new Error("Bạn không có quyền với dự án đã chọn");
   const project = await db.query(
     `SELECT id FROM projects
@@ -692,34 +684,19 @@ app.get("/projects", checkAuth, async (req, res) => {
   const statsByProject = new Map();
 
   if (projectIds.length) {
-    const scopedUserId = projectScopeUserId(req);
     const stats = await db.query(
       `WITH accessible_links AS (
          SELECT c.project_id, c.domain_id, c.is_active,
                 COALESCE(c.stats_redirects, 0)::bigint AS redirects,
                 'conditional'::text AS link_type
-         FROM campaigns c
-         WHERE c.project_id=ANY($1::int[])
-           AND (
-             $2::int IS NULL
-             OR EXISTS (
-               SELECT 1 FROM domain_user_access dua
-               WHERE dua.domain_id=c.domain_id AND dua.user_id=$2
-             )
-           )
-         UNION ALL
+          FROM campaigns c
+          WHERE c.project_id=ANY($1::int[])
+          UNION ALL
          SELECT s.project_id, s.domain_id, s.is_active,
                 COALESCE(s.clicks, 0)::bigint AS redirects,
                 'delayed'::text AS link_type
-         FROM short_links s
-         WHERE s.project_id=ANY($1::int[])
-           AND (
-             $2::int IS NULL
-             OR EXISTS (
-               SELECT 1 FROM domain_user_access dua
-               WHERE dua.domain_id=s.domain_id AND dua.user_id=$2
-             )
-           )
+          FROM short_links s
+          WHERE s.project_id=ANY($1::int[])
        )
        SELECT project_id,
               COUNT(*)::int AS link_count,
@@ -730,7 +707,7 @@ app.get("/projects", checkAuth, async (req, res) => {
               COALESCE(SUM(redirects), 0)::bigint AS redirects
        FROM accessible_links
        GROUP BY project_id`,
-      [projectIds, scopedUserId]
+      [projectIds]
     );
     stats.rows.forEach((row) => statsByProject.set(Number(row.project_id), row));
   }
@@ -786,50 +763,40 @@ app.get(
   checkAuth,
   requireProjectAccess(),
   async (req, res) => {
-    const scopedUserId = projectScopeUserId(req);
     const projectResult = await db.query(
-      `SELECT p.*, owner.username AS owner_name
+      `SELECT p.*, owner.username AS owner_name, owner_role.name AS owner_role_name
        FROM projects p
        JOIN users owner ON owner.id=p.user_id
+       JOIN roles owner_role ON owner_role.id=owner.role_id
        WHERE p.id=$1`,
       [req.params.id]
     );
     if (!projectResult.rowCount) return res.redirect("/projects");
     const project = projectResult.rows[0];
+    const canManage =
+      req.session.user.role_name === "super_admin" ||
+      Number(project.user_id) === Number(req.session.user.id);
 
     const conditionalResult = await db.query(
       `SELECT c.*, d.domain_url, creator.username AS created_by_name
        FROM campaigns c
        JOIN domains d ON d.id=c.domain_id
-       LEFT JOIN users creator ON creator.id=c.user_id
-       WHERE c.project_id=$1
-         AND (
-           $2::int IS NULL
-           OR EXISTS (
-             SELECT 1 FROM domain_user_access dua
-             WHERE dua.domain_id=c.domain_id AND dua.user_id=$2
-           )
-         )
-       ORDER BY c.id DESC`,
-      [project.id, scopedUserId]
+        LEFT JOIN users creator ON creator.id=c.user_id
+        WHERE c.project_id=$1
+        ORDER BY c.id DESC`,
+      [project.id]
     );
     const delayedResult = await db.query(
       `SELECT s.*, d.domain_url, creator.username AS created_by_name
        FROM short_links s
        JOIN domains d ON d.id=s.domain_id
-       LEFT JOIN users creator ON creator.id=s.user_id
-       WHERE s.project_id=$1
-         AND (
-           $2::int IS NULL
-           OR EXISTS (
-             SELECT 1 FROM domain_user_access dua
-             WHERE dua.domain_id=s.domain_id AND dua.user_id=$2
-           )
-         )
-       ORDER BY s.id DESC`,
-      [project.id, scopedUserId]
+        LEFT JOIN users creator ON creator.id=s.user_id
+        WHERE s.project_id=$1
+        ORDER BY s.id DESC`,
+      [project.id]
     );
-    const availableResult = await db.query(
+    const availableResult = canManage
+      ? await db.query(
       `SELECT *
        FROM (
          SELECT 'campaign'::text AS link_type, c.id,
@@ -863,8 +830,32 @@ app.get(
        WHERE project_id IS DISTINCT FROM $1::int
        ORDER BY lower(domain_url), lower(link_name)
        LIMIT 500`,
-      [project.id, scopedUserId]
+      [project.id, projectScopeUserId(req)]
+    )
+      : { rows: [] };
+    const projectMembers = await db.query(
+      `SELECT u.id, u.username, pua.access_level
+       FROM project_user_access pua
+       JOIN users u ON u.id=pua.user_id
+       JOIN roles r ON r.id=u.role_id
+       WHERE pua.project_id=$1
+         AND u.is_active=true
+         AND r.name='user'
+       ORDER BY lower(u.username), u.id`,
+      [project.id]
     );
+    const assignableUsers = canManage
+      ? await db.query(
+          `SELECT u.id, u.username
+           FROM users u
+           JOIN roles r ON r.id=u.role_id
+           WHERE u.is_active=true
+             AND r.name='user'
+             AND u.id<>$1
+           ORDER BY lower(u.username), u.id`,
+          [project.user_id]
+        )
+      : { rows: [] };
 
     const conditionalLinks = conditionalResult.rows.map((link) => ({
       ...link,
@@ -884,9 +875,11 @@ app.get(
       (a, b) => Number(b.id) - Number(a.id)
     );
     const domainCount = new Set(links.map((link) => link.domain_id)).size;
-    const canManage =
-      req.session.user.role_name === "super_admin" ||
-      Number(project.user_id) === Number(req.session.user.id);
+    const displayOwnerName =
+      project.owner_role_name === "super_admin" &&
+      req.session.user.role_name !== "super_admin"
+        ? "Hệ thống"
+        : project.owner_name;
 
     res.render("admin/project_detail", {
       user: req.session.user,
@@ -894,6 +887,9 @@ app.get(
       links,
       availableLinks: availableResult.rows,
       canManage,
+      projectMembers: projectMembers.rows,
+      assignableUsers: assignableUsers.rows,
+      displayOwnerName,
       stats: {
         links: links.length,
         active: links.filter((link) => link.is_active).length,
@@ -903,6 +899,79 @@ app.get(
       notice: req.session.projectNotice || null,
     });
     delete req.session.projectNotice;
+  }
+);
+
+app.post(
+  "/projects/:id/access",
+  checkAuth,
+  requireProjectAccess({ manage: true }),
+  async (req, res) => {
+    const projectId = Number.parseInt(req.params.id, 10);
+    const projectResult = await db.query(
+      `SELECT id, user_id, name FROM projects WHERE id=$1 LIMIT 1`,
+      [projectId]
+    );
+    if (!projectResult.rowCount) {
+      return res.status(404).send("Không tìm thấy dự án");
+    }
+    const project = projectResult.rows[0];
+    const selectedUserIds = parseUserIdList(req.body.member_user_ids).filter(
+      (userId) => userId !== Number(project.user_id)
+    );
+    const validUsers = await db.query(
+      `SELECT u.id
+       FROM users u
+       JOIN roles r ON r.id=u.role_id
+       WHERE u.is_active=true
+         AND r.name='user'
+         AND u.id=ANY($1::int[])
+       ORDER BY u.id`,
+      [selectedUserIds]
+    );
+    if (validUsers.rowCount !== selectedUserIds.length) {
+      return res.status(400).send("Danh sách user không hợp lệ");
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `DELETE FROM project_user_access WHERE project_id=$1`,
+        [projectId]
+      );
+      await client.query(
+        `INSERT INTO project_user_access
+           (project_id, user_id, access_level, granted_by)
+         SELECT $1, member_id, 'viewer', $2
+         FROM unnest($3::int[]) AS member_id`,
+        [projectId, req.session.user.id, selectedUserIds]
+      );
+      await client.query(
+        `UPDATE projects SET updated_by=$2, updated_at=now() WHERE id=$1`,
+        [projectId, req.session.user.id]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return res.status(500).send("Không thể cập nhật thành viên dự án");
+    } finally {
+      client.release();
+    }
+
+    await auditAdminAction({
+      req,
+      action: "project_access_update",
+      targetType: "project",
+      targetId: projectId,
+      detail: {
+        project_name: project.name,
+        member_user_ids: selectedUserIds,
+        access_level: "viewer",
+      },
+    });
+    req.session.projectNotice = "Đã cập nhật người được xem dự án.";
+    return res.redirect(`/projects/${projectId}`);
   }
 );
 
@@ -980,7 +1049,7 @@ app.post(
 app.post(
   "/projects/:id/links/assign",
   checkAuth,
-  requireProjectAccess(),
+  requireProjectAccess({ manage: true }),
   async (req, res) => {
     await resolveProjectId(req, req.params.id);
     const [type, rawId] = String(req.body.link_ref || "").split(":");
@@ -1006,7 +1075,7 @@ app.post(
 app.post(
   "/projects/:id/links/:type/:linkId/remove",
   checkAuth,
-  requireProjectAccess(),
+  requireProjectAccess({ manage: true }),
   async (req, res) => {
     const type = req.params.type;
     const access = await requireLinkAccess(req, type, req.params.linkId);
@@ -2320,7 +2389,10 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     ...link,
     full_url: `https://${rDom.rows[0].domain_url}/s/${link.code}`,
   }));
-  const availableProjects = await getAccessibleProjects(req, { activeOnly: true });
+  const availableProjects = await getAccessibleProjects(req, {
+    activeOnly: true,
+    manageOnly: true,
+  });
 
   // Đếm lượt hiển thị Safe Page theo link để đưa ra gợi ý vận hành.
   const linkIds = links.map((l) => l.id);
@@ -2595,7 +2667,7 @@ app.get("/campaigns/edit/:id", checkAuth, ownCampaignFromParams, async (req, res
     `SELECT id, name FROM campaigns WHERE domain_id=$1 ORDER BY id DESC`,
     [r.rows[0].domain_id]
   );
-  const projects = await getAccessibleProjects(req);
+  const projects = await getAccessibleProjects(req, { manageOnly: true });
   res.render("admin/campaign_edit", {
     user: req.session.user,
     camp: r.rows[0],
@@ -3310,6 +3382,10 @@ const deleteUserHandler = async (req, res) => {
       await client.query("BEGIN");
       await client.query(
         `DELETE FROM domain_user_access WHERE user_id=$1`,
+        [targetId]
+      );
+      await client.query(
+        `DELETE FROM project_user_access WHERE user_id=$1`,
         [targetId]
       );
       const transferred = await client.query(

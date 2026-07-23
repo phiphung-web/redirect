@@ -315,6 +315,124 @@ const ownShortLinkFromParams = requireOwnedResource(
   (req) => req.params.id
 );
 
+const projectScopeUserId = (req) =>
+  req.session.user.role_name === "super_admin" ? null : req.session.user.id;
+
+const getAccessibleProjects = async (req, { activeOnly = false } = {}) =>
+  db.query(
+    `SELECT p.*, owner.username AS owner_name
+     FROM projects p
+     JOIN users owner ON owner.id=p.user_id
+     WHERE ($2::boolean=false OR p.status='active')
+       AND (
+         $1::int IS NULL
+         OR p.user_id=$1
+         OR EXISTS (
+           SELECT 1
+           FROM campaigns c
+           JOIN domain_user_access dua ON dua.domain_id=c.domain_id
+           WHERE c.project_id=p.id AND dua.user_id=$1
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM short_links s
+           JOIN domain_user_access dua ON dua.domain_id=s.domain_id
+           WHERE s.project_id=p.id AND dua.user_id=$1
+         )
+       )
+     ORDER BY CASE WHEN p.status='active' THEN 0 ELSE 1 END,
+              lower(p.name), p.id`,
+    [projectScopeUserId(req), activeOnly]
+  );
+
+const canAccessProject = async (req, projectId, { manage = false } = {}) => {
+  const id = Number.parseInt(projectId, 10);
+  if (!Number.isInteger(id)) return false;
+  if (req.session.user.role_name === "super_admin") return true;
+  const result = await db.query(
+    `SELECT 1
+     FROM projects p
+     WHERE p.id=$1
+       AND (
+         p.user_id=$2
+         OR (
+           $3::boolean=false
+           AND (
+             EXISTS (
+               SELECT 1
+               FROM campaigns c
+               JOIN domain_user_access dua ON dua.domain_id=c.domain_id
+               WHERE c.project_id=p.id AND dua.user_id=$2
+             )
+             OR EXISTS (
+               SELECT 1
+               FROM short_links s
+               JOIN domain_user_access dua ON dua.domain_id=s.domain_id
+               WHERE s.project_id=p.id AND dua.user_id=$2
+             )
+           )
+         )
+       )
+     LIMIT 1`,
+    [id, req.session.user.id, manage]
+  );
+  return result.rowCount > 0;
+};
+
+const requireProjectAccess = ({ manage = false } = {}) => async (req, res, next) => {
+  if (!req.session.user) return res.redirect("/login");
+  if (await canAccessProject(req, req.params.id, { manage })) return next();
+  return res.status(403).send("Bạn không có quyền với dự án này");
+};
+
+const resolveProjectId = async (
+  req,
+  rawProjectId,
+  { allowArchived = false } = {}
+) => {
+  if (rawProjectId === undefined || rawProjectId === null || rawProjectId === "") {
+    return null;
+  }
+  const projectId = Number.parseInt(rawProjectId, 10);
+  if (!Number.isInteger(projectId)) throw new Error("Dự án không hợp lệ");
+  const accessible = await canAccessProject(req, projectId);
+  if (!accessible) throw new Error("Bạn không có quyền với dự án đã chọn");
+  const project = await db.query(
+    `SELECT id FROM projects
+     WHERE id=$1 AND ($2::boolean=true OR status='active')
+     LIMIT 1`,
+    [projectId, allowArchived]
+  );
+  if (!project.rowCount) throw new Error("Dự án đã lưu trữ hoặc không tồn tại");
+  return projectId;
+};
+
+const requireLinkAccess = async (req, type, linkId) => {
+  const resource =
+    type === "campaign"
+      ? RESOURCE_DOMAIN_EXPRESSIONS.campaign
+      : type === "short_link"
+        ? RESOURCE_DOMAIN_EXPRESSIONS.shortLink
+        : null;
+  const id = Number.parseInt(linkId, 10);
+  if (!resource || !Number.isInteger(id)) return null;
+  const result = await db.query(
+    `SELECT ${resource.expression} AS domain_id
+     FROM ${resource.table}
+     WHERE id=$1
+     LIMIT 1`,
+    [id]
+  );
+  if (!result.rowCount) return null;
+  if (req.session.user.role_name === "super_admin") return result.rows[0];
+  const access = await db.query(
+    `SELECT 1 FROM domain_user_access
+     WHERE domain_id=$1 AND user_id=$2 LIMIT 1`,
+    [result.rows[0].domain_id, req.session.user.id]
+  );
+  return access.rowCount ? result.rows[0] : null;
+};
+
 // AUTH
 app.get("/login", (req, res) => res.render("admin/login", { error: null }));
 app.post("/login", loginRateLimit, async (req, res) => {
@@ -561,6 +679,355 @@ app.get("/", checkAuth, async (req, res) => {
   res.render("admin/welcome", { user: req.session.user });
 });
 
+// --- PROJECTS ---
+app.get("/projects", checkAuth, async (req, res) => {
+  const projectsResult = await getAccessibleProjects(req);
+  const projects = projectsResult.rows;
+  const projectIds = projects.map((project) => project.id);
+  const statsByProject = new Map();
+
+  if (projectIds.length) {
+    const scopedUserId = projectScopeUserId(req);
+    const stats = await db.query(
+      `WITH accessible_links AS (
+         SELECT c.project_id, c.domain_id, c.is_active,
+                COALESCE(c.stats_redirects, 0)::bigint AS redirects,
+                'conditional'::text AS link_type
+         FROM campaigns c
+         WHERE c.project_id=ANY($1::int[])
+           AND (
+             $2::int IS NULL
+             OR EXISTS (
+               SELECT 1 FROM domain_user_access dua
+               WHERE dua.domain_id=c.domain_id AND dua.user_id=$2
+             )
+           )
+         UNION ALL
+         SELECT s.project_id, s.domain_id, s.is_active,
+                COALESCE(s.clicks, 0)::bigint AS redirects,
+                'delayed'::text AS link_type
+         FROM short_links s
+         WHERE s.project_id=ANY($1::int[])
+           AND (
+             $2::int IS NULL
+             OR EXISTS (
+               SELECT 1 FROM domain_user_access dua
+               WHERE dua.domain_id=s.domain_id AND dua.user_id=$2
+             )
+           )
+       )
+       SELECT project_id,
+              COUNT(*)::int AS link_count,
+              COUNT(*) FILTER (WHERE is_active)::int AS active_count,
+              COUNT(*) FILTER (WHERE link_type='conditional')::int AS conditional_count,
+              COUNT(*) FILTER (WHERE link_type='delayed')::int AS delayed_count,
+              COUNT(DISTINCT domain_id)::int AS domain_count,
+              COALESCE(SUM(redirects), 0)::bigint AS redirects
+       FROM accessible_links
+       GROUP BY project_id`,
+      [projectIds, scopedUserId]
+    );
+    stats.rows.forEach((row) => statsByProject.set(Number(row.project_id), row));
+  }
+
+  res.render("admin/projects", {
+    user: req.session.user,
+    projects: projects.map((project) => ({
+      ...project,
+      ...(statsByProject.get(Number(project.id)) || {
+        link_count: 0,
+        active_count: 0,
+        conditional_count: 0,
+        delayed_count: 0,
+        domain_count: 0,
+        redirects: 0,
+      }),
+    })),
+    notice: req.session.projectNotice || null,
+  });
+  delete req.session.projectNotice;
+});
+
+app.post("/projects/create", checkAuth, async (req, res) => {
+  try {
+    const name = validateName(req.body.name, "Tên dự án");
+    const description = String(req.body.description || "").trim();
+    if (description.length > 500) throw new Error("Mô tả tối đa 500 ký tự");
+    const inserted = await db.query(
+      `INSERT INTO projects (user_id, name, description, updated_by)
+       VALUES ($1, $2, $3, $1)
+       RETURNING id`,
+      [req.session.user.id, name, description || null]
+    );
+    await auditAdminAction({
+      req,
+      action: "project_create",
+      targetType: "project",
+      targetId: inserted.rows[0].id,
+      detail: { name },
+    });
+    return res.redirect(`/projects/${inserted.rows[0].id}`);
+  } catch (error) {
+    req.session.projectNotice =
+      error.code === "23505"
+        ? "Bạn đã có dự án trùng tên."
+        : error.message || "Không thể tạo dự án.";
+    return res.redirect("/projects");
+  }
+});
+
+app.get(
+  "/projects/:id",
+  checkAuth,
+  requireProjectAccess(),
+  async (req, res) => {
+    const scopedUserId = projectScopeUserId(req);
+    const projectResult = await db.query(
+      `SELECT p.*, owner.username AS owner_name
+       FROM projects p
+       JOIN users owner ON owner.id=p.user_id
+       WHERE p.id=$1`,
+      [req.params.id]
+    );
+    if (!projectResult.rowCount) return res.redirect("/projects");
+    const project = projectResult.rows[0];
+
+    const conditionalResult = await db.query(
+      `SELECT c.*, d.domain_url, creator.username AS created_by_name
+       FROM campaigns c
+       JOIN domains d ON d.id=c.domain_id
+       LEFT JOIN users creator ON creator.id=c.user_id
+       WHERE c.project_id=$1
+         AND (
+           $2::int IS NULL
+           OR EXISTS (
+             SELECT 1 FROM domain_user_access dua
+             WHERE dua.domain_id=c.domain_id AND dua.user_id=$2
+           )
+         )
+       ORDER BY c.id DESC`,
+      [project.id, scopedUserId]
+    );
+    const delayedResult = await db.query(
+      `SELECT s.*, d.domain_url, creator.username AS created_by_name
+       FROM short_links s
+       JOIN domains d ON d.id=s.domain_id
+       LEFT JOIN users creator ON creator.id=s.user_id
+       WHERE s.project_id=$1
+         AND (
+           $2::int IS NULL
+           OR EXISTS (
+             SELECT 1 FROM domain_user_access dua
+             WHERE dua.domain_id=s.domain_id AND dua.user_id=$2
+           )
+         )
+       ORDER BY s.id DESC`,
+      [project.id, scopedUserId]
+    );
+    const availableResult = await db.query(
+      `SELECT *
+       FROM (
+         SELECT 'campaign'::text AS link_type, c.id,
+                c.name AS link_name, c.domain_id, d.domain_url,
+                c.project_id, current_project.name AS project_name
+         FROM campaigns c
+         JOIN domains d ON d.id=c.domain_id
+         LEFT JOIN projects current_project ON current_project.id=c.project_id
+         WHERE (
+           $2::int IS NULL
+           OR EXISTS (
+             SELECT 1 FROM domain_user_access dua
+             WHERE dua.domain_id=c.domain_id AND dua.user_id=$2
+           )
+         )
+         UNION ALL
+         SELECT 'short_link'::text AS link_type, s.id,
+                COALESCE(s.title, s.code) AS link_name, s.domain_id, d.domain_url,
+                s.project_id, current_project.name AS project_name
+         FROM short_links s
+         JOIN domains d ON d.id=s.domain_id
+         LEFT JOIN projects current_project ON current_project.id=s.project_id
+         WHERE (
+           $2::int IS NULL
+           OR EXISTS (
+             SELECT 1 FROM domain_user_access dua
+             WHERE dua.domain_id=s.domain_id AND dua.user_id=$2
+           )
+         )
+       ) available
+       WHERE project_id IS DISTINCT FROM $1::int
+       ORDER BY lower(domain_url), lower(link_name)
+       LIMIT 500`,
+      [project.id, scopedUserId]
+    );
+
+    const conditionalLinks = conditionalResult.rows.map((link) => ({
+      ...link,
+      type: "campaign",
+      display_name: link.name,
+      full_url: `https://${link.domain_url}/?${link.param_key || "q"}=${link.param_value || link.id}`,
+      redirects: Number(link.stats_redirects || 0),
+    }));
+    const delayedLinks = delayedResult.rows.map((link) => ({
+      ...link,
+      type: "short_link",
+      display_name: link.title || link.code,
+      full_url: `https://${link.domain_url}/s/${link.code}`,
+      redirects: Number(link.clicks || 0),
+    }));
+    const links = [...conditionalLinks, ...delayedLinks].sort(
+      (a, b) => Number(b.id) - Number(a.id)
+    );
+    const domainCount = new Set(links.map((link) => link.domain_id)).size;
+    const canManage =
+      req.session.user.role_name === "super_admin" ||
+      Number(project.user_id) === Number(req.session.user.id);
+
+    res.render("admin/project_detail", {
+      user: req.session.user,
+      project,
+      links,
+      availableLinks: availableResult.rows,
+      canManage,
+      stats: {
+        links: links.length,
+        active: links.filter((link) => link.is_active).length,
+        domains: domainCount,
+        redirects: links.reduce((sum, link) => sum + link.redirects, 0),
+      },
+      notice: req.session.projectNotice || null,
+    });
+    delete req.session.projectNotice;
+  }
+);
+
+app.post(
+  "/projects/:id/update",
+  checkAuth,
+  requireProjectAccess({ manage: true }),
+  async (req, res) => {
+    try {
+      const name = validateName(req.body.name, "Tên dự án");
+      const description = String(req.body.description || "").trim();
+      if (description.length > 500) throw new Error("Mô tả tối đa 500 ký tự");
+      await db.query(
+        `UPDATE projects
+         SET name=$1, description=$2, updated_by=$3
+         WHERE id=$4`,
+        [name, description || null, req.session.user.id, req.params.id]
+      );
+      await auditAdminAction({
+        req,
+        action: "project_update",
+        targetType: "project",
+        targetId: req.params.id,
+        detail: { name },
+      });
+      req.session.projectNotice = "Đã cập nhật dự án.";
+    } catch (error) {
+      req.session.projectNotice =
+        error.code === "23505" ? "Dự án bị trùng tên." : error.message;
+    }
+    return res.redirect(`/projects/${req.params.id}`);
+  }
+);
+
+app.post(
+  "/projects/:id/toggle",
+  checkAuth,
+  requireProjectAccess({ manage: true }),
+  async (req, res) => {
+    await db.query(
+      `UPDATE projects
+       SET status=CASE WHEN status='active' THEN 'archived' ELSE 'active' END,
+           updated_by=$2
+       WHERE id=$1`,
+      [req.params.id, req.session.user.id]
+    );
+    await auditAdminAction({
+      req,
+      action: "project_toggle",
+      targetType: "project",
+      targetId: req.params.id,
+    });
+    return res.redirect(`/projects/${req.params.id}`);
+  }
+);
+
+app.post(
+  "/projects/:id/delete",
+  checkAuth,
+  requireProjectAccess({ manage: true }),
+  async (req, res) => {
+    await db.query(`DELETE FROM projects WHERE id=$1`, [req.params.id]);
+    await auditAdminAction({
+      req,
+      action: "project_delete",
+      targetType: "project",
+      targetId: req.params.id,
+    });
+    req.session.projectNotice =
+      "Đã xóa dự án. Các link được chuyển về Chưa phân loại.";
+    return res.redirect("/projects");
+  }
+);
+
+app.post(
+  "/projects/:id/links/assign",
+  checkAuth,
+  requireProjectAccess(),
+  async (req, res) => {
+    await resolveProjectId(req, req.params.id);
+    const [type, rawId] = String(req.body.link_ref || "").split(":");
+    const access = await requireLinkAccess(req, type, rawId);
+    if (!access) return res.status(403).send("Bạn không có quyền với link này");
+    const table = type === "campaign" ? "campaigns" : "short_links";
+    await db.query(
+      `UPDATE ${table} SET project_id=$1, updated_by=$2 WHERE id=$3`,
+      [req.params.id, req.session.user.id, rawId]
+    );
+    await auditAdminAction({
+      req,
+      action: "project_link_assign",
+      targetType: type,
+      targetId: rawId,
+      detail: { project_id: Number(req.params.id), domain_id: access.domain_id },
+    });
+    req.session.projectNotice = "Đã đưa link vào dự án.";
+    return res.redirect(`/projects/${req.params.id}`);
+  }
+);
+
+app.post(
+  "/projects/:id/links/:type/:linkId/remove",
+  checkAuth,
+  requireProjectAccess(),
+  async (req, res) => {
+    const type = req.params.type;
+    const access = await requireLinkAccess(req, type, req.params.linkId);
+    if (!access) return res.status(403).send("Bạn không có quyền với link này");
+    const table = type === "campaign" ? "campaigns" : "short_links";
+    const result = await db.query(
+      `UPDATE ${table}
+       SET project_id=NULL, updated_by=$3
+       WHERE id=$1 AND project_id=$2
+       RETURNING id`,
+      [req.params.linkId, req.params.id, req.session.user.id]
+    );
+    if (result.rowCount) {
+      await auditAdminAction({
+        req,
+        action: "project_link_remove",
+        targetType: type,
+        targetId: req.params.linkId,
+        detail: { project_id: Number(req.params.id), domain_id: access.domain_id },
+      });
+    }
+    req.session.projectNotice = "Đã đưa link về Chưa phân loại.";
+    return res.redirect(`/projects/${req.params.id}`);
+  }
+);
+
 // --- DASHBOARD ---
 app.get("/redirect", checkAuth, async (req, res) => {
   const scopedUserId =
@@ -670,6 +1137,7 @@ app.post("/short-links/create", checkAuth, ownDomainFromBody, async (req, res) =
       req.body.title || req.body.name || "Short link",
       "Ten link"
     );
+    const projectId = await resolveProjectId(req, req.body.project_id);
     const targetUrl = normalizeTargetUrl(req.body.target_url);
     const redirectDelaySeconds = Number.parseInt(
       req.body.redirect_delay_seconds,
@@ -694,8 +1162,9 @@ app.post("/short-links/create", checkAuth, ownDomainFromBody, async (req, res) =
         await db.query(
           `
             INSERT INTO short_links
-              (domain_id, user_id, code, title, target_url, updated_by, redirect_delay_seconds)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+              (domain_id, user_id, code, title, target_url, updated_by,
+               redirect_delay_seconds, project_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           `,
           [
             domainId,
@@ -705,6 +1174,7 @@ app.post("/short-links/create", checkAuth, ownDomainFromBody, async (req, res) =
             targetUrl,
             req.session.user.id,
             redirectDelaySeconds,
+            projectId,
           ]
         );
         await auditAdminAction({
@@ -712,11 +1182,12 @@ app.post("/short-links/create", checkAuth, ownDomainFromBody, async (req, res) =
           action: "short_link_create",
           targetType: "short_link",
           targetId: `${domainId}:${currentCode}`,
-          detail: {
-            domain_id: domainId,
-            code: currentCode,
-            title,
-            redirect_delay_seconds: redirectDelaySeconds,
+            detail: {
+              domain_id: domainId,
+              code: currentCode,
+              title,
+              redirect_delay_seconds: redirectDelaySeconds,
+              project_id: projectId,
           },
         });
         return res.redirect(`/domains/${domainId}`);
@@ -1710,6 +2181,7 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
   const rLinks = await db.query(
     `
       SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name,
+             p.name AS project_name,
              (SELECT COUNT(*) FROM traffic_logs tl
               WHERE tl.campaign_id=c.id AND tl.action='redirect') +
              COALESCE((
@@ -1719,6 +2191,7 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
       FROM campaigns c
       LEFT JOIN users cu ON c.user_id = cu.id
       LEFT JOIN users uu ON c.updated_by = uu.id
+      LEFT JOIN projects p ON p.id=c.project_id
       WHERE c.domain_id=$1
       ORDER BY c.id DESC
     `,
@@ -1728,6 +2201,7 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
   const rShortLinks = await db.query(
     `
       SELECT s.*, cu.username AS created_by_name, uu.username AS updated_by_name,
+             p.name AS project_name,
              (SELECT COUNT(*) FROM traffic_logs tl
                WHERE tl.short_link_id=s.id AND tl.action='short_redirect_confirmed') +
              COALESCE((
@@ -1745,6 +2219,7 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
       FROM short_links s
       LEFT JOIN users cu ON s.user_id = cu.id
       LEFT JOIN users uu ON s.updated_by = uu.id
+      LEFT JOIN projects p ON p.id=s.project_id
       WHERE s.domain_id=$1
       ORDER BY s.id DESC
     `,
@@ -1798,6 +2273,7 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     ...link,
     full_url: `https://${rDom.rows[0].domain_url}/s/${link.code}`,
   }));
+  const availableProjects = await getAccessibleProjects(req, { activeOnly: true });
 
   // Đếm lượt hiển thị Safe Page theo link để đưa ra gợi ý vận hành.
   const linkIds = links.map((l) => l.id);
@@ -1849,6 +2325,7 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     domainTrafficStats: domainTrafficStats.rows[0],
     domainMembers: domainMembers.rows,
     assignableUsers: assignableUsers.rows,
+    projects: availableProjects.rows,
   });
 });
 
@@ -1897,12 +2374,14 @@ app.post("/campaigns/create", checkAuth, ownDomainFromBody, async (req, res) => 
     rules_json,
     allowed_countries,
     copy_from_id,
+    project_id,
   } = req.body;
   try {
     const normalizedDomainId = Number.parseInt(domain_id, 10);
     if (!Number.isInteger(normalizedDomainId))
       throw new Error("Domain khong hop le");
     const normalizedName = validateName(name, "Ten link");
+    const normalizedProjectId = await resolveProjectId(req, project_id);
     const normalizedTargetUrl = normalizeTargetUrl(target_url);
     let rulesPayload = parseRules(rules_json);
     let rulesPayloadJson = JSON.stringify(rulesPayload || []);
@@ -1946,8 +2425,8 @@ app.post("/campaigns/create", checkAuth, ownDomainFromBody, async (req, res) => 
       `
             INSERT INTO campaigns
               (domain_id, user_id, name, param_key, param_value,
-               target_url, rules, filters, updated_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               target_url, rules, filters, updated_by, project_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
       [
         normalizedDomainId,
@@ -1959,6 +2438,7 @@ app.post("/campaigns/create", checkAuth, ownDomainFromBody, async (req, res) => 
         rulesPayloadJson,
         filtersJson,
         req.session.user.id,
+        normalizedProjectId,
       ]
     );
 
@@ -1970,6 +2450,7 @@ app.post("/campaigns/create", checkAuth, ownDomainFromBody, async (req, res) => 
       detail: {
         domain_id: normalizedDomainId,
         name: normalizedName,
+        project_id: normalizedProjectId,
       },
     });
     res.redirect("/domains/" + normalizedDomainId);
@@ -2063,11 +2544,13 @@ app.get("/campaigns/edit/:id", checkAuth, ownCampaignFromParams, async (req, res
     `SELECT id, name FROM campaigns WHERE domain_id=$1 ORDER BY id DESC`,
     [r.rows[0].domain_id]
   );
+  const projects = await getAccessibleProjects(req);
   res.render("admin/campaign_edit", {
     user: req.session.user,
     camp: r.rows[0],
     domain: d.rows[0],
     otherCamps: others.rows.filter((c) => c.id !== r.rows[0].id),
+    projects: projects.rows,
   });
 });
 
@@ -2078,6 +2561,7 @@ app.post("/campaigns/update/:id", checkAuth, ownCampaignFromParams, async (req, 
     rules_json,
     allowed_countries,
     domain_id,
+    project_id,
   } =
     req.body;
   try {
@@ -2085,6 +2569,9 @@ app.post("/campaigns/update/:id", checkAuth, ownCampaignFromParams, async (req, 
     if (!Number.isInteger(normalizedDomainId))
       throw new Error("Domain khong hop le");
     const normalizedName = validateName(name, "Ten link");
+    const normalizedProjectId = await resolveProjectId(req, project_id, {
+      allowArchived: true,
+    });
     const normalizedTargetUrl = normalizeTargetUrl(target_url);
     const rulesPayload = parseRules(rules_json);
     const filters = buildFilters(allowed_countries);
@@ -2108,14 +2595,16 @@ app.post("/campaigns/update/:id", checkAuth, ownCampaignFromParams, async (req, 
     await db.query(
       `UPDATE campaigns
        SET name=$1, target_url=$2, rules=$3, filters=$4,
-           safe_page_id=NULL, safe_template_override=NULL, updated_by=$5
-       WHERE id=$6`,
+            safe_page_id=NULL, safe_template_override=NULL, updated_by=$5,
+            project_id=$6
+        WHERE id=$7`,
       [
         normalizedName,
         normalizedTargetUrl,
         rulesPayloadJson,
         filtersJson,
         req.session.user.id,
+        normalizedProjectId,
         req.params.id,
       ]
     );
@@ -2124,7 +2613,11 @@ app.post("/campaigns/update/:id", checkAuth, ownCampaignFromParams, async (req, 
       action: "campaign_update",
       targetType: "campaign",
       targetId: req.params.id,
-      detail: { domain_id: normalizedDomainId, name: normalizedName },
+      detail: {
+        domain_id: normalizedDomainId,
+        name: normalizedName,
+        project_id: normalizedProjectId,
+      },
     });
     res.redirect("/domains/" + normalizedDomainId);
   } catch (e) {

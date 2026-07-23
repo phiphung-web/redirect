@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dự án - <%= project.name %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <%- include('../partials/header', {
+    user,
+    active: 'projects',
+    backUrl: '/projects',
+    breadcrumb: [
+      { label: 'Dự án', url: '/projects' },
+      { label: project.name }
+    ]
+  }) %>
+
+  <div class="container-xxl">
+    <% if (notice) { %><div class="alert alert-info"><%= notice %></div><% } %>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-body d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <h3 class="mb-0"><%= project.name %></h3>
+            <span class="badge <%= project.status === 'active' ? 'bg-success' : 'bg-secondary' %>">
+              <%= project.status === 'active' ? 'Đang dùng' : 'Đã lưu trữ' %>
+            </span>
+          </div>
+          <div class="text-muted"><%= project.description || 'Không có mô tả.' %></div>
+          <div class="small text-muted mt-2">Chủ dự án: <%= project.owner_name %> · Cập nhật <%= new Date(project.updated_at || project.created_at).toLocaleString('vi-VN') %></div>
+        </div>
+        <% if (canManage) { %>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#editProject"><i class="fa-solid fa-pen me-1"></i>Sửa</button>
+            <form action="/projects/<%= project.id %>/toggle" method="POST">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button class="btn btn-outline-secondary"><%= project.status === 'active' ? 'Lưu trữ' : 'Khôi phục' %></button>
+            </form>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <% if (canManage) { %>
+      <div class="collapse mb-4" id="editProject">
+        <div class="card border-primary shadow-sm">
+          <form class="card-body" action="/projects/<%= project.id %>/update" method="POST">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <div class="row g-3">
+              <div class="col-lg-4">
+                <label class="form-label fw-bold">Tên dự án</label>
+                <input class="form-control" name="name" maxlength="150" value="<%= project.name %>" required>
+              </div>
+              <div class="col-lg-6">
+                <label class="form-label fw-bold">Mô tả</label>
+                <input class="form-control" name="description" maxlength="500" value="<%= project.description || '' %>">
+              </div>
+              <div class="col-lg-2 d-flex align-items-end"><button class="btn btn-primary w-100">Lưu</button></div>
+            </div>
+          </form>
+        </div>
+      </div>
+    <% } %>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted">Tổng link</div><div class="h3 mb-0"><%= stats.links %></div></div></div></div>
+      <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted">Đang bật</div><div class="h3 mb-0 text-success"><%= stats.active %></div></div></div></div>
+      <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted">Domain liên quan</div><div class="h3 mb-0 text-primary"><%= stats.domains %></div></div></div></div>
+      <div class="col-md-3"><div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted" data-help="Tổng bộ đếm chuyển hướng thành công của các link hiện nằm trong dự án.">Lượt đã chuyển</div><div class="h3 mb-0 text-success"><%= Number(stats.redirects).toLocaleString('vi-VN') %></div></div></div></div>
+    </div>
+
+    <% if (project.status === 'active') { %>
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white fw-bold" data-help="Có thể đưa link từ nhiều domain vào cùng dự án. Thao tác này không đổi URL hoặc rule.">Đưa link vào dự án</div>
+        <form class="card-body" action="/projects/<%= project.id %>/links/assign" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="row g-3">
+            <div class="col-lg-10">
+              <select class="form-select" name="link_ref" required <%= availableLinks.length ? '' : 'disabled' %>>
+                <option value="">-- Chọn link đang có quyền truy cập --</option>
+                <% availableLinks.forEach(link => { %>
+                  <option value="<%= link.link_type %>:<%= link.id %>">
+                    [<%= link.domain_url %>] <%= link.link_name %> · <%= link.link_type === 'campaign' ? 'Kiểm tra rule' : 'Tự chuyển' %><%= link.project_name ? ' · đang ở ' + link.project_name : ' · Chưa phân loại' %>
+                  </option>
+                <% }) %>
+              </select>
+            </div>
+            <div class="col-lg-2"><button class="btn btn-primary w-100" <%= availableLinks.length ? '' : 'disabled' %>>Thêm vào</button></div>
+          </div>
+          <% if (!availableLinks.length) { %><div class="form-text">Không còn link phù hợp để thêm.</div><% } %>
+        </form>
+      </div>
+    <% } %>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-bold">Link trong dự án</div>
+          <div class="small text-muted">Danh sách có thể trải trên nhiều domain.</div>
+        </div>
+        <span class="badge bg-primary"><%= links.length %> link</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light"><tr><th>Link</th><th>Domain</th><th>URL sử dụng</th><th>Đã chuyển</th><th>Trạng thái</th><th class="text-end">Hành động</th></tr></thead>
+          <tbody>
+            <% if (!links.length) { %><tr><td colspan="6" class="text-center py-5 text-muted">Dự án chưa có link.</td></tr><% } %>
+            <% links.forEach(link => { %>
+              <tr>
+                <td>
+                  <strong><%= link.display_name %></strong>
+                  <div><span class="badge <%= link.type === 'campaign' ? 'bg-primary' : 'bg-warning text-dark' %>"><%= link.type === 'campaign' ? 'Kiểm tra rule' : 'Tự chuyển' %></span></div>
+                </td>
+                <td><a href="/domains/<%= link.domain_id %>"><%= link.domain_url %></a></td>
+                <td style="min-width:300px">
+                  <div class="input-group input-group-sm">
+                    <input id="project-link-<%= link.type %>-<%= link.id %>" class="form-control bg-white" value="<%= link.full_url %>" readonly>
+                    <button type="button" class="btn btn-outline-primary" onclick="copyProjectLink('project-link-<%= link.type %>-<%= link.id %>')"><i class="fa-solid fa-copy"></i></button>
+                  </div>
+                </td>
+                <td><strong class="text-success"><%= Number(link.redirects).toLocaleString('vi-VN') %></strong></td>
+                <td><span class="badge <%= link.is_active ? 'bg-success' : 'bg-danger' %>"><%= link.is_active ? 'ON' : 'OFF' %></span></td>
+                <td class="text-end text-nowrap">
+                  <% if (link.type === 'campaign') { %>
+                    <a class="btn btn-sm btn-outline-primary" href="/campaigns/edit/<%= link.id %>">Chi tiết</a>
+                    <a class="btn btn-sm btn-outline-info" href="/campaigns/<%= link.id %>/report"><i class="fa-solid fa-chart-line"></i></a>
+                  <% } else { %>
+                    <a class="btn btn-sm btn-outline-info" href="/short-links/<%= link.id %>/report"><i class="fa-solid fa-chart-line"></i></a>
+                  <% } %>
+                  <form class="d-inline" action="/projects/<%= project.id %>/links/<%= link.type %>/<%= link.id %>/remove" method="POST" onsubmit="return confirm('Đưa link này về Chưa phân loại?')">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-sm btn-outline-secondary" title="Bỏ khỏi dự án"><i class="fa-solid fa-folder-minus"></i></button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <% if (canManage) { %>
+      <div class="text-end">
+        <form action="/projects/<%= project.id %>/delete" method="POST" onsubmit="return confirm('Xóa dự án? Link và thống kê sẽ không bị xóa, chỉ chuyển về Chưa phân loại.')">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-outline-danger">Xóa dự án</button>
+        </form>
+      </div>
+    <% } %>
+  </div>
+
+  <script>
+    function copyProjectLink(id) {
+      const input = document.getElementById(id);
+      if (!input) return;
+      navigator.clipboard.writeText(input.value).catch(() => {
+        input.select();
+        document.execCommand('copy');
+      });
+    }
+  </script>
+  <%- include('../partials/footer') %>
+</body>
+</html>

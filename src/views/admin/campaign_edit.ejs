@@ -21,6 +21,7 @@
 </head>
 
 <body>
+    <% const visibleProjects = typeof projects !== 'undefined' && Array.isArray(projects) ? projects : []; %>
     <%- include('../partials/header', { user, active: 'redirect' , backUrl: '/domains/' + domain.id, breadcrumb: [ {
         label: 'Redirect' , url: '/redirect' }, { label: domain.domain_url, url: '/domains/' + domain.id }, {
         label: 'Chi tiết link' } ] }) %>
@@ -66,6 +67,16 @@
                         <input type="url" name="target_url" class="form-control" value="<%= camp.target_url %>"
                             required>
                     </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="fw-bold" data-help="Có thể chuyển link sang dự án khác hoặc để Chưa phân loại. URL và rule không thay đổi.">Dự án</label>
+                    <select class="form-select" name="project_id">
+                        <option value="">Chưa phân loại</option>
+                        <% visibleProjects.forEach(project => { %>
+                            <option value="<%= project.id %>" <%= Number(project.id) === Number(camp.project_id) ? 'selected' : '' %> <%= project.status !== 'active' && Number(project.id) !== Number(camp.project_id) ? 'disabled' : '' %>><%= project.name %><%= project.status !== 'active' ? ' · Đã lưu trữ' : '' %><%= Number(project.user_id) === Number(user.id) ? '' : ' · ' + project.owner_name %></option>
+                        <% }) %>
+                    </select>
                 </div>
 
                 <div class="mb-3">

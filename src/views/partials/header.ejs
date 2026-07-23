@@ -27,6 +27,9 @@
         <li class="nav-item">
           <a class="nav-link <%= ['redirect','short-links'].includes(currentMenu) ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-globe me-2"></i>Tên miền &amp; Link</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link <%= currentMenu === 'projects' ? 'active' : '' %>" href="/projects"><i class="fa-solid fa-folder-tree me-2"></i>Dự án</a>
+        </li>
         <% if (isAdmin) { %>
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle <%= ['system','users'].includes(currentMenu) ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown">

@@ -90,6 +90,7 @@
 <body>
     <% const visibleDomainMembers = typeof domainMembers !== 'undefined' && Array.isArray(domainMembers) ? domainMembers : []; %>
     <% const visibleAssignableUsers = typeof assignableUsers !== 'undefined' && Array.isArray(assignableUsers) ? assignableUsers : []; %>
+    <% const visibleProjects = typeof projects !== 'undefined' && Array.isArray(projects) ? projects : []; %>
     <%- include('../partials/header', { user, active: 'redirect' , backUrl: '/redirect' , breadcrumb: [ {
         label: 'Tên miền & Link' , url: '/redirect' }, { label: domain.domain_url } ] }) %>
         <input type="hidden" id="csrfToken" value="<%= csrfToken %>">
@@ -222,7 +223,9 @@
                                         <td>
                                             <b>
                                                 <%= l.name %>
-                                            </b><br>
+                                            </b>
+                                            <% if (l.project_name) { %><a href="/projects/<%= l.project_id %>" class="badge bg-primary-subtle text-primary text-decoration-none ms-1"><i class="fa-solid fa-folder me-1"></i><%= l.project_name %></a><% } else { %><span class="badge bg-light text-secondary border ms-1">Chưa phân loại</span><% } %>
+                                            <br>
                                             <small class="text-muted d-block text-truncate" style="max-width: 200px;">
                                                 <%= l.target_url %>
                                             </small>
@@ -312,7 +315,7 @@
                             <% } %>
                             <% shortLinks.forEach((link) => { %>
                                 <tr>
-                                    <td><strong><%= link.title || link.code %></strong><small class="text-muted d-block text-truncate" style="max-width:230px"><%= link.target_url %></small></td>
+                                    <td><strong><%= link.title || link.code %></strong> <% if (link.project_name) { %><a href="/projects/<%= link.project_id %>" class="badge bg-primary-subtle text-primary text-decoration-none"><i class="fa-solid fa-folder me-1"></i><%= link.project_name %></a><% } else { %><span class="badge bg-light text-secondary border">Chưa phân loại</span><% } %><small class="text-muted d-block text-truncate" style="max-width:230px"><%= link.target_url %></small></td>
                                     <td style="min-width:270px"><div class="input-group input-group-sm"><input type="text" class="form-control bg-white text-primary fw-bold" value="<%= link.full_url %>" readonly id="short-link-<%= link.id %>"><button type="button" class="btn btn-primary" onclick="copyLink('short-link-<%= link.id %>')"><i class="fas fa-copy"></i></button></div><small class="text-muted">/s/<%= link.code %></small></td>
                                     <td><span class="badge bg-warning text-dark"><%= link.redirect_delay_seconds || 3 %> giây</span></td>
                                     <td><strong><%= Number(link.opened_count || 0).toLocaleString('vi-VN') %></strong> / <strong class="text-success"><%= Number(link.confirmed_redirects || 0).toLocaleString('vi-VN') %></strong></td>
@@ -378,6 +381,15 @@
                                     <label class="form-label fw-bold">Link đích</label>
                                     <input type="url" name="target_url" class="form-control" placeholder="https://example.com/landing" required>
                                 </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold" data-help="Dự án chỉ dùng để gom và báo cáo link; không thay đổi URL, rule hoặc domain.">Dự án</label>
+                                <select name="project_id" class="form-select">
+                                    <option value="">Chưa phân loại</option>
+                                    <% visibleProjects.forEach(project => { %>
+                                        <option value="<%= project.id %>"><%= project.name %><%= Number(project.user_id) === Number(user.id) ? '' : ' · ' + project.owner_name %></option>
+                                    <% }) %>
+                                </select>
                             </div>
 
                             <section id="conditionalFields" data-flow="conditional" hidden>

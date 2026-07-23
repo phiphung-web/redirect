@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dự án</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <%- include('../partials/header', {
+    user,
+    active: 'projects',
+    breadcrumb: [{ label: 'Dự án' }]
+  }) %>
+
+  <div class="container-xxl">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+      <div>
+        <h3 class="mb-1" data-help="Dự án gom các link cùng khách hàng hoặc chiến dịch, kể cả khi link nằm trên nhiều domain.">Dự án</h3>
+        <div class="text-muted">Gom link theo công việc; domain vẫn giữ cấu hình và quyền truy cập riêng.</div>
+      </div>
+      <button class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#createProject">
+        <i class="fa-solid fa-plus me-1"></i>Tạo dự án
+      </button>
+    </div>
+
+    <% if (notice) { %><div class="alert alert-info"><%= notice %></div><% } %>
+
+    <div class="collapse mb-4" id="createProject">
+      <div class="card shadow-sm border-primary">
+        <div class="card-header bg-white fw-bold">Dự án mới</div>
+        <form class="card-body" action="/projects/create" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="row g-3">
+            <div class="col-lg-4">
+              <label class="form-label fw-bold">Tên dự án</label>
+              <input class="form-control" name="name" maxlength="150" placeholder="Ví dụ: Khách hàng A" required>
+            </div>
+            <div class="col-lg-6">
+              <label class="form-label fw-bold">Mô tả</label>
+              <input class="form-control" name="description" maxlength="500" placeholder="Mục đích hoặc ghi chú ngắn">
+            </div>
+            <div class="col-lg-2 d-flex align-items-end">
+              <button class="btn btn-primary w-100">Tạo dự án</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <% if (!projects.length) { %>
+      <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+          <div class="display-6 text-primary mb-3"><i class="fa-solid fa-folder-open"></i></div>
+          <h5>Chưa có dự án</h5>
+          <p class="text-muted mb-0">Tạo dự án đầu tiên, sau đó chọn dự án khi tạo link hoặc đưa link cũ vào dự án.</p>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="row g-3">
+        <% projects.forEach(project => { %>
+          <div class="col-xl-4 col-md-6">
+            <a href="/projects/<%= project.id %>" class="card h-100 shadow-sm text-decoration-none text-reset project-card">
+              <div class="card-body">
+                <div class="d-flex justify-content-between gap-3 mb-3">
+                  <div class="d-flex gap-3 align-items-center">
+                    <div class="rounded-3 bg-primary-subtle text-primary d-grid place-items-center" style="width:44px;height:44px;place-items:center">
+                      <i class="fa-solid fa-folder"></i>
+                    </div>
+                    <div>
+                      <h5 class="mb-0"><%= project.name %></h5>
+                      <small class="text-muted">Chủ dự án: <%= project.owner_name %></small>
+                    </div>
+                  </div>
+                  <span class="badge align-self-start <%= project.status === 'active' ? 'bg-success' : 'bg-secondary' %>">
+                    <%= project.status === 'active' ? 'Đang dùng' : 'Đã lưu trữ' %>
+                  </span>
+                </div>
+                <p class="text-muted small mb-3" style="min-height:40px"><%= project.description || 'Không có mô tả.' %></p>
+                <div class="row g-2 text-center">
+                  <div class="col-4"><div class="border rounded p-2"><strong class="d-block"><%= project.domain_count %></strong><small class="text-muted">Domain</small></div></div>
+                  <div class="col-4"><div class="border rounded p-2"><strong class="d-block"><%= project.link_count %></strong><small class="text-muted">Link</small></div></div>
+                  <div class="col-4"><div class="border rounded p-2"><strong class="d-block text-success"><%= Number(project.redirects || 0).toLocaleString('vi-VN') %></strong><small class="text-muted">Đã chuyển</small></div></div>
+                </div>
+                <div class="small text-muted mt-3">
+                  <span class="me-3"><i class="fa-solid fa-filter me-1"></i><%= project.conditional_count %> kiểm tra</span>
+                  <span><i class="fa-solid fa-clock me-1"></i><%= project.delayed_count %> tự chuyển</span>
+                </div>
+              </div>
+            </a>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+
+  <%- include('../partials/footer') %>
+</body>
+</html>

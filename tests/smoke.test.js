@@ -139,6 +139,38 @@ test("domain access supports one owner, many members, and one-time legacy takeov
   assert.match(adminSource, /FROM traffic_daily_stats/);
 });
 
+test("projects organize links across domains without changing legacy links", () => {
+  const migration = fs.readFileSync(
+    path.join(
+      root,
+      "database/migrations/2026-07-23-project-management.sql"
+    ),
+    "utf8"
+  );
+  const adminSource = fs.readFileSync(
+    path.join(root, "src/server-admin.js"),
+    "utf8"
+  );
+  const header = fs.readFileSync(
+    path.join(root, "src/views/partials/header.ejs"),
+    "utf8"
+  );
+  const domainDetail = fs.readFileSync(
+    path.join(root, "src/views/admin/domain_detail.ejs"),
+    "utf8"
+  );
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.projects/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS project_id/);
+  assert.match(migration, /ON DELETE SET NULL/);
+  assert.match(adminSource, /app\.get\("\/projects", checkAuth/);
+  assert.match(adminSource, /"\/projects\/:id"/);
+  assert.match(adminSource, /projectScopeUserId/);
+  assert.match(header, /href="\/projects"/);
+  assert.match(domainDetail, /name="project_id"/);
+  assert.match(domainDetail, /Chưa phân loại/);
+});
+
 test("Telegram codes and link configuration checks are deterministic", () => {
   assert.deepEqual(parseCommand("/connect ABC-123"), {
     command: "connect",
@@ -1199,6 +1231,7 @@ test("admin creates an automatic redirect with a configurable delay", async () =
     "https://target.test/landing",
     11,
     7,
+    null,
   ]);
 });
 
@@ -1253,6 +1286,68 @@ test("admin creates a conditional link with submitted quick-template rules", asy
   assert.ok(insertedParams);
   assert.deepEqual(JSON.parse(insertedParams[6]), rules);
   assert.deepEqual(JSON.parse(insertedParams[7]), { countries: ["US"] });
+  assert.equal(insertedParams[9], null);
+});
+
+test("an authenticated user can create a cross-domain project", async () => {
+  let insertedProject = null;
+  db.query = async (sql, params) => {
+    if (sql.includes("SELECT u.*, r.name as role_name FROM users")) {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            id: 21,
+            username: "project-owner",
+            password_hash: "secret123",
+            role_id: 2,
+            role_name: "user",
+          },
+        ],
+      };
+    }
+    if (sql.includes("UPDATE users SET password_hash=$1")) {
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes("INSERT INTO projects")) {
+      insertedProject = params;
+      return { rowCount: 1, rows: [{ id: 31 }] };
+    }
+    if (sql.includes("INSERT INTO admin_audit_logs")) {
+      return { rowCount: 1, rows: [] };
+    }
+    throw new Error(`Unhandled query in project create test: ${sql}`);
+  };
+
+  const agent = request.agent(adminApp);
+  const loginPage = await agent.get("/login");
+  const loginCsrf = extractCsrf(loginPage.text);
+  await agent
+    .post("/login")
+    .type("form")
+    .send({
+      username: "project-owner",
+      password: "secret123",
+      _csrf: loginCsrf,
+    });
+  const welcome = await agent.get("/");
+  const csrf = extractCsrf(welcome.text);
+  const response = await agent
+    .post("/projects/create")
+    .type("form")
+    .send({
+      name: "Khách hàng A",
+      description: "Link từ nhiều domain",
+      _csrf: csrf,
+    });
+
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.location, "/projects/31");
+  assert.deepEqual(insertedProject, [
+    21,
+    "Khách hàng A",
+    "Link từ nhiều domain",
+  ]);
 });
 
 test("regular users own unlimited domains, private Telegram settings, and no user administration", async () => {

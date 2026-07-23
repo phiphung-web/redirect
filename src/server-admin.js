@@ -487,7 +487,12 @@ app.get("/redirect", checkAuth, async (req, res) => {
              (SELECT COUNT(*) FROM short_links s WHERE s.domain_id = d.id AND s.is_active) AS link_active,
              (SELECT COUNT(*) FROM traffic_logs tl
               WHERE tl.domain_id = d.id
-                AND tl.action IN ('redirect', 'short_redirect_confirmed')) AS traffic_count,
+                AND tl.action IN ('redirect', 'short_redirect_confirmed')) +
+             COALESCE((
+               SELECT SUM(tds.hits) FROM traffic_daily_stats tds
+               WHERE tds.domain_id=d.id
+                 AND tds.action IN ('redirect', 'short_redirect_confirmed')
+             ), 0) AS traffic_count,
              (SELECT COUNT(*) FROM domain_user_access dua
               WHERE dua.domain_id=d.id) AS member_count
       FROM domains d
@@ -533,14 +538,25 @@ app.get("/redirect", checkAuth, async (req, res) => {
                (SELECT COUNT(*) FROM traffic_logs
                  WHERE action IN ('redirect', 'short_redirect_confirmed')
                    AND ($1::int IS NULL OR domain_id IN
-                     (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) as total_traffic,
+                     (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) +
+               COALESCE((SELECT SUM(hits) FROM traffic_daily_stats
+                 WHERE action IN ('redirect', 'short_redirect_confirmed')
+                   AND ($1::int IS NULL OR domain_id IN
+                     (SELECT domain_id FROM domain_user_access WHERE user_id=$1))), 0) as total_traffic,
                (SELECT COUNT(*) FROM traffic_logs
                  WHERE action LIKE 'safe_page%'
                    AND ($1::int IS NULL OR domain_id IN
-                     (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) as total_safe_views,
+                     (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) +
+               COALESCE((SELECT SUM(hits) FROM traffic_daily_stats
+                 WHERE action LIKE 'safe_page%'
+                   AND ($1::int IS NULL OR domain_id IN
+                     (SELECT domain_id FROM domain_user_access WHERE user_id=$1))), 0) as total_safe_views,
                (SELECT COUNT(*) FROM traffic_logs
                  WHERE ($1::int IS NULL OR domain_id IN
-                   (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) as total_raw_requests
+                   (SELECT domain_id FROM domain_user_access WHERE user_id=$1))) +
+               COALESCE((SELECT SUM(hits) FROM traffic_daily_stats
+                 WHERE ($1::int IS NULL OR domain_id IN
+                   (SELECT domain_id FROM domain_user_access WHERE user_id=$1))), 0) as total_raw_requests
     `, [scopedUserId]);
   res.render("admin/dashboard", {
     user: req.session.user,
@@ -654,6 +670,12 @@ app.get("/short-links/toggle/:id", checkAuth, (req, res) =>
 app.post("/short-links/toggle/:id", checkAuth, ownShortLinkFromParams, toggleShortLinkHandler);
 
 const deleteShortLinkHandler = async (req, res) => {
+  await db.query(`DELETE FROM traffic_logs WHERE short_link_id=$1`, [
+    req.params.id,
+  ]);
+  await db.query(`DELETE FROM traffic_daily_stats WHERE short_link_id=$1`, [
+    req.params.id,
+  ]);
   const deleted = await db.query(
     `DELETE FROM short_links WHERE id=$1 RETURNING domain_id`,
     [req.params.id]
@@ -742,7 +764,14 @@ app.get("/short-links/:id/report", checkAuth, ownShortLinkFromParams, async (req
     end = new Date(now.getFullYear() + 1, 0, 1);
   } else if (preset === "all") {
     const earliest = await db.query(
-      `SELECT MIN(created_at) AS min_date FROM traffic_logs WHERE short_link_id=$1`,
+      `SELECT MIN(min_date) AS min_date
+       FROM (
+         SELECT MIN(created_at) AS min_date
+         FROM traffic_logs WHERE short_link_id=$1
+         UNION ALL
+         SELECT MIN(day)::timestamp AS min_date
+         FROM traffic_daily_stats WHERE short_link_id=$1
+       ) history`,
       [shortLinkId]
     );
     const minRaw = earliest.rows[0]?.min_date || link.created_at || startOfDay(now);
@@ -772,12 +801,27 @@ app.get("/short-links/:id/report", checkAuth, ownShortLinkFromParams, async (req
 
   const stats = await db.query(
     `
-      SELECT date_trunc($4::text, created_at) AS bucket,
-             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed
-      FROM traffic_logs
-      WHERE short_link_id=$1
-        AND created_at >= $2
-        AND created_at < $3
+      WITH series AS (
+        SELECT date_trunc($4::text, created_at) AS bucket,
+               COUNT(*) FILTER (WHERE action='short_redirect_confirmed')::bigint AS confirmed
+        FROM traffic_logs
+        WHERE short_link_id=$1
+          AND created_at >= $2
+          AND created_at < $3
+        GROUP BY bucket
+        UNION ALL
+        SELECT date_trunc($4::text, day::timestamp) AS bucket,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               ), 0)::bigint
+        FROM traffic_daily_stats
+        WHERE short_link_id=$1
+          AND day >= $2::date
+          AND day < $3::date
+        GROUP BY bucket
+      )
+      SELECT bucket, SUM(confirmed) AS confirmed
+      FROM series
       GROUP BY bucket
       ORDER BY bucket ASC
     `,
@@ -785,51 +829,113 @@ app.get("/short-links/:id/report", checkAuth, ownShortLinkFromParams, async (req
   );
   const totals = await db.query(
     `
-      SELECT COUNT(*) FILTER (
-               WHERE action IN ('short_link_open', 'short_redirect_confirmed')
-             ) AS opened,
-             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed,
-             COUNT(*) FILTER (WHERE action='short_link_open') AS unconfirmed,
-             COUNT(DISTINCT ip) FILTER (
-               WHERE action='short_redirect_confirmed'
-             ) AS unique_ips
-      FROM traffic_logs
-      WHERE short_link_id=$1
-        AND created_at >= $2
-        AND created_at < $3
+      WITH totals AS (
+        SELECT COUNT(*) FILTER (
+                 WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+               )::bigint AS opened,
+               COUNT(*) FILTER (WHERE action='short_redirect_confirmed')::bigint AS confirmed,
+               COUNT(*) FILTER (WHERE action='short_link_open')::bigint AS unconfirmed,
+               COUNT(DISTINCT ip) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               )::bigint AS unique_ips
+        FROM traffic_logs
+        WHERE short_link_id=$1
+          AND created_at >= $2
+          AND created_at < $3
+        UNION ALL
+        SELECT COALESCE(SUM(hits) FILTER (
+                 WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+               ), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               ), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_link_open'
+               ), 0)::bigint,
+               0::bigint
+        FROM traffic_daily_stats
+        WHERE short_link_id=$1
+          AND day >= $2::date
+          AND day < $3::date
+      )
+      SELECT SUM(opened) AS opened, SUM(confirmed) AS confirmed,
+             SUM(unconfirmed) AS unconfirmed, SUM(unique_ips) AS unique_ips
+      FROM totals
     `,
     [shortLinkId, start, end]
   );
   const prevTotals = await db.query(
     `
-      SELECT COUNT(*) FILTER (
-               WHERE action IN ('short_link_open', 'short_redirect_confirmed')
-             ) AS opened,
-             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed,
-             COUNT(*) FILTER (WHERE action='short_link_open') AS unconfirmed,
-             COUNT(DISTINCT ip) FILTER (
-               WHERE action='short_redirect_confirmed'
-             ) AS unique_ips
-      FROM traffic_logs
-      WHERE short_link_id=$1
-        AND created_at >= $2
-        AND created_at < $3
+      WITH totals AS (
+        SELECT COUNT(*) FILTER (
+                 WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+               )::bigint AS opened,
+               COUNT(*) FILTER (WHERE action='short_redirect_confirmed')::bigint AS confirmed,
+               COUNT(*) FILTER (WHERE action='short_link_open')::bigint AS unconfirmed,
+               COUNT(DISTINCT ip) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               )::bigint AS unique_ips
+        FROM traffic_logs
+        WHERE short_link_id=$1
+          AND created_at >= $2
+          AND created_at < $3
+        UNION ALL
+        SELECT COALESCE(SUM(hits) FILTER (
+                 WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+               ), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               ), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_link_open'
+               ), 0)::bigint,
+               0::bigint
+        FROM traffic_daily_stats
+        WHERE short_link_id=$1
+          AND day >= $2::date
+          AND day < $3::date
+      )
+      SELECT SUM(opened) AS opened, SUM(confirmed) AS confirmed,
+             SUM(unconfirmed) AS unconfirmed, SUM(unique_ips) AS unique_ips
+      FROM totals
     `,
     [shortLinkId, prevStart, prevEnd]
   );
   const lifetimeTotals = await db.query(
     `
-      SELECT COUNT(*) FILTER (
-               WHERE action IN ('short_link_open', 'short_redirect_confirmed')
-             ) AS opened,
-             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed,
-             COUNT(*) FILTER (WHERE action='short_link_open') AS unconfirmed,
-             COUNT(DISTINCT ip) FILTER (
-               WHERE action='short_redirect_confirmed'
-             ) AS unique_ips,
-             COUNT(*) FILTER (WHERE action='short_redirect') AS legacy_unverified
-      FROM traffic_logs
-      WHERE short_link_id=$1
+      WITH totals AS (
+        SELECT COUNT(*) FILTER (
+                 WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+               )::bigint AS opened,
+               COUNT(*) FILTER (WHERE action='short_redirect_confirmed')::bigint AS confirmed,
+               COUNT(*) FILTER (WHERE action='short_link_open')::bigint AS unconfirmed,
+               COUNT(DISTINCT ip) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               )::bigint AS unique_ips,
+               COUNT(*) FILTER (WHERE action='short_redirect')::bigint AS legacy_unverified
+        FROM traffic_logs
+        WHERE short_link_id=$1
+        UNION ALL
+        SELECT COALESCE(SUM(hits) FILTER (
+                 WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+               ), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               ), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_link_open'
+               ), 0)::bigint,
+               0::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_redirect'
+               ), 0)::bigint
+        FROM traffic_daily_stats
+        WHERE short_link_id=$1
+      )
+      SELECT SUM(opened) AS opened, SUM(confirmed) AS confirmed,
+             SUM(unconfirmed) AS unconfirmed, SUM(unique_ips) AS unique_ips,
+             SUM(legacy_unverified) AS legacy_unverified
+      FROM totals
     `,
     [shortLinkId]
   );
@@ -971,19 +1077,42 @@ app.get("/short-links/:id/report/export", checkAuth, ownShortLinkFromParams, asy
 
   const data = await db.query(
     `
-      SELECT date(created_at) AS day,
-             COUNT(*) FILTER (
-               WHERE action IN ('short_link_open', 'short_redirect_confirmed')
-             ) AS opened,
-             COUNT(*) FILTER (WHERE action='short_redirect_confirmed') AS confirmed,
-             COUNT(*) FILTER (WHERE action='short_link_open') AS unconfirmed,
-             COUNT(DISTINCT ip) FILTER (
-               WHERE action='short_redirect_confirmed'
-             ) AS unique_ips
-      FROM traffic_logs
-      WHERE short_link_id=$1
-        AND created_at >= $2
-        AND created_at < $3
+      WITH daily AS (
+        SELECT date(created_at) AS day,
+               COUNT(*) FILTER (
+                 WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+               )::bigint AS opened,
+               COUNT(*) FILTER (WHERE action='short_redirect_confirmed')::bigint AS confirmed,
+               COUNT(*) FILTER (WHERE action='short_link_open')::bigint AS unconfirmed,
+               COUNT(DISTINCT ip) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               )::bigint AS unique_ips
+        FROM traffic_logs
+        WHERE short_link_id=$1
+          AND created_at >= $2
+          AND created_at < $3
+        GROUP BY day
+        UNION ALL
+        SELECT day,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action IN ('short_link_open', 'short_redirect_confirmed')
+               ), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_redirect_confirmed'
+               ), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (
+                 WHERE action='short_link_open'
+               ), 0)::bigint,
+               0::bigint
+        FROM traffic_daily_stats
+        WHERE short_link_id=$1
+          AND day >= $2::date
+          AND day < $3::date
+        GROUP BY day
+      )
+      SELECT day, SUM(opened) AS opened, SUM(confirmed) AS confirmed,
+             SUM(unconfirmed) AS unconfirmed, SUM(unique_ips) AS unique_ips
+      FROM daily
       GROUP BY day
       ORDER BY day ASC
     `,
@@ -1378,6 +1507,9 @@ app.post("/domains/:id/ssl/retry", checkAuth, ownDomainFromParams, async (req, r
 // Chỉ super admin được xóa domain.
 const deleteDomainHandler = async (req, res) => {
   try {
+    await db.query(`DELETE FROM traffic_daily_stats WHERE domain_id=$1`, [
+      req.params.id,
+    ]);
     await db.query(`DELETE FROM domains WHERE id=$1`, [req.params.id]);
     await auditAdminAction({
       req,
@@ -1492,7 +1624,11 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     `
       SELECT c.*, cu.username AS created_by_name, uu.username AS updated_by_name,
              (SELECT COUNT(*) FROM traffic_logs tl
-              WHERE tl.campaign_id=c.id AND tl.action='redirect') AS log_redirects
+              WHERE tl.campaign_id=c.id AND tl.action='redirect') +
+             COALESCE((
+               SELECT SUM(tds.hits) FROM traffic_daily_stats tds
+               WHERE tds.campaign_id=c.id AND tds.action='redirect'
+             ), 0) AS log_redirects
       FROM campaigns c
       LEFT JOIN users cu ON c.user_id = cu.id
       LEFT JOIN users uu ON c.updated_by = uu.id
@@ -1506,10 +1642,19 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     `
       SELECT s.*, cu.username AS created_by_name, uu.username AS updated_by_name,
              (SELECT COUNT(*) FROM traffic_logs tl
-               WHERE tl.short_link_id=s.id AND tl.action='short_redirect_confirmed') AS confirmed_redirects,
+               WHERE tl.short_link_id=s.id AND tl.action='short_redirect_confirmed') +
+             COALESCE((
+               SELECT SUM(tds.hits) FROM traffic_daily_stats tds
+               WHERE tds.short_link_id=s.id AND tds.action='short_redirect_confirmed'
+             ), 0) AS confirmed_redirects,
              (SELECT COUNT(*) FROM traffic_logs tl
                WHERE tl.short_link_id=s.id
-                 AND tl.action IN ('short_link_open', 'short_redirect_confirmed')) AS opened_count
+                 AND tl.action IN ('short_link_open', 'short_redirect_confirmed')) +
+             COALESCE((
+               SELECT SUM(tds.hits) FROM traffic_daily_stats tds
+               WHERE tds.short_link_id=s.id
+                 AND tds.action IN ('short_link_open', 'short_redirect_confirmed')
+             ), 0) AS opened_count
       FROM short_links s
       LEFT JOIN users cu ON s.user_id = cu.id
       LEFT JOIN users uu ON s.updated_by = uu.id
@@ -1532,16 +1677,25 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
 
   const domainTrafficStats = await db.query(
     `
+      WITH events AS (
+        SELECT action, campaign_id, short_link_id, COUNT(*)::bigint AS hits
+        FROM traffic_logs
+        WHERE domain_id=$1
+        GROUP BY action, campaign_id, short_link_id
+        UNION ALL
+        SELECT action, NULLIF(campaign_id, 0), NULLIF(short_link_id, 0), hits
+        FROM traffic_daily_stats
+        WHERE domain_id=$1
+      )
       SELECT
-        COUNT(*) FILTER (
+        COALESCE(SUM(hits) FILTER (
           WHERE action IN ('redirect', 'short_redirect_confirmed')
-        ) AS link_traffic,
-        COUNT(*) FILTER (WHERE action LIKE 'safe_page%') AS safe_page_views,
-        COUNT(*) FILTER (
+        ), 0) AS link_traffic,
+        COALESCE(SUM(hits) FILTER (WHERE action LIKE 'safe_page%'), 0) AS safe_page_views,
+        COALESCE(SUM(hits) FILTER (
           WHERE campaign_id IS NULL AND short_link_id IS NULL
-        ) AS direct_or_unmatched
-      FROM traffic_logs
-      WHERE domain_id=$1
+        ), 0) AS direct_or_unmatched
+      FROM events
     `,
     [domainId]
   );
@@ -1564,11 +1718,28 @@ app.get("/domains/:id", checkAuth, ownDomainFromParams, async (req, res) => {
     const safeMap = new Map();
     const safeRows = await db.query(
       `
+        WITH totals AS (
+          SELECT campaign_id,
+                 COUNT(*) FILTER (WHERE action LIKE 'safe_page%')::bigint AS safe_total,
+                 COUNT(*) FILTER (
+                   WHERE action LIKE 'safe_page%'
+                     AND created_at >= now() - interval '24 hours'
+                 )::bigint AS safe_24h
+          FROM traffic_logs
+          WHERE campaign_id = ANY($1)
+          GROUP BY campaign_id
+          UNION ALL
+          SELECT campaign_id,
+                 SUM(hits) FILTER (WHERE action LIKE 'safe_page%')::bigint AS safe_total,
+                 0::bigint AS safe_24h
+          FROM traffic_daily_stats
+          WHERE campaign_id = ANY($1)
+          GROUP BY campaign_id
+        )
         SELECT campaign_id,
-               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') AS safe_total,
-               COUNT(*) FILTER (WHERE action LIKE 'safe_page%' AND created_at >= now() - interval '24 hours') AS safe_24h
-        FROM traffic_logs
-        WHERE campaign_id = ANY($1)
+               COALESCE(SUM(safe_total), 0) AS safe_total,
+               COALESCE(SUM(safe_24h), 0) AS safe_24h
+        FROM totals
         GROUP BY campaign_id
       `,
       [linkIds]
@@ -1757,6 +1928,9 @@ const deleteCampaignHandler = async (req, res) => {
   ]);
   if (r.rowCount) {
     await db.query(`DELETE FROM traffic_logs WHERE campaign_id=$1`, [
+      req.params.id,
+    ]);
+    await db.query(`DELETE FROM traffic_daily_stats WHERE campaign_id=$1`, [
       req.params.id,
     ]);
     await db.query(`DELETE FROM campaigns WHERE id=$1`, [req.params.id]);
@@ -1955,7 +2129,14 @@ app.get("/campaigns/:id/report/v2", checkAuth, ownCampaignFromParams, async (req
     end = new Date(now.getFullYear() + 1, 0, 1);
   } else if (preset === "all") {
     const earliest = await db.query(
-      `SELECT MIN(created_at) AS min_date FROM traffic_logs WHERE campaign_id=$1`,
+      `SELECT MIN(min_date) AS min_date
+       FROM (
+         SELECT MIN(created_at) AS min_date
+         FROM traffic_logs WHERE campaign_id=$1
+         UNION ALL
+         SELECT MIN(day)::timestamp AS min_date
+         FROM traffic_daily_stats WHERE campaign_id=$1
+       ) history`,
       [campId]
     );
     const minRaw =
@@ -1989,13 +2170,27 @@ app.get("/campaigns/:id/report/v2", checkAuth, ownCampaignFromParams, async (req
 
   const stats = await db.query(
     `
-        SELECT date_trunc($4::text, created_at) as bucket,
-               COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
-               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
-        FROM traffic_logs
-        WHERE campaign_id = $1
-          AND created_at >= $2
-          AND created_at < $3
+        WITH series AS (
+          SELECT date_trunc($4::text, created_at) as bucket,
+                 COUNT(*) FILTER (WHERE action = 'redirect')::bigint as redirects,
+                 COUNT(*) FILTER (WHERE action LIKE 'safe_page%')::bigint as safe
+          FROM traffic_logs
+          WHERE campaign_id = $1
+            AND created_at >= $2
+            AND created_at < $3
+          GROUP BY bucket
+          UNION ALL
+          SELECT date_trunc($4::text, day::timestamp) as bucket,
+                 COALESCE(SUM(hits) FILTER (WHERE action='redirect'), 0)::bigint,
+                 COALESCE(SUM(hits) FILTER (WHERE action LIKE 'safe_page%'), 0)::bigint
+          FROM traffic_daily_stats
+          WHERE campaign_id=$1
+            AND day >= $2::date
+            AND day < $3::date
+          GROUP BY bucket
+        )
+        SELECT bucket, SUM(redirects) AS redirects, SUM(safe) AS safe
+        FROM series
         GROUP BY bucket
         ORDER BY bucket ASC
       `,
@@ -2004,26 +2199,50 @@ app.get("/campaigns/:id/report/v2", checkAuth, ownCampaignFromParams, async (req
 
   const totals = await db.query(
     `
-        SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
-               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
-               COUNT(*) as total
-        FROM traffic_logs
-        WHERE campaign_id = $1
-          AND created_at >= $2
-          AND created_at < $3
+        WITH totals AS (
+          SELECT COUNT(*) FILTER (WHERE action = 'redirect')::bigint AS redirects,
+                 COUNT(*) FILTER (WHERE action LIKE 'safe_page%')::bigint AS safe,
+                 COUNT(*)::bigint AS total
+          FROM traffic_logs
+          WHERE campaign_id = $1
+            AND created_at >= $2
+            AND created_at < $3
+          UNION ALL
+          SELECT COALESCE(SUM(hits) FILTER (WHERE action='redirect'), 0)::bigint,
+                 COALESCE(SUM(hits) FILTER (WHERE action LIKE 'safe_page%'), 0)::bigint,
+                 COALESCE(SUM(hits), 0)::bigint
+          FROM traffic_daily_stats
+          WHERE campaign_id=$1
+            AND day >= $2::date
+            AND day < $3::date
+        )
+        SELECT SUM(redirects) AS redirects, SUM(safe) AS safe, SUM(total) AS total
+        FROM totals
       `,
     [campId, start, end]
   );
 
   const prevTotals = await db.query(
     `
-        SELECT COUNT(*) FILTER (WHERE action = 'redirect') as redirects,
-               COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe,
-               COUNT(*) as total
-        FROM traffic_logs
-        WHERE campaign_id = $1
-          AND created_at >= $2
-          AND created_at < $3
+        WITH totals AS (
+          SELECT COUNT(*) FILTER (WHERE action = 'redirect')::bigint AS redirects,
+                 COUNT(*) FILTER (WHERE action LIKE 'safe_page%')::bigint AS safe,
+                 COUNT(*)::bigint AS total
+          FROM traffic_logs
+          WHERE campaign_id = $1
+            AND created_at >= $2
+            AND created_at < $3
+          UNION ALL
+          SELECT COALESCE(SUM(hits) FILTER (WHERE action='redirect'), 0)::bigint,
+                 COALESCE(SUM(hits) FILTER (WHERE action LIKE 'safe_page%'), 0)::bigint,
+                 COALESCE(SUM(hits), 0)::bigint
+          FROM traffic_daily_stats
+          WHERE campaign_id=$1
+            AND day >= $2::date
+            AND day < $3::date
+        )
+        SELECT SUM(redirects) AS redirects, SUM(safe) AS safe, SUM(total) AS total
+        FROM totals
       `,
     [campId, prevStart, prevEnd]
   );
@@ -2178,13 +2397,27 @@ app.get("/campaigns/:id/report/export", checkAuth, ownCampaignFromParams, async 
 
   const data = await db.query(
     `
-      SELECT date(created_at) as day,
-             COUNT(*) FILTER (WHERE action='redirect') as redirects,
-             COUNT(*) FILTER (WHERE action LIKE 'safe_page%') as safe
-      FROM traffic_logs
-      WHERE campaign_id=$1
-        AND created_at >= $2
-        AND created_at < $3
+      WITH daily AS (
+        SELECT date(created_at) as day,
+               COUNT(*) FILTER (WHERE action='redirect')::bigint as redirects,
+               COUNT(*) FILTER (WHERE action LIKE 'safe_page%')::bigint as safe
+        FROM traffic_logs
+        WHERE campaign_id=$1
+          AND created_at >= $2
+          AND created_at < $3
+        GROUP BY day
+        UNION ALL
+        SELECT day,
+               COALESCE(SUM(hits) FILTER (WHERE action='redirect'), 0)::bigint,
+               COALESCE(SUM(hits) FILTER (WHERE action LIKE 'safe_page%'), 0)::bigint
+        FROM traffic_daily_stats
+        WHERE campaign_id=$1
+          AND day >= $2::date
+          AND day < $3::date
+        GROUP BY day
+      )
+      SELECT day, SUM(redirects) AS redirects, SUM(safe) AS safe
+      FROM daily
       GROUP BY day
       ORDER BY day ASC
     `,

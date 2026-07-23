@@ -110,6 +110,13 @@ test("domain access supports one owner, many members, and one-time legacy takeov
     path.join(root, "scripts/cleanup-traffic.js"),
     "utf8"
   );
+  const trafficArchiveMigration = fs.readFileSync(
+    path.join(
+      root,
+      "database/migrations/2026-07-23-traffic-daily-short-links.sql"
+    ),
+    "utf8"
+  );
 
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.domain_user_access/);
   assert.match(migration, /idx_domain_user_access_one_owner/);
@@ -123,6 +130,9 @@ test("domain access supports one owner, many members, and one-time legacy takeov
   assert.match(domainView, /name="member_user_ids"/);
   assert.match(cleanup, /DELETE FROM traffic_logs/);
   assert.match(cleanup, /DELETE FROM admin_audit_logs/);
+  assert.match(cleanup, /short_link_id/);
+  assert.match(trafficArchiveMigration, /PRIMARY KEY \(day, domain_id, campaign_id, short_link_id, action\)/);
+  assert.match(adminSource, /FROM traffic_daily_stats/);
 });
 
 test("Telegram codes and link configuration checks are deterministic", () => {

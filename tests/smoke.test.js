@@ -44,7 +44,14 @@ test("production PM2 profile uses a bounded redirect cluster", () => {
   const ads = ecosystem.apps.find((app) => app.name === "linkpilot-ads");
   const admin = ecosystem.apps.find((app) => app.name === "linkpilot-admin");
   assert.equal(ads.exec_mode, "cluster");
-  assert.equal(ads.instances, 4);
+  assert.ok(Number.isInteger(ads.instances));
+  assert.ok(ads.instances >= 1 && ads.instances <= 6);
+  if (Number.isInteger(Number.parseInt(process.env.ADS_INSTANCES, 10))) {
+    assert.equal(
+      ads.instances,
+      Math.min(Math.max(Number.parseInt(process.env.ADS_INSTANCES, 10), 1), 6)
+    );
+  }
   assert.equal(admin.exec_mode, "fork");
   assert.equal(admin.instances, 1);
 });

@@ -1,0 +1,39 @@
+<% if (typeof redirectTargetUrl === 'string' && redirectTargetUrl && typeof redirectDelaySeconds === 'number') { %>
+  <noscript><meta http-equiv="refresh" content="<%= redirectDelaySeconds %>;url=<%= redirectTargetUrl %>"></noscript>
+  <script>
+    (() => {
+      const target = <%- JSON.stringify(redirectTargetUrl).replace(/</g, '\\u003c') %>;
+      const delayMs = <%= Math.max(1, Math.min(30, redirectDelaySeconds)) * 1000 %>;
+      const confirmUrl = <%- JSON.stringify(typeof redirectConfirmUrl === 'string' ? redirectConfirmUrl : '').replace(/</g, '\\u003c') %>;
+      const confirmToken = <%- JSON.stringify(typeof redirectConfirmToken === 'string' ? redirectConfirmToken : '').replace(/</g, '\\u003c') %>;
+      let redirectStarted = false;
+
+      window.setTimeout(() => {
+        if (redirectStarted) return;
+        redirectStarted = true;
+
+        if (confirmUrl && confirmToken) {
+          const body = JSON.stringify({ token: confirmToken });
+          let queued = false;
+          try {
+            queued = navigator.sendBeacon(
+              confirmUrl,
+              new Blob([body], { type: 'application/json' })
+            );
+          } catch (_) {}
+          if (!queued) {
+            fetch(confirmUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body,
+              credentials: 'same-origin',
+              keepalive: true
+            }).catch(() => {});
+          }
+        }
+
+        window.location.replace(target);
+      }, delayMs);
+    })();
+  </script>
+<% } %>

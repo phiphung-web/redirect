@@ -1,5 +1,98 @@
 </main>
-<footer class="app-footer text-center py-3 mt-4">
-  <small class="footer-note">@mvp2025</small>
+<footer class="app-footer py-3 mt-4">
+  <div class="container-xxl d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <small class="footer-note">© <%= new Date().getFullYear() %> <%= product.name %></small>
+    <small class="footer-note"><span class="status-dot me-2"></span>Redirect engine và trang quản trị hoạt động độc lập</small>
+  </div>
 </footer>
+<div class="help-popover" id="globalHelpPopover" role="tooltip" aria-hidden="true"></div>
+<script>
+  (() => {
+    const popover = document.getElementById('globalHelpPopover');
+    if (!popover) return;
+
+    let activeTip = null;
+    let hideTimer = null;
+
+    const positionPopover = (tip) => {
+      const rect = tip.getBoundingClientRect();
+      const gap = 9;
+      const edge = 12;
+      const popoverWidth = popover.offsetWidth;
+      const popoverHeight = popover.offsetHeight;
+      const useTop = rect.top >= popoverHeight + gap + edge;
+      const desiredLeft = rect.left + rect.width / 2 - popoverWidth / 2;
+      const left = Math.max(edge, Math.min(desiredLeft, window.innerWidth - popoverWidth - edge));
+      const top = useTop ? rect.top - popoverHeight - gap : rect.bottom + gap;
+      const arrowLeft = Math.max(12, Math.min(rect.left + rect.width / 2 - left, popoverWidth - 12));
+
+      popover.dataset.side = useTop ? 'top' : 'bottom';
+      popover.style.left = `${Math.round(left)}px`;
+      popover.style.top = `${Math.round(top)}px`;
+      popover.style.setProperty('--help-arrow-left', `${Math.round(arrowLeft)}px`);
+    };
+
+    const show = (tip) => {
+      window.clearTimeout(hideTimer);
+      if (activeTip && activeTip !== tip) activeTip.setAttribute('aria-expanded', 'false');
+      activeTip = tip;
+      popover.textContent = tip.dataset.help || '';
+      popover.setAttribute('aria-hidden', 'false');
+      tip.setAttribute('aria-expanded', 'true');
+      positionPopover(tip);
+      requestAnimationFrame(() => popover.classList.add('is-visible'));
+    };
+
+    const hide = (delay = 0) => {
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => {
+        popover.classList.remove('is-visible');
+        popover.setAttribute('aria-hidden', 'true');
+        if (activeTip) activeTip.setAttribute('aria-expanded', 'false');
+        activeTip = null;
+      }, delay);
+    };
+
+    document.querySelectorAll('[data-help]').forEach((anchor, index) => {
+      const text = String(anchor.dataset.help || '').trim();
+      if (!text || anchor.querySelector(':scope > .help-tip')) return;
+      anchor.classList.add('help-anchor');
+
+      const tip = document.createElement('span');
+      tip.className = 'help-tip';
+      tip.textContent = '!';
+      tip.dataset.help = text;
+      tip.tabIndex = 0;
+      tip.setAttribute('role', 'button');
+      tip.setAttribute('aria-label', `Giải thích: ${text}`);
+      tip.setAttribute('aria-expanded', 'false');
+      tip.setAttribute('aria-describedby', 'globalHelpPopover');
+      tip.dataset.helpIndex = String(index);
+      anchor.appendChild(tip);
+
+      tip.addEventListener('mouseenter', () => show(tip));
+      tip.addEventListener('mouseleave', () => hide(100));
+      tip.addEventListener('focus', () => show(tip));
+      tip.addEventListener('blur', () => hide(80));
+      tip.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeTip === tip) hide(); else show(tip);
+      });
+      tip.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeTip === tip) hide(); else show(tip);
+      });
+    });
+
+    window.addEventListener('resize', () => activeTip && positionPopover(activeTip));
+    window.addEventListener('scroll', () => activeTip && positionPopover(activeTip), true);
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') hide(); });
+    document.addEventListener('click', (event) => {
+      if (activeTip && !activeTip.contains(event.target)) hide();
+    });
+  })();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

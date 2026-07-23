@@ -1,99 +1,51 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redirect Control - Home</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tổng quan · <%= product.name %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <%- include('../partials/header', { user, active: 'home', breadcrumb: [{ label: 'Trang chủ' }] }) %>
-    <div class="container-xxl">
-        <section class="page-intro mb-4">
-            <div class="row align-items-center g-4">
-                <div class="col-lg-7">
-                    <div class="feature-badge mb-3">Chao mung, <%= user.username %></div>
-                    <p class="eyebrow mb-2">Trung tam he thong</p>
-                    <h1 class="mb-3">Redirect chi la mot module. Day la hub dieu khien toan bo he thong.</h1>
-                    <p class="text-muted mb-4">Su dung menu "Chuc nang" de vao tung khu vuc: Redirect, he thong hoat dong va quan tri nguoi dung. Cac phan khac se duoc bo sung dan trong roadmap.</p>
-                    <div class="d-flex flex-wrap gap-2">
-                        <a class="btn btn-primary" href="/redirect"><i class="fa-solid fa-bolt me-2"></i>Mo Redirect</a>
-                        <% if (user.role_name === 'super_admin') { %>
-                            <a class="btn btn-outline-dark" href="/admin/system"><i class="fa-solid fa-server me-2"></i>Trang he thong</a>
-                        <% } %>
-                        <% if (user.role_name === 'super_admin' || user.role_name === 'admin') { %>
-                            <a class="btn btn-outline-dark" href="/users"><i class="fa-solid fa-users-gear me-2"></i>Quan tri nguoi dung</a>
-                        <% } %>
-                    </div>
-                    <div class="d-flex flex-wrap gap-3 mt-3">
-                        <span class="badge bg-light text-dark border border-0">Role: <%= user.role_name %></span>
-                        <span class="badge bg-light text-dark border border-0">Ho tro: @mvp2025</span>
-                    </div>
-                </div>
-                <div class="col-lg-5">
-                    <div class="card-surface h-100">
-                        <div class="d-flex align-items-center justify-content-between mb-3">
-                            <h5 class="fw-bold mb-0">Ban do chuc nang</h5>
-                            <span class="text-muted small">Trang chu</span>
-                        </div>
-                        <div class="action-grid">
-                            <div class="action-card">
-                                <div class="label">Redirect</div>
-                                <h5 class="mb-2">Quan ly domain & link</h5>
-                                <p class="text-muted mb-3">Them/sua domain, link redirect, xem thong ke luu luong.</p>
-                                <a class="btn btn-sm btn-primary" href="/redirect">Mo Redirect</a>
-                            </div>
-                            <% if (user.role_name === 'super_admin') { %>
-                                <div class="action-card">
-                                    <div class="label">He thong</div>
-                                    <h5 class="mb-2">Trang thai hoat dong</h5>
-                                    <p class="text-muted mb-3">Kiem tra uptime, tai nguyen server va ket noi database.</p>
-                                    <a class="btn btn-sm btn-outline-dark" href="/admin/system">Xem he thong</a>
-                                </div>
-                            <% } %>
-                            <% if (user.role_name === 'super_admin' || user.role_name === 'admin') { %>
-                                <div class="action-card">
-                                    <div class="label">Nguoi dung</div>
-                                    <h5 class="mb-2">Phan quyen & quan tri</h5>
-                                    <p class="text-muted mb-3">Quan ly tai khoan, role va phan quyen truy cap.</p>
-                                    <a class="btn btn-sm btn-outline-dark" href="/users">Quan tri</a>
-                                </div>
-                            <% } %>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+  <%- include('../partials/header', { user, active: 'home', breadcrumb: [{ label: 'Tổng quan' }] }) %>
+  <div class="container-xxl">
+    <section class="hero-panel mb-4">
+      <div>
+        <div class="product-chip mb-3"><span class="status-dot"></span>Hệ thống sẵn sàng</div>
+        <p class="eyebrow mb-2">Xin chào, <%= user.username %></p>
+        <h1 data-help="Sản phẩm có đúng hai luồng tạo link để thao tác nhanh và tránh nhầm cấu hình.">Hai luồng redirect, một nơi quản lý.</h1>
+        <p class="hero-copy">Dùng link kiểm tra cho traffic cần rule; dùng link chờ chuyển cho luồng tự động sau thời gian đã đặt. Cấu hình mới được đồng bộ sang engine trong tối đa 30 giây.</p>
+        <a class="btn btn-primary" href="/redirect"><i class="fa-solid fa-globe me-2"></i>Chọn domain và tạo link</a>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="route-node route-node-source"><i class="fa-solid fa-globe"></i></div>
+        <div class="route-line"></div>
+        <div class="route-node route-node-core"><%= product.shortName %></div>
+        <div class="route-line"></div>
+        <div class="route-node route-node-target"><i class="fa-solid fa-arrow-up-right-from-square"></i></div>
+      </div>
+    </section>
 
-        <section class="mb-3">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="card-surface h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="fw-bold mb-0">Huong phat trien</h6>
-                            <span class="badge bg-light text-dark border border-0">Soon</span>
-                        </div>
-                        <p class="text-muted mb-3">Cac module bo sung (giay to, bao cao nang cao, cau hinh he thong) se duoc dua vao menu "Chuc nang" khi san sang.</p>
-                        <ul class="text-muted small mb-0">
-                            <li>Tap trung vao trang chu de dan duong ro rang.</li>
-                            <li>Giu main content chieu cao day du de footer nam cuoi trang.</li>
-                            <li>Bo sung menu tong hop de nguoi dung di chuyen nhanh.</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card-surface h-100">
-                        <h6 class="fw-bold mb-2">Cap nhat gan day</h6>
-                        <div class="text-muted small">
-                            <p class="mb-2">- Header moi gom logo/text, menu chuc nang va khu vuc tai khoan.</p>
-                            <p class="mb-2">- Trang chu tao diem neo de trinh bay toan bo he thong.</p>
-                            <p class="mb-0">- Footer giu thong tin @mvp2025, main phu hop ke ca khi noi dung it.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </div>
-    <%- include('../partials/footer') %>
+    <section class="quick-grid mb-4">
+      <a class="quick-card" href="/redirect">
+        <div class="quick-icon primary"><i class="fa-solid fa-route"></i></div>
+        <div><span class="quick-label">Luồng 1</span><h3>Link kiểm tra tham số</h3><p>Kiểm tra tham số, quốc gia và rule trước khi chuyển.</p></div>
+        <i class="fa-solid fa-arrow-right quick-arrow"></i>
+      </a>
+      <a class="quick-card" href="/redirect">
+        <div class="quick-icon green"><i class="fa-solid fa-link"></i></div>
+        <div><span class="quick-label">Luồng 2</span><h3>Link chờ chuyển hướng</h3><p>Không kiểm tra điều kiện; tự chuyển sau 1–30 giây và giữ tham số tracking.</p></div>
+        <i class="fa-solid fa-arrow-right quick-arrow"></i>
+      </a>
+    </section>
+
+    <section class="card-surface operating-note">
+      <div class="d-flex align-items-start gap-3">
+        <div class="quick-icon amber"><i class="fa-solid fa-lightbulb"></i></div>
+        <div><h3 class="h6 fw-bold mb-2" data-help="Quy trình này giảm lỗi DNS và cấu hình sai. Chỉ đưa traffic thật vào sau khi link thử trả đúng đích và ghi nhận log.">Quy trình vận hành đề xuất</h3><p class="text-muted mb-0">Tạo domain → chọn một trong hai Safe Page → chọn luồng link → mở link thử → theo dõi báo cáo. Hãy thử trên domain phụ trước khi đưa traffic thật vào hệ thống.</p></div>
+      </div>
+    </section>
+  </div>
+  <%- include('../partials/footer') %>
 </body>
 </html>

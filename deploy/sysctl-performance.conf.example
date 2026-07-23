@@ -1,0 +1,4 @@
+# Conservative VM profile for a redirect server with SSD-backed swap.
+vm.swappiness = 10
+vm.vfs_cache_pressure = 50
+net.core.somaxconn = 4096

@@ -9,4 +9,5 @@ pnpm-debug.log*
 coverage/
 dist/
 tmp/
+backups/
 *.log

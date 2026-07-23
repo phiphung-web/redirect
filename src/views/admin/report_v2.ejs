@@ -14,6 +14,8 @@
     .table-log td { font-size: 0.9rem; vertical-align: middle; }
     code.url-snippet { word-break: break-all; white-space: normal; }
     .breadcrumb-bar + .container-xxl { margin-top: 0; }
+    .report-filter-field { min-width: 150px; }
+    .report-filter-field .form-label { margin-bottom: 4px; color: #667085; font-size: .78rem; font-weight: 700; }
   </style>
 </head>
 <body class="bg-light">
@@ -33,12 +35,13 @@
       <div class="card-body d-flex flex-wrap justify-content-between align-items-start gap-3">
         <div>
           <div class="text-muted small">Chiến dịch</div>
-          <h4 class="mb-1"><%= camp.name %></h4>
+          <h4 class="mb-1" data-help="Báo cáo của riêng campaign này trong khoảng thời gian đã chọn."><%= camp.name %></h4>
           <div class="text-muted small">Khoảng: <%= rangeLabel %></div>
           <div class="text-muted small">Nhóm theo: <%= bucketType === 'hour' ? 'Khung giờ' : bucketType === 'day' ? 'Ngày' : bucketType === 'week' ? 'Tuần' : 'Tháng' %></div>
         </div>
         <form class="d-flex flex-wrap align-items-end gap-2" method="get">
-          <div class="form-floating">
+          <div class="report-filter-field">
+            <label class="form-label" for="presetSelect" data-help="Chọn khoảng thống kê có sẵn hoặc Tùy chọn để nhập ngày bắt đầu và kết thúc.">Mốc thời gian</label>
             <select class="form-select" id="presetSelect" name="preset" onchange="toggleCustomPreset(this.value)">
               <option value="today" <%= preset === 'today' ? 'selected' : '' %>>Hôm nay</option>
               <option value="this_week" <%= preset === 'this_week' ? 'selected' : '' %>>Tuần này</option>
@@ -47,15 +50,14 @@
               <option value="all" <%= preset === 'all' ? 'selected' : '' %>>Tất cả</option>
               <option value="custom" <%= preset === 'custom' ? 'selected' : '' %>>Tùy chọn</option>
             </select>
-            <label for="presetSelect">Mốc thời gian</label>
           </div>
-          <div class="form-floating custom-range d-none" id="startWrap">
+          <div class="report-filter-field custom-range d-none" id="startWrap">
+            <label class="form-label" for="startDate">Từ ngày</label>
             <input type="date" class="form-control" id="startDate" name="start_date" value="<%= start ? new Date(start).toISOString().slice(0,10) : '' %>">
-            <label for="startDate">Từ ngày</label>
           </div>
-          <div class="form-floating custom-range d-none" id="endWrap">
+          <div class="report-filter-field custom-range d-none" id="endWrap">
+            <label class="form-label" for="endDate">Đến ngày</label>
             <input type="date" class="form-control" id="endDate" name="end_date" value="<%= end ? new Date(end).toISOString().slice(0,10) : '' %>">
-            <label for="endDate">Đến ngày</label>
           </div>
           <button class="btn btn-primary" type="submit">Lọc</button>
         </form>
@@ -66,7 +68,7 @@
       <div class="col-md-3">
         <div class="card shadow-sm metric-card h-100">
           <div class="card-body">
-            <div class="label">Redirect</div>
+            <div class="label" data-help="Số request vượt qua toàn bộ rules và bộ lọc để chuyển tới URL đích.">Redirect</div>
             <div class="value text-success fw-bold"><%= summary.redirects || 0 %></div>
             <div class="delta text-muted small">So với kỳ trước: <%= delta.redirects >= 0 ? '+' : '' %><%= delta.redirects %></div>
           </div>
@@ -75,7 +77,7 @@
       <div class="col-md-3">
         <div class="card shadow-sm metric-card h-100">
           <div class="card-body">
-            <div class="label">Fail</div>
+            <div class="label" data-help="Số request không đạt điều kiện và được đưa về Safe Page.">Fail</div>
             <div class="value text-danger fw-bold"><%= summary.fail || 0 %></div>
             <div class="delta text-muted small">So với kỳ trước: <%= delta.safe >= 0 ? '+' : '' %><%= delta.safe %></div>
           </div>
@@ -84,7 +86,7 @@
       <div class="col-md-3">
         <div class="card shadow-sm metric-card h-100">
           <div class="card-body">
-            <div class="label">Pass rate</div>
+            <div class="label" data-help="Tỷ lệ Redirect chia cho tổng số request đã ghi nhận trong kỳ.">Pass rate</div>
             <div class="value fw-bold"><%= summary.pass_rate %>%</div>
             <div class="delta text-muted small">Chênh lệch: <%= delta.pass_rate >= 0 ? '+' : '' %><%= Math.round(delta.pass_rate * 10) / 10 %>%</div>
           </div>
@@ -93,7 +95,7 @@
       <div class="col-md-3">
         <div class="card shadow-sm metric-card h-100">
           <div class="card-body">
-            <div class="label">Tổng lượt</div>
+            <div class="label" data-help="Tổng Redirect và Fail đã ghi nhận trong khoảng thời gian đang xem.">Tổng lượt</div>
             <div class="value fw-bold"><%= summary.total || 0 %></div>
             <div class="delta text-muted small">Kỳ trước: <%= previous.total || 0 %></div>
           </div>
@@ -105,7 +107,7 @@
       <div class="col-lg-8">
         <div class="card shadow-sm h-100">
           <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <span><i class="fa-solid fa-chart-line me-2"></i>Biểu đồ lưu lượng</span>
+            <span data-help="Biểu đồ thể hiện Redirect và Fail theo giờ, ngày, tuần hoặc tháng tùy độ dài khoảng thời gian."><i class="fa-solid fa-chart-line me-2"></i>Biểu đồ lưu lượng</span>
             <span class="text-muted small"><%= presetLabel %> · <%= rangeLabel %></span>
           </div>
           <div class="card-body">
@@ -114,8 +116,8 @@
         </div>
       </div>
       <div class="col-lg-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-header bg-white"><b>Top quốc gia</b></div>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header bg-white"><b data-help="Quốc gia được suy ra từ IP truy cập; kết quả có thể sai lệch với VPN hoặc proxy.">Top quốc gia</b></div>
           <div class="card-body p-0">
             <table class="table table-sm mb-0">
               <thead class="table-light"><tr><th>Quốc gia</th><th class="text-end">Hit</th><th class="text-end">Pass</th></tr></thead>
@@ -129,6 +131,19 @@
                     <td class="text-end"><%= c.hits %></td>
                     <td class="text-end"><%= c.redirects %></td>
                   </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card shadow-sm">
+          <div class="card-header bg-white"><b data-help="Thiết bị của các lượt đã chuyển hướng thành công, được suy ra từ User-Agent.">Thiết bị</b></div>
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <tbody>
+                <% if (!deviceStats || !deviceStats.length) { %><tr><td class="text-center text-muted py-3">Chưa có dữ liệu</td></tr><% } %>
+                <% deviceStats && deviceStats.forEach(row => { %>
+                  <tr><td><%= row.device_type || 'pc' %></td><td class="text-end fw-bold"><%= row.hits %></td></tr>
                 <% }) %>
               </tbody>
             </table>
@@ -201,7 +216,7 @@
 
     <div class="card shadow-sm mt-3">
       <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h6 class="mb-0">Log mới (50)</h6>
+        <h6 class="mb-0" data-help="50 request gần nhất của campaign, dùng để kiểm tra URL, thiết bị và lý do pass/fail.">Log mới (50)</h6>
         <a class="btn btn-link btn-sm" href="/campaigns/<%= camp.id %>/logs">Xem tất cả</a>
       </div>
       <div class="table-responsive p-3">

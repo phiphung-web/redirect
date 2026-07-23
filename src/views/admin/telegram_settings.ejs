@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thông báo Telegram</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <%- include('../partials/header', {
+    user,
+    active: '',
+    backUrl: '/',
+    breadcrumb: [{ label: 'Tài khoản', url: '/' }, { label: 'Telegram' }]
+  }) %>
+
+  <div class="container" style="max-width: 760px;">
+    <div class="mb-4">
+      <h3 class="mb-1">Thông báo Telegram</h3>
+      <div class="text-muted">Nhận cảnh báo riêng cho domain và link do tài khoản của bạn tạo.</div>
+    </div>
+
+    <% if (notice) { %><div class="alert alert-info"><%= notice %></div><% } %>
+    <% if (!telegramEnabled) { %>
+      <div class="alert alert-warning">Bot Telegram chưa được bật trên máy chủ.</div>
+    <% } %>
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white fw-bold">Kết nối tài khoản</div>
+      <div class="card-body">
+        <% if (settings.telegram_chat_id) { %>
+          <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <div>
+              <span class="badge bg-success mb-2">Đã kết nối</span>
+              <div><b>Telegram:</b> <%= settings.telegram_username ? '@' + settings.telegram_username : settings.telegram_chat_id %></div>
+              <% if (settings.telegram_connected_at) { %>
+                <small class="text-muted">Kết nối lúc <%= new Date(settings.telegram_connected_at).toLocaleString('vi-VN') %></small>
+              <% } %>
+            </div>
+            <form action="/account/telegram/disconnect" method="POST">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button class="btn btn-outline-danger">Ngắt kết nối</button>
+            </form>
+          </div>
+        <% } else { %>
+          <ol class="mb-3">
+            <li>Bấm <b>Tạo mã kết nối</b>.</li>
+            <li>Mở bot Telegram<% if (telegramBotUsername) { %> <a href="https://t.me/<%= telegramBotUsername %>" target="_blank" rel="noopener">@<%= telegramBotUsername %></a><% } %>.</li>
+            <li>Gửi lệnh <code>/connect MÃ</code> trong vòng 15 phút.</li>
+          </ol>
+          <% if (connectCode) { %>
+            <div class="alert alert-primary">
+              Mã dùng một lần: <code class="fs-5 fw-bold"><%= connectCode %></code>
+            </div>
+          <% } %>
+          <form action="/account/telegram/code" method="POST">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn btn-primary" <%= telegramEnabled ? '' : 'disabled' %>>Tạo mã kết nối</button>
+          </form>
+        <% } %>
+      </div>
+    </div>
+
+    <% if (settings.telegram_chat_id) { %>
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-white fw-bold">Loại thông báo</div>
+        <form class="card-body" action="/account/telegram/preferences" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="telegram_link_alerts" id="linkAlerts" <%= settings.telegram_link_alerts ? 'checked' : '' %>>
+            <label class="form-check-label" for="linkAlerts">Bất thường ở domain và link do tôi tạo</label>
+          </div>
+          <% if (user.role_name === 'super_admin') { %>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" name="telegram_system_alerts" id="systemAlerts" <%= settings.telegram_system_alerts ? 'checked' : '' %>>
+              <label class="form-check-label" for="systemAlerts">Cảnh báo quan trọng của máy chủ, database và backup</label>
+            </div>
+          <% } %>
+          <button class="btn btn-primary">Lưu cài đặt</button>
+        </form>
+      </div>
+
+      <form action="/account/telegram/test" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn btn-outline-primary">Gửi thông báo thử</button>
+      </form>
+    <% } %>
+  </div>
+  <%- include('../partials/footer') %>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <%- include('../partials/safe_redirect_head') %>
+  <title><%= title || domain %></title>
+  <style>
+    :root { color-scheme: light; --bg: #eef0f2; --text: #30353b; }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .age-shell {
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      padding: max(12px, env(safe-area-inset-top)) 0 max(12px, env(safe-area-inset-bottom));
+    }
+    .age-card {
+      width: min(100%, 480px);
+      overflow: hidden;
+      background: #edf0f2;
+      box-shadow: 0 24px 70px rgba(28, 34, 41, .14);
+    }
+    .age-art { position: relative; width: 100%; }
+    .age-art img { display: block; width: 100%; height: auto; }
+    .choice {
+      position: absolute;
+      top: 53.4%;
+      height: 10.5%;
+      border: 0;
+      border-radius: 16px;
+      background: transparent;
+      cursor: pointer;
+      color: transparent;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .choice:focus-visible { outline: 4px solid #1668e3; outline-offset: 3px; }
+    .choice.yes { left: 5.4%; width: 21.9%; }
+    .choice.no { left: 29.2%; width: 21.7%; }
+    .result {
+      display: none;
+      min-height: 100svh;
+      place-items: center;
+      padding: 24px;
+      text-align: center;
+      background: #f7f8fa;
+    }
+    .result-card { width: min(100%, 380px); }
+    .result-mark {
+      width: 62px;
+      height: 62px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 18px;
+      border-radius: 50%;
+      background: #e7f8ee;
+      color: #079447;
+      font-size: 30px;
+      font-weight: 800;
+    }
+    .result h1 { margin: 0 0 10px; font-size: 26px; }
+    .result p { margin: 0; color: #68717d; line-height: 1.55; }
+    body.has-result .age-shell { display: none; }
+    body.has-result .result { display: grid; }
+    body.denied .result-mark { background: #f1f3f5; color: #6b7280; }
+    @media (min-width: 481px) {
+      .age-card { border-radius: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="age-shell" aria-label="Age confirmation">
+    <section class="age-card">
+      <div class="age-art">
+        <img src="/assets/images/safe-age-gate.jpeg" alt="Are you 18 years old or older?">
+        <button class="choice yes" type="button" data-choice="yes" aria-label="Yes, I am 18 or older">Yes</button>
+        <button class="choice no" type="button" data-choice="no" aria-label="No, I am under 18">No</button>
+      </div>
+    </section>
+  </main>
+
+  <section class="result" aria-live="polite">
+    <div class="result-card">
+      <div class="result-mark" id="resultMark">✓</div>
+      <h1 id="resultTitle">Age confirmed</h1>
+      <p id="resultText">Thank you. You may continue browsing this website.</p>
+    </div>
+  </section>
+
+  <script>
+    document.querySelectorAll('[data-choice]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const denied = button.dataset.choice === 'no';
+        document.body.classList.add('has-result');
+        document.body.classList.toggle('denied', denied);
+        document.getElementById('resultMark').textContent = denied ? '×' : '✓';
+        document.getElementById('resultTitle').textContent = denied ? 'Access unavailable' : 'Age confirmed';
+        document.getElementById('resultText').textContent = denied
+          ? 'This content is only available to visitors aged 18 or older.'
+          : 'Thank you. You may continue browsing this website.';
+      });
+    });
+  </script>
+</body>
+</html>

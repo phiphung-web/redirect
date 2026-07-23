@@ -1,94 +1,78 @@
-﻿<%
+<%
   const currentMenu = typeof active === 'string' ? active : '';
-  const isAdmin = user && (user.role_name === 'super_admin' || user.role_name === 'admin');
+  const isAdmin = user && user.role_name === 'super_admin';
   const isSuper = user && user.role_name === 'super_admin';
-  const initials = user && user.username ? user.username.substring(0, 2).toUpperCase() : 'AC';
-  const crumbList = (typeof breadcrumb !== 'undefined' && Array.isArray(breadcrumb)) ? breadcrumb : [];
+  const initials = user?.username ? user.username.substring(0, 2).toUpperCase() : 'RP';
+  const crumbList = Array.isArray(typeof breadcrumb !== 'undefined' ? breadcrumb : null) ? breadcrumb : [];
   const backLink = (typeof backUrl !== 'undefined' && backUrl) ? backUrl : null;
 %>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 <link href="/css/app.css" rel="stylesheet">
 
-<nav class="navbar navbar-expand-lg navbar-dark app-navbar px-3 px-lg-4">
+<nav class="navbar navbar-expand-lg navbar-dark app-navbar px-3 px-lg-4 sticky-top">
   <div class="container-fluid">
     <a class="navbar-brand d-flex align-items-center gap-2" href="/">
-      <div class="brand-mark">RC</div>
+      <div class="brand-mark"><%= product.shortName %></div>
       <div class="brand-text">
-        <div class="fw-bold">Redirect Control</div>
-        <small class="text-white-50">MVP Suite</small>
+        <div class="fw-bold"><%= product.name %></div>
+        <small><%= product.tagline %></small>
       </div>
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Mở menu">
       <span class="navbar-toggler-icon"></span>
     </button>
+
     <div class="collapse navbar-collapse" id="mainNav">
-      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle <%= ['redirect','short-links','safe-pages'].includes(currentMenu) ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            Chức năng
-          </a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item <%= currentMenu === 'redirect' ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-shuffle me-2 text-primary"></i>Redirect</a></li>
-            <li><a class="dropdown-item <%= currentMenu === 'short-links' ? 'active' : '' %>" href="/short-links"><i class="fa-solid fa-link me-2 text-primary"></i>Rút gọn link</a></li>
-            <li><a class="dropdown-item <%= currentMenu === 'safe-pages' ? 'active' : '' %>" href="/safe-pages"><i class="fa-solid fa-palette me-2 text-primary"></i>Giao diện mẫu</a></li>
-          </ul>
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0 app-nav-links">
+        <li class="nav-item">
+          <a class="nav-link <%= ['redirect','short-links'].includes(currentMenu) ? 'active' : '' %>" href="/redirect"><i class="fa-solid fa-globe me-2"></i>Tên miền &amp; Link</a>
         </li>
         <% if (isAdmin) { %>
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle <%= ['system','users'].includes(currentMenu) ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Quản trị
+            <a class="nav-link dropdown-toggle <%= ['system','users'].includes(currentMenu) ? 'active' : '' %>" href="#" role="button" data-bs-toggle="dropdown">
+              <i class="fa-solid fa-gear me-2"></i>Quản trị
             </a>
             <ul class="dropdown-menu">
               <% if (isSuper) { %>
-                <li><a class="dropdown-item <%= currentMenu === 'system' ? 'active' : '' %>" href="/admin/system"><i class="fa-solid fa-server me-2 text-primary"></i>Hệ thống</a></li>
+                <li><a class="dropdown-item" href="/admin/system"><i class="fa-solid fa-server me-2 text-primary"></i>Trạng thái hệ thống</a></li>
               <% } %>
-              <% if (isAdmin) { %>
-                <li><a class="dropdown-item <%= currentMenu === 'users' ? 'active' : '' %>" href="/users"><i class="fa-solid fa-users-gear me-2 text-primary"></i>Người dùng</a></li>
-              <% } %>
+              <li><a class="dropdown-item" href="/users"><i class="fa-solid fa-users-gear me-2 text-primary"></i>Người dùng</a></li>
             </ul>
           </li>
         <% } %>
       </ul>
 
-      <div class="d-flex align-items-center gap-3 text-white ms-lg-auto">
-        <% if (user) { %>
-          <div class="account-pill">
+      <% if (user) { %>
+        <div class="d-flex align-items-center gap-2 ms-lg-auto nav-account-wrap">
+          <div class="live-pill"><span class="status-dot"></span>Online</div>
+          <a class="account-pill text-decoration-none" href="/account/telegram" title="Cài đặt thông báo Telegram">
             <div class="avatar"><%= initials %></div>
             <div class="small lh-sm">
-              <div class="text-white-50">Tài khoản</div>
               <div class="fw-bold text-white"><%= user.username %></div>
               <div class="text-white-50"><%= user.role_name %></div>
             </div>
-          </div>
+          </a>
           <form action="/logout" method="POST" class="d-inline">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <button type="submit" class="btn btn-sm btn-outline-light">
-              <i class="fa-solid fa-arrow-right-from-bracket me-1"></i>Đăng xuất
+            <button type="submit" class="btn btn-sm btn-outline-light" aria-label="Đăng xuất" title="Đăng xuất">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i>
             </button>
           </form>
-        <% } %>
-      </div>
+        </div>
+      <% } %>
     </div>
   </div>
 </nav>
 
 <main class="app-main">
-  <% if ((crumbList && crumbList.length) || backLink) { %>
+  <% if (crumbList.length || backLink) { %>
     <div class="container-xxl d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <% if (crumbList && crumbList.length) { %>
-        <div class="breadcrumb-bar">
-          <% crumbList.forEach((bc, idx) => { %>
-            <% if (bc.url) { %>
-              <a href="<%= bc.url %>" class="text-decoration-none"><%= bc.label %></a>
-            <% } else { %>
-              <span><%= bc.label %></span>
-            <% } %>
-            <% if (idx < crumbList.length - 1) { %> / <% } %>
-          <% }) %>
-        </div>
-      <% } %>
-      <% if (backLink) { %>
-        <a href="<%= backLink %>" class="back-link"><i class="fa-solid fa-arrow-left"></i> Quay lại</a>
-      <% } %>
+      <div class="breadcrumb-bar">
+        <% crumbList.forEach((bc, idx) => { %>
+          <% if (bc.url) { %><a href="<%= bc.url %>"><%= bc.label %></a><% } else { %><span><%= bc.label %></span><% } %>
+          <% if (idx < crumbList.length - 1) { %><i class="fa-solid fa-chevron-right mx-2 small"></i><% } %>
+        <% }) %>
+      </div>
+      <% if (backLink) { %><a href="<%= backLink %>" class="back-link"><i class="fa-solid fa-arrow-left"></i>Quay lại</a><% } %>
     </div>
   <% } %>

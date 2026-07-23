@@ -1,99 +1,168 @@
-# Redirect Control
+# LinkPilot / Redirect Pro
 
-Node/Express redirect manager with a separate ads engine and admin panel.
+Production-oriented redirect and campaign management for a single organization. The product keeps the public redirect engine isolated from the admin panel and runs on a standard Ubuntu VPS, including the current Contabo deployment.
 
-## Local run
+## Product modules
+
+- conditional links with parameter, country and device routing;
+- automatic redirect links with a configurable 1-30 second wait;
+- exactly two built-in fallback layouts: an English repair-services page and an English mobile 18+ age gate;
+- one of two bundled English Safe Pages is selected when a domain is added and applies to every campaign on that domain;
+- opening a configured domain without a valid link identifier displays that domain's Safe Page;
+- both link types are created and managed from the domain detail screen;
+- campaign and short-link reports;
+- users, roles and admin audit logs;
+- health endpoints, database backups and raw-log retention.
+
+## Delayed-link reporting
+
+Delayed links keep separate lifecycle metrics:
+
+- `short_link_open`: the Safe Page loaded;
+- `short_redirect_confirmed`: the browser stayed until the configured delay and sent a signed, one-time confirmation immediately before navigation;
+- an open that remains unconfirmed is reported separately and is not counted as a redirect.
+
+Confirmation totals can be lower when visitors leave before the delay ends, lose connectivity, disable JavaScript or use a browser that blocks the confirmation request. Historical `short_redirect` rows predate this protocol and are displayed as unverified legacy data.
+
+## Meta Ads URL parameters
+
+The conditional-link builder opens with a fixed `fbclid` existence rule plus four editable rules: `utm_source`, `utm_medium`, `utm_campaign`, and `utm_content`. Their exact-match values are also used to build the query string shown below the rules.
+
+Paste only the generated string into the ad-level **Tracking → URL parameters** field, without a leading `?`. Meta supplies `fbclid` automatically, so it is visible only as an existence rule and is never included in the copied string. If the user deliberately removes that rule, the campaign no longer checks `fbclid`. Never place email addresses, phone numbers or other personal data in UTM values.
+
+Reference: [Meta Business Help — URL parameters](https://www.facebook.com/business/help/1016122818401732).
+
+## Automatic domain SSL
+
+When automatic SSL is enabled, adding a domain creates a background certificate
+job. The domain detail screen shows `pending`, `active`, or `error`, records the
+certificate expiry date, and provides a manual retry action. Nginx keeps a
+fallback TLS listener available while issuance is pending so proxied domains do
+not time out on port 443.
+
+Before adding a domain, point its DNS `A` record to the server and make sure
+inbound ports 80 and 443 are open. For the most reliable first issuance on
+Cloudflare, use DNS-only mode, then enable the proxy and `Full (strict)` after
+the domain certificate becomes active. A proxied record can also work when
+Cloudflare does not force the HTTP challenge through strict origin TLS.
+
+On Ubuntu, after reviewing and accepting the Let's Encrypt Subscriber
+Agreement, set the operational email and enable the feature in `.env`:
+
+```bash
+AUTO_SSL_ENABLED=true
+CERTBOT_EMAIL=admin@example.com
+LETSENCRYPT_AGREE_TOS=true
+```
+
+Install the fixed, root-owned provisioning helper once:
+
+```bash
+sudo bash deploy/install-auto-ssl.sh
+```
+
+The application invokes only `/usr/local/sbin/redirect-pro-provision-domain`
+with a validated domain argument. Certbot uses HTTP-01 webroot validation;
+certificate renewal is handled by `certbot.timer`, followed by a safe Nginx
+configuration test and reload.
+
+## Performance model
+
+The redirect hot path uses short-lived in-process caches for domain, campaign and short-link configuration. Most traffic logs and counters are buffered in production so redirect responses are not blocked by reporting writes. Delayed-link opens are persisted immediately because their row is atomically promoted when the browser confirms navigation.
+
+Default production profile for a 6-vCPU / 12-GB VPS:
+
+- four clustered redirect workers (bounded to at most six);
+- one admin process;
+- PostgreSQL pool limited to 8 connections per process;
+- 30-second routing cache;
+- five-minute stale-cache safety window during short database interruptions;
+- traffic inserts in batches of 100;
+- counter flush every two seconds;
+- raw logs retained for 30 days.
+
+See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the measured Contabo baseline, tuned result and capacity caveats.
+
+## Local development
 
 ```bash
 npm install
-cp .env.example .env
-npm run start:ads
-npm run start:admin
-```
-
-Default ports:
-
-- Ads engine: `4001`
-- Admin panel: `4002`
-
-Run both services in one terminal:
-
-```bash
+copy .env.example .env
+npm test
 npm start
 ```
 
-## Production isolation
+Default ports are `4001` for redirect traffic and `4002` for admin.
 
-Use a separate database, ports, cookie name, and session secret for the new system so it does not collide with the old running system.
+## Fresh database
+
+Create an empty PostgreSQL database, restore `database/schema_backup.sql`, then run:
 
 ```bash
-cp .env.production.example .env
+npm run migrate
+```
+
+Create the first admin by setting `ADMIN_USERNAME` and `ADMIN_PASSWORD`, then run:
+
+```bash
+npm run create:admin
+```
+
+## Production
+
+Use `.env.production.example` as the starting point. Production refuses to boot with a missing database password or a session secret shorter than 32 characters.
+
+```bash
 npm ci --omit=dev
+npm run migrate
 npm test
-npm start
-```
-
-Recommended production values:
-
-- `DB_NAME=redirect_v2_new`
-- `SESSION_NAME=redirect_new.sid`
-- `ADS_PORT` and `ADMIN_PORT` different from the old service
-- A long random `SESSION_SECRET`
-
-## PM2
-
-```bash
 pm2 start ecosystem.config.cjs
-pm2 save
 ```
 
-Load `.env` from the project directory before starting PM2, or export variables in the shell/service manager.
+See [docs/VULTR_DEPLOY.md](docs/VULTR_DEPLOY.md) for the generic Ubuntu VPS, PostgreSQL, Nginx, SSL, backup and scaling procedure.
 
-## Database
-
-Restore `database/schema_backup.sql`, then run all idempotent migrations in filename order:
+## Operations
 
 ```bash
-npm run migrate
+npm run backup
+npm run cleanup:logs
 ```
 
-The migration runner uses the same `DB_*` settings as the app. Prefer it over
-manual `psql -f` commands on production because it avoids `/root/redirect`
-permission issues when switching to the `postgres` Linux user.
+## Optional owner monitoring branch
 
-## Upgrade from redirect-check
+The `owner/telegram-monitoring` branch adds features intended for a separately
+managed installation:
 
-Before reloading PM2, keep the running process on the old code while preparing files on disk:
+- exactly two roles: `super_admin` and `user`;
+- users can add any number of domains, but can view and manage only their own domains and links;
+- custom Safe Page creation is intentionally disabled; only `clean` and `age_gate` are supported;
+- one shared Telegram bot, with a private chat linked separately by each user;
+- per-user alerts for malformed link configuration, DNS and SSL problems;
+- server, database and backup alerts available only to `super_admin`;
+- a private JSONL request audit plus database audit retention limited to 7 days.
+
+Create a bot with BotFather, put its token and username in `.env`, enable
+`TELEGRAM_ALERTS_ENABLED`, then run migrations and restart the PM2 ecosystem.
+Each account can click its account name, generate a one-time code and send
+`/connect MÃ` to the bot. The five-minute monitor is installed from
+`deploy/crontab.example`; it can also be run manually with `npm run monitor`.
+
+The private audit path defaults to `/var/log/linkpilot/audit-YYYY-MM-DD.log` in
+production. It is not exposed in the admin UI and expired files are removed
+automatically. Run `npm run cleanup:logs` daily to apply the same 7-day limit to
+database admin-audit rows.
+
+Load test only a staging or dedicated test campaign:
 
 ```bash
-cd ~/redirect
-git fetch origin
-git diff --name-status HEAD..origin/main
-git pull origin main
-npm install
+LOAD_TARGET=https://test.example.com/?q=test LOAD_CONCURRENCY=20 LOAD_DURATION_SECONDS=30 npm run test:load
 ```
 
-Apply migrations before the first reload:
+Health endpoints:
 
-```bash
-set -a
-. ./.env
-set +a
-npm run migrate
-```
+- redirect engine: `http://127.0.0.1:4101/healthz`
+- admin: `http://127.0.0.1:4102/healthz`
 
-Then verify and reload:
+## Security and scope
 
-```bash
-npm test
-pm2 reload ecosystem.config.cjs
-```
-
-The code keeps compatible defaults for the old server when `.env` is missing, but production should still set `DB_*`, `SESSION_SECRET`, `SESSION_NAME`, `ADS_PORT`, and `ADMIN_PORT` explicitly.
-
-## Notes
-
-- Safe page templates live in `src/views/safepages`.
-- Domain-level safe page settings are the default fallback. Campaigns can use a template from the domain safe-page library instead.
-- Short-link detailed reporting requires `traffic_logs.short_link_id`, created by `npm run migrate`.
-- Admin views use shared styling from `public/css/app.css`.
+This project is intended for compliant redirect, campaign routing and measurement. It is not designed to present different content to platform reviewers or bypass advertising policies.

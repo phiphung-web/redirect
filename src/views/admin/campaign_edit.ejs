@@ -27,7 +27,7 @@
         <div class="container bg-white p-4 rounded shadow-sm mt-3" style="max-width: 900px;">
             <div class="d-flex justify-content-between mb-4">
                 <div>
-                    <h3 class="mb-0">Chi tiết link: <span class="text-primary">
+                    <h3 class="mb-0" data-help="Chỉnh URL đích, phạm vi quốc gia và các quy tắc tham số của chiến dịch. Thay đổi có thể mất tối đa 30 giây để hết cache.">Chi tiết link: <span class="text-primary">
                             <%= camp.name %>
                         </span></h3>
                     <small class="text-muted">ID: <%= camp.id %> | Domain: <%= domain.domain_url %></small><br>
@@ -58,24 +58,25 @@
 
                 <div class="row mb-3">
                     <div class="col-md-6">
-                        <label class="fw-bold">Tên Chiến Dịch</label>
+                        <label class="fw-bold" data-help="Tên nội bộ giúp phân biệt chiến dịch trong dashboard, log và báo cáo.">Tên Chiến Dịch</label>
                         <input type="text" name="name" class="form-control" value="<%= camp.name %>" required>
                     </div>
                     <div class="col-md-6">
-                        <label class="fw-bold">Link Đích (Target)</label>
+                        <label class="fw-bold" data-help="URL được sử dụng khi tham số khớp và toàn bộ bộ lọc của chiến dịch đều đạt.">Link Đích (Target)</label>
                         <input type="url" name="target_url" class="form-control" value="<%= camp.target_url %>"
                             required>
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="fw-bold">Quốc gia cho phép</label>
+                    <label class="fw-bold" data-help="Chỉ các mã quốc gia được chọn mới đi tới link đích. Để trống nếu chiến dịch không giới hạn quốc gia.">Quốc gia cho phép</label>
                     <select class="form-control select2-countries" name="allowed_countries[]" multiple="multiple"
                         id="countrySelect"></select>
                     <small class="text-muted">Để trống = Tất cả quốc gia.</small>
                 </div>
 
-                <label class="fw-bold mb-2">Quy tắc Tham số (Rules)</label>
+                <label class="fw-bold mb-2" data-help="Mỗi rule kiểm tra một query parameter. Tồn tại chỉ yêu cầu có key; Bằng yêu cầu đúng cả key và giá trị.">Quy tắc Tham số (Rules)</label>
+                <div class="row g-2 px-3 mb-1 d-none d-md-flex small text-muted fw-semibold"><div class="col-md-4">Tên tham số</div><div class="col-md-3">Kiểm tra</div><div class="col-md-4">Giá trị cần khớp</div><div class="col-md-1"></div></div>
                 <div id="rules-wrapper" class="bg-light p-3 rounded border mb-3"></div>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="addNewRule()">+ Thêm điều kiện</button>
 
@@ -342,6 +343,7 @@
 
             const oldRules = <%- JSON.stringify(camp.rules || []) %>;
             const oldCountryFilter = <%- JSON.stringify(camp.filters?.countries || []) %>;
+            const SYSTEM_RULE_KEYS = new Set(['fbclid', 'fbcid']);
 
             $(document).ready(function () {
                 const select = $('#countrySelect');
@@ -349,29 +351,53 @@
                     select.append(new Option(`${name} (${code})`, code));
                 }
                 select.select2().val(oldCountryFilter).trigger('change');
-                if (oldRules.length > 0) oldRules.forEach(r => addNewRule(r.key, r.operator, r.value));
+                oldRules.forEach(r => addNewRule(r.key, r.operator, r.value, r.copyValue));
             });
 
-            function addNewRule(key = '', op = 'exists', val = '') {
-                let html = `
+            function addNewRule(key = '', op = 'exists', val = '', copyValue = '') {
+                const isSystemRule = SYSTEM_RULE_KEYS.has(String(key).trim().toLowerCase());
+                const row = $(`
                 <div class="row g-2 mb-2 rule-row align-items-center">
-                    <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-key" value="${key}" placeholder="Key"></div>
-                    <div class="col-3">
-                        <select class="form-select form-select-sm rule-op" onchange="toggleVal(this)">
-                            <option value="exists" ${op === 'exists' ? 'selected' : ''}>Tồn tại</option>
-                            <option value="equals" ${op === 'equals' ? 'selected' : ''}>Bằng (=)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-val" value="${val}" ${op === 'exists' ? 'disabled' : ''}></div>
-                    <div class="col-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove()">x</button></div>
-                </div>`;
-                $('#rules-wrapper').append(html);
+                    <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-key" placeholder="Key"></div>
+                    <div class="col-md-3"><select class="form-select form-select-sm rule-op" onchange="toggleVal(this)"><option value="exists">Tồn tại</option><option value="equals">Bằng (=)</option></select></div>
+                    <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-val" placeholder="Giá trị cần khớp"></div>
+                    <div class="col-md-1"><button type="button" class="btn btn-sm text-danger" onclick="this.closest('.rule-row').remove()">x</button></div>
+                    <input type="hidden" class="rule-copy-val">
+                </div>`);
+                row.find('.rule-key').val(key);
+                row.find('.rule-op').val(op === 'equals' ? 'equals' : 'exists');
+                row.find('.rule-val').val(val);
+                row.find('.rule-copy-val').val(copyValue);
+                if (isSystemRule) {
+                    row.attr('data-system-rule', 'true');
+                    row.find('.rule-key').prop('readonly', true);
+                    row.find('.rule-op').val('exists').prop('disabled', true);
+                    row.find('.rule-val').val('').prop('disabled', true).prop('required', false).attr('placeholder', 'Không cần giá trị');
+                    row.find('.rule-copy-val').val('').prop('disabled', true);
+                    row.find('button').attr('title', 'Xóa kiểm tra fbclid');
+                }
+                $('#rules-wrapper').append(row);
+                toggleVal(row.find('.rule-op')[0]);
             }
 
             function toggleVal(sel) {
                 const inp = sel.closest('.rule-row').querySelector('.rule-val');
+                const copyInp = sel.closest('.rule-row').querySelector('.rule-copy-val');
+                const isSystemRule = sel.closest('.rule-row').dataset.systemRule === 'true';
+                if (isSystemRule) {
+                    sel.value = 'exists';
+                    inp.value = '';
+                    inp.disabled = true;
+                    inp.required = false;
+                    copyInp.value = '';
+                    copyInp.disabled = true;
+                    return;
+                }
                 inp.disabled = (sel.value === 'exists');
+                inp.required = (sel.value === 'equals');
+                copyInp.disabled = (sel.value === 'equals');
                 if (inp.disabled) inp.value = '';
+                if (sel.value === 'equals') copyInp.value = inp.value;
             }
 
             function collectRules() {
@@ -380,7 +406,13 @@
                     let k = $(this).find('.rule-key').val();
                     let o = $(this).find('.rule-op').val();
                     let v = $(this).find('.rule-val').val();
-                    if (k) rules.push({ key: k, operator: o, value: v });
+                    let copyValue = o === 'exists' ? $(this).find('.rule-copy-val').val() : '';
+                    const normalizedKey = String(k || '').trim().toLowerCase();
+                    if (normalizedKey === 'fbclid') {
+                        rules.push({ key: 'fbclid', operator: 'exists', value: '' });
+                    } else if (k && normalizedKey !== 'fbcid') {
+                        rules.push({ key: k, operator: o, value: v, ...(copyValue ? { copyValue } : {}) });
+                    }
                 });
                 return rules;
             }
